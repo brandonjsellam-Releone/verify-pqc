@@ -26,13 +26,25 @@ never modified; the chain was only read.
    <https://github.com/brandonjsellam-Releone/verify-pqc>. The conformance CI runs on push.
    *(Rename/transfer to a `trelyan` org later if desired, then update the link in `web/index.html`.)*
 
-2. **Publish the SDK (npm).** `cd packages/verify-pqc && npm publish --access public`
-   (requires an npm account + the `@trelyan` scope; this is a financial/account action — yours).
+2. **Publish the SDK (npm).** A CI workflow is wired: `.github/workflows/npm-publish.yml`
+   publishes `@trelyan/verify-pqc` on a GitHub Release using a `NPM_TOKEN` secret. You do once:
+   create the free `trelyan` org on npmjs.com, add `NPM_TOKEN` (repo → Settings → Secrets),
+   then cut a Release (or run the workflow). `@trelyan/verify-pqc` is unclaimed today. *(npm
+   account/scope = yours; the trigger stays with you since publish is irreversible.)*
 
-3. **Ship the web tools to trelyan.foundation.** Copy `web/*.html` + `web/pqbadge.js` into
-   `website/v2/`, add nav links (e.g. a "Verify live" entry → `verify-live.html`, "Anchor" →
-   `anchor.html`), then `cd website/v2 && netlify deploy --prod`. *(Deploy is owner-gated per
-   project policy — never autonomous.)*
+3a. **Web tools — ALREADY LIVE on GitHub Pages:** <https://brandonjsellam-releone.github.io/verify-pqc/>
+    (hub + verify-live/unified/anchor/pqbadge). CNAME `pq.trelyan.foundation` → Pages to put it on-domain.
+
+3b. **Web tools on trelyan.foundation (CSP-safe drop-in).** Use `site-integration/` — it makes
+    the verifiers work under the site's strict CSP via a same-origin proxy (no CSP change). From
+    the **full** site checkout: copy `site-integration/netlify/functions/pqproxy.mjs` +
+    `site-integration/pq/` in, then `cd website/v2 && netlify deploy --prod`. See
+    `site-integration/NETLIFY_ADDITIONS.md`. *(Don't deploy from the partial OneDrive copy — it's
+    missing the cloud-only functions; deploying it would wipe the live `/api/*` routes.)*
+
+3c. **Transfer the repo to a `trelyan` GitHub org (optional).** The org doesn't exist yet — create
+    it on github.com (yours), then: `gh api repos/brandonjsellam-Releone/verify-pqc/transfer -f new_owner=trelyan`,
+    and update the link in `web/index.html` + `docs/index.html`.
 
 4. **Enhance verify.html.** Paste `web/verify-section.snippet.html` into `website/v2/verify.html`
    after the "§ I On-chain" section, then redeploy.
@@ -47,6 +59,7 @@ never modified; the chain was only read.
 
 ## Hard constraints honored
 - Deployed app `763809096` / ABI / box-prefixes untouched (read-only).
-- No Netlify/Vercel/bridge deploys executed; no GitHub posts; no npm publish; no keys read.
+- GitHub publish + Pages done (authorized, reversible). NOT done — yours by rule: npm publish,
+  the anchor sign+inscribe, any Netlify/Vercel/bridge deploy. No keys read; no funds spent; no CSP/security setting changed.
 - Honest framing throughout: TestNet · unaudited; `0xBA` = trelyan-pq wrapper, not a NIST/FIPS field;
   Falcon = signatures, not encryption; "reference + conformance suite", not "the standard".

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TRELYAN — Post-quantum trust, end to end</title>
+<meta name="description" content="THRONDAR signs every AI answer with post-quantum signatures, commits it to a transparency log, and anchors that log on Algorand as a Falcon-1024 inscription. Every layer is yours to verify. TestNet, unaudited." />
+<meta name="theme-color" content="#0A0E1F" />
+<style>
+  :root{--bg:#0A0E1F;--panel:#10162E;--line:rgba(217,198,144,.18);--gold:#D9C690;--txt:#E8EAF2;--mut:#9AA0B6;--ok:#5DCAA5;--mono:'JetBrains Mono',ui-monospace,Menlo,monospace}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.65}
+  .wrap{max-width:880px;margin:0 auto;padding:56px 20px 90px}
+  .eyebrow{font:500 12px/1 var(--mono);letter-spacing:.2em;color:var(--gold);text-transform:uppercase}
+  h1{font-weight:500;font-size:40px;line-height:1.15;margin:16px 0 10px}h1 em{font-style:italic;color:var(--gold)}
+  h2{font-weight:500;font-size:20px;margin:48px 0 14px}
+  .lede{color:var(--mut);max-width:62ch;font-size:18px}
+  .flow{display:grid;grid-template-columns:1fr;gap:10px;margin:30px 0}
+  .step{display:grid;grid-template-columns:38px 1fr;gap:14px;align-items:start;background:var(--panel);border:.5px solid var(--line);border-radius:14px;padding:16px 18px}
+  .step .n{width:30px;height:30px;border-radius:50%;border:.5px solid var(--line);display:flex;align-items:center;justify-content:center;font:500 13px/1 var(--mono);color:var(--gold)}
+  .step h3{font-weight:500;font-size:16px;margin:2px 0 3px}
+  .step p{margin:0;font-size:14px;color:var(--mut)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:8px}
+  a.card{display:block;text-decoration:none;color:inherit;background:var(--panel);border:.5px solid var(--line);border-radius:14px;padding:18px;transition:border-color .15s}
+  a.card:hover{border-color:var(--gold)}
+  a.card .t{display:flex;align-items:center;gap:8px;font-weight:500;font-size:16px}
+  a.card .d{margin:8px 0 0;font-size:14px;color:var(--mut)}
+  a.card .go{margin-top:12px;font:500 12px/1 var(--mono);color:var(--gold);text-transform:uppercase;letter-spacing:.08em}
+  .pill{display:inline-flex;align-items:center;gap:6px;font:500 12px/1 var(--mono);padding:6px 11px;border-radius:999px;border:.5px solid var(--line);color:var(--mut)}
+  .pills{display:flex;gap:8px;flex-wrap:wrap;margin:22px 0 0}
+  .note{margin-top:48px;font-size:13px;color:var(--mut);border-top:.5px solid var(--line);padding-top:18px}
+  code{font-family:var(--mono);background:var(--panel);border:.5px solid var(--line);border-radius:6px;padding:2px 6px;font-size:13px}
+  .gold{color:var(--gold)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">TRELYAN · post-quantum trust</p>
+  <h1>Trust you can <em>check yourself</em> — down to the byte.</h1>
+  <p class="lede">THRONDAR signs every AI answer with post-quantum signatures, commits it to a transparency log, and anchors that log on a public chain as a Falcon-1024 inscription. None of it asks for your trust. Every layer hands you the artifacts to verify — or break — the claim.</p>
+
+  <div class="pills">
+    <span class="pill">ML-DSA-87 + Falcon-1024</span>
+    <span class="pill">RFC-6962 transparency log</span>
+    <span class="pill">Algorand falcon_verify</span>
+    <span class="pill">TestNet · unaudited</span>
+  </div>
+
+  <h2>How the trust is built</h2>
+  <div class="flow">
+    <div class="step"><div class="n">1</div><div><h3>Signed, post-quantum</h3><p>Each answer is signed with ML-DSA-87 and Falcon-1024 — signatures that hold even against a quantum adversary.</p></div></div>
+    <div class="step"><div class="n">2</div><div><h3>Logged, append-only</h3><p>Every answer is committed to an RFC-6962 transparency log whose signed tree head can't be quietly rewritten.</p></div></div>
+    <div class="step"><div class="n">3</div><div><h3>Anchored on-chain</h3><p>The log's tree head is inscribed on Algorand as a write-once Falcon-1024 record, verified by the <code>falcon_verify</code> opcode.</p></div></div>
+    <div class="step"><div class="n">4</div><div><h3>Verified by you</h3><p>Open the tools below. They query the chain in your browser — no server of ours in the middle.</p></div></div>
+  </div>
+
+  <h2>Verify it yourself</h2>
+  <div class="cards">
+    <a class="card" href="./verify-live.html"><div class="t">Live verifier</div><div class="d">Enter an Algorand app-id; decode the on-chain Falcon-1024 signature and confirm acceptance.</div><div class="go">open ↗</div></a>
+    <a class="card" href="./verify-unified.html"><div class="t">Unified verifier</div><div class="d">One input: an on-chain inscription or a THRONDAR answer receipt — provenance + post-quantum + anchor.</div><div class="go">open ↗</div></a>
+    <a class="card" href="./anchor.html"><div class="t">Anchor log</div><div class="d">Watch THRONDAR's signed tree head bind to an Algorand Falcon inscription, recomputed live.</div><div class="go">open ↗</div></a>
+    <a class="card" href="./pqbadge-demo.html"><div class="t">pqBadge</div><div class="d">A drop-in pill that shows live post-quantum verification next to any content.</div><div class="go">open ↗</div></a>
+  </div>
+
+  <h2>Build on it</h2>
+  <div class="cards">
+    <a class="card" href="https://github.com/brandonjsellam-Releone/verify-pqc"><div class="t">@trelyan/verify-pqc</div><div class="d">Dependency-free JS SDK (Node + browser): inspect Falcon signatures, verify inscriptions on-chain.</div><div class="go">npm + source ↗</div></a>
+    <a class="card" href="https://github.com/brandonjsellam-Releone/verify-pqc/blob/main/SPEC.md"><div class="t">Conformance suite</div><div class="d">The byte-level reference + three conformance checks for any Falcon-on-Algorand signer.</div><div class="go">read the spec ↗</div></a>
+  </div>
+
+  <p class="note"><b class="gold">Honest scope.</b> Algorand <b>TestNet</b>, and the reference system is <b>unaudited</b> — treat every claim as an engineering description pending independent review. The on-chain signature header <code>0xBA</code> is trelyan-pq's own deterministic-wrapper convention (<code>0x3A | 0x80</code>), <em>not</em> a NIST Falcon or FIPS-206 (FN-DSA) field. Falcon is a signature scheme, not encryption. The browser tools reflect a single public indexer's view of the chain.</p>
+</div>
+</body>
+</html>

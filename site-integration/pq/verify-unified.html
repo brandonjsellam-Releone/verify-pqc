@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TRELYAN — Unified post-quantum trust verifier</title>
+<meta name="description" content="One input. Paste an Algorand app-id/txid to verify a post-quantum (Falcon-1024) inscription on-chain, or a THRONDAR answer receipt to verify AI-answer provenance. The combined panel shows provenance, post-quantum signing, and on-chain anchoring. TestNet, unaudited." />
+<meta name="theme-color" content="#0A0E1F" />
+<style>
+  :root{--bg:#0A0E1F;--panel:#10162E;--line:rgba(217,198,144,.18);--gold:#D9C690;--txt:#E8EAF2;--mut:#9AA0B6;--ok:#5DCAA5;--warn:#EF9F27;--bad:#E24B4A;--mono:'JetBrains Mono',ui-monospace,Menlo,monospace}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.6}
+  .wrap{max-width:780px;margin:0 auto;padding:48px 20px 80px}
+  .eyebrow{font:500 12px/1 var(--mono);letter-spacing:.18em;color:var(--gold);text-transform:uppercase}
+  h1{font-weight:500;font-size:30px;margin:14px 0 6px}h1 em{font-style:italic;color:var(--gold)}
+  .lede{color:var(--mut);max-width:62ch;margin:0 0 26px}
+  .card{background:var(--panel);border:.5px solid var(--line);border-radius:14px;padding:20px}
+  label{display:block;font:500 12px/1 var(--mono);letter-spacing:.12em;color:var(--mut);text-transform:uppercase;margin-bottom:8px}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  input{flex:1;min-width:220px;background:#0A0E1F;border:.5px solid var(--line);border-radius:10px;color:var(--txt);font:400 14px/1 var(--mono);padding:12px 14px}
+  input:focus{outline:none;border-color:var(--gold)}
+  button{background:var(--gold);color:#0A0E1F;border:0;border-radius:10px;font:500 14px/1 inherit;padding:12px 20px;cursor:pointer}
+  button:disabled{opacity:.5;cursor:wait}
+  .kind{margin:8px 0 0;font:500 12px/1 var(--mono);color:var(--mut)}
+  .lights{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:22px 0 8px}
+  .light{background:#0A0E1F;border:.5px solid var(--line);border-radius:12px;padding:14px}
+  .light .h{display:flex;align-items:center;gap:8px;font-weight:500;font-size:14px}
+  .light .s{font:500 12px/1.4 var(--mono);margin-top:8px;color:var(--mut)}
+  .dot{width:10px;height:10px;border-radius:50%;flex:none;background:#555}
+  .on .dot{background:var(--ok)}.wn .dot{background:var(--warn)}.er .dot{background:var(--bad)}.pend .dot{animation:p 1s infinite}
+  @keyframes p{50%{opacity:.3}}
+  .detail{margin-top:14px;font-size:14px;color:var(--mut)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:12px}
+  .stat{background:#0A0E1F;border:.5px solid var(--line);border-radius:10px;padding:11px 13px}
+  .stat .k{font:500 11px/1 var(--mono);letter-spacing:.1em;color:var(--mut);text-transform:uppercase}
+  .stat .v{font:500 16px/1.3 var(--mono);margin-top:7px;word-break:break-all}
+  a{color:var(--gold)} .links{margin-top:14px;font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+  .note{margin-top:22px;font-size:13px;color:var(--mut);border-top:.5px solid var(--line);padding-top:16px}
+  .gold{color:var(--gold)}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+  .spin{display:inline-block;width:13px;height:13px;border:2px solid var(--line);border-top-color:var(--gold);border-radius:50%;animation:s .7s linear infinite;vertical-align:-2px}@keyframes s{to{transform:rotate(360deg)}}
+  .ex{font:500 12px/1 var(--mono);color:var(--gold);cursor:pointer;background:none;border:.5px solid var(--line);border-radius:8px;padding:7px 10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">One verifier · two layers</p>
+  <h1>Verify the <em>whole chain of trust.</em></h1>
+  <p class="lede">Paste an Algorand <strong>app-id or txid</strong> to verify a post-quantum (Falcon-1024) inscription on-chain — or a <strong>THRONDAR answer receipt</strong> to verify AI-answer provenance. The panel below shows all three layers: provenance, post-quantum signing, and on-chain anchoring.</p>
+
+  <div class="card">
+    <label for="q">App-id · txid · or THRONDAR receipt</label>
+    <div class="row">
+      <input id="q" value="763809096" autocomplete="off" spellcheck="false" />
+      <button id="go">Verify</button>
+    </div>
+    <div class="kind" id="kind"></div>
+    <div id="out"></div>
+  </div>
+
+  <div class="row" style="margin-top:14px;gap:8px">
+    <button class="ex" data-q="763809096">app-id 763809096</button>
+    <button class="ex" data-q="SQEPDOZ4NKFTVNO56FZS2MQOGV7SPTBTFQS2H2LUASV7XW52WZDQ">a signing txid</button>
+  </div>
+
+  <p class="note" id="note"></p>
+</div>
+
+<script src="js/verify-unified.js"></script>
+</body>
+</html>

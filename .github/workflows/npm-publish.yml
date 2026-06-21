@@ -1,0 +1,26 @@
+name: npm-publish
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Test (offline)
+        run: PQC_SKIP_LIVE=1 node packages/verify-pqc/test.js
+
+      - name: Publish @trelyan/verify-pqc
+        run: npm publish --access public
+        working-directory: packages/verify-pqc
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
