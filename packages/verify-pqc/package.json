@@ -1,0 +1,15 @@
+{
+  "name": "@trelyan/verify-pqc",
+  "version": "0.1.0",
+  "description": "Dependency-free toolkit to inspect Falcon-1024 signatures and verify post-quantum inscriptions on Algorand (AVM falcon_verify). Node + browser.",
+  "license": "MIT",
+  "main": "index.js",
+  "browser": "index.js",
+  "type": "commonjs",
+  "files": ["index.js", "README.md"],
+  "keywords": ["post-quantum", "pqc", "falcon", "falcon-1024", "fn-dsa", "algorand", "falcon_verify", "signature", "verification", "trelyan"],
+  "scripts": {
+    "test": "node test.js"
+  },
+  "engines": { "node": ">=18" }
+}

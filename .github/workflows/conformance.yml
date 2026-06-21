@@ -1,0 +1,32 @@
+name: conformance
+on: [push, pull_request]
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: SDK unit tests (offline)
+        run: PQC_SKIP_LIVE=1 node packages/verify-pqc/test.js
+
+      - name: Python core unit tests (offline)
+        run: python test_falcon_interop.py
+
+      - name: KAT conformance validation (offline)
+        run: |
+          python falcon_interop.py kat kat/falcon1024_det.onchain.json
+          python falcon_interop.py kat kat/falcon1024_det.example.json
+
+      - name: No FN-DSA over-claim in KATs (hard constraint)
+        run: |
+          if grep -ri "FN-DSA" kat/ | grep -iv "NOT FIPS-206 / FN-DSA"; then
+            echo "::error::A KAT field implies FN-DSA/FIPS-206. Use the trelyan-pq wrapper framing."; exit 1
+          fi
+          echo "ok: no bare FN-DSA claims"

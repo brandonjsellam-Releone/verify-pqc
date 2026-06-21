@@ -1,0 +1,8 @@
+node_modules/
+__pycache__/
+*.pyc
+.DS_Store
+anchor/anchor-*.json
+!anchor/anchor-demo.json
+web/anchors.json.local
+*.v1.bak

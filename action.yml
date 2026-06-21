@@ -1,0 +1,25 @@
+name: 'Falcon-on-Algorand conformance check'
+description: 'Fail CI unless an Algorand app has an on-chain Falcon-1024 post-quantum inscription accepted by falcon_verify. TestNet, unaudited.'
+branding:
+  icon: 'shield'
+  color: 'yellow'
+inputs:
+  app-id:
+    description: 'Algorand application id to verify'
+    required: true
+    default: '763809096'
+  indexer:
+    description: 'Algorand indexer base URL'
+    required: false
+    default: 'https://testnet-idx.algonode.cloud'
+runs:
+  using: 'composite'
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    - shell: bash
+      env:
+        APP_ID: ${{ inputs.app-id }}
+        INDEXER: ${{ inputs.indexer }}
+      run: node "${{ github.action_path }}/tools/conformance-check.js"
