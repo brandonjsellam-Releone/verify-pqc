@@ -22,10 +22,9 @@ never modified; the chain was only read.
 
 ## Owner steps to go live (each gated — run when you choose)
 
-1. **Publish the kit (GitHub).**
-   `cd trelyan-interop && git init && git add -A && git commit -m "Falcon-on-Algorand interop suite"`
-   then push to a public repo. Update the `github.com/trelyan/verify-pqc` links in `web/index.html`
-   and the SDK README to the real repo URL.
+1. **Publish the kit (GitHub).** ✅ **DONE** — live (public) at
+   <https://github.com/brandonjsellam-Releone/verify-pqc>. The conformance CI runs on push.
+   *(Rename/transfer to a `trelyan` org later if desired, then update the link in `web/index.html`.)*
 
 2. **Publish the SDK (npm).** `cd packages/verify-pqc && npm publish --access public`
    (requires an npm account + the `@trelyan` scope; this is a financial/account action — yours).
