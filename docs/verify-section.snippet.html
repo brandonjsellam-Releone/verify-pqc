@@ -1,0 +1,75 @@
+<!--
+  PASTE-READY SECTION for trelyan.foundation/verify.html.
+  Drop this <section> in after the existing "§ I On-chain" section (it reuses the site's
+  .field / .section-label / .num / .cta classes; the interactive bits are scoped with a
+  tlv- prefix so they don't collide with styles.css). Owner deploys — staged only.
+-->
+<section class="field" aria-labelledby="liveTitle">
+  <div class="section-label">Live <span class="num">§ I·b</span></div>
+  <h2 id="liveTitle">Don't take our word — <em>check it now.</em></h2>
+  <p>This runs entirely in your browser. It queries a public Algorand indexer directly,
+     ABI-decodes the on-chain Falcon-1024 signature, and confirms the write-once inscription
+     box exists — the box the contract writes only after <code>falcon_verify</code> succeeds.
+     No server of ours sits in the middle.</p>
+
+  <style>
+    .tlv-card{background:rgba(255,255,255,.02);border:1px solid rgba(217,198,144,.18);border-radius:14px;padding:18px;margin-top:18px}
+    .tlv-row{display:flex;gap:10px;flex-wrap:wrap}
+    .tlv-row input{flex:1;min-width:200px;background:#0A0E1F;border:1px solid rgba(217,198,144,.18);border-radius:10px;color:#E8EAF2;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:15px;padding:12px 14px}
+    .tlv-row input:focus{outline:none;border-color:#D9C690}
+    .tlv-row button{background:#D9C690;color:#0A0E1F;border:0;border-radius:10px;font-weight:600;padding:12px 20px;cursor:pointer;font:inherit}
+    .tlv-verdict{display:flex;align-items:center;gap:11px;margin:18px 0 6px;font-size:19px;font-weight:600}
+    .tlv-dot{width:11px;height:11px;border-radius:50%;flex:none;background:#888}
+    .tlv-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:12px}
+    .tlv-stat{background:#0A0E1F;border:1px solid rgba(217,198,144,.18);border-radius:10px;padding:11px 13px}
+    .tlv-stat .k{font:600 11px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:#9AA0B6;text-transform:uppercase}
+    .tlv-stat .v{font:600 16px/1.3 'JetBrains Mono',monospace;margin-top:7px;word-break:break-all}
+    .tlv-mut{color:#9AA0B6}.tlv-ok{color:#5DCAA5}.tlv-warn{color:#EF9F27}.tlv-gold{color:#D9C690}
+    .tlv-spin{display:inline-block;width:13px;height:13px;border:2px solid rgba(217,198,144,.25);border-top-color:#D9C690;border-radius:50%;animation:tlvspin .7s linear infinite;vertical-align:-2px}
+    @keyframes tlvspin{to{transform:rotate(360deg)}}
+  </style>
+
+  <div class="tlv-card">
+    <div class="tlv-row">
+      <input id="tlvApp" inputmode="numeric" value="763809096" autocomplete="off" spellcheck="false" aria-label="Algorand application id" />
+      <button id="tlvGo" type="button">Verify on-chain</button>
+    </div>
+    <div id="tlvOut" style="margin-top:6px"></div>
+  </div>
+
+  <script>
+  (function(){
+    var IDX="https://testnet-idx.algonode.cloud",out=document.getElementById("tlvOut"),btn=document.getElementById("tlvGo"),inp=document.getElementById("tlvApp");
+    function b64(b){var s=atob(b),u=new Uint8Array(s.length);for(var i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u;}
+    function abi(b){if(b.length>=2){var d=(b[0]<<8)|b[1];if(d===b.length-2)return b.slice(2);}return b;}
+    function esc(s){return String(s).replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c];});}
+    async function verify(app){
+      var tr=await fetch(IDX+"/v2/transactions?application-id="+encodeURIComponent(app)+"&limit=100").then(function(r){return r.json();});
+      var sig=null,txid=null,pub=false;
+      (tr.transactions||[]).forEach(function(t){
+        (((t["application-transaction"]||{})["application-args"])||[]).map(b64).map(abi).forEach(function(a){
+          if(!sig&&a.length>600&&a.length<1500&&(a[0]&0x0f)===10){sig={h:"0x"+a[0].toString(16),len:a.length,det:!!(a[0]&0x80)};txid=t.id;}
+          if(a.length===1793&&(a[0]&0x0f)===10)pub=true;
+        });
+      });
+      var insc=false;try{var bx=await fetch(IDX+"/v2/applications/"+encodeURIComponent(app)+"/boxes?limit=100").then(function(r){return r.json();});insc=(bx.boxes||[]).some(function(x){var n=b64(x.name);return n.length>=2&&n[0]===0x69&&n[1]===0x5f;});}catch(e){}
+      return {sig:sig,txid:txid,pub:pub,insc:insc,verified:!!(sig&&insc)};
+    }
+    function render(app,r){
+      if(!r.sig){out.innerHTML='<div class="tlv-verdict"><span class="tlv-dot" style="background:#EF9F27"></span><span class="tlv-warn">No Falcon signature found</span></div>';return;}
+      var ok=r.verified,color=ok?"#5DCAA5":"#EF9F27";
+      out.innerHTML='<div class="tlv-verdict"><span class="tlv-dot" style="background:'+color+'"></span><span class="'+(ok?"tlv-ok":"tlv-warn")+'">'+(ok?"Post-quantum signature accepted on-chain":"Falcon signature found — acceptance unconfirmed")+'</span></div>'
+        +'<p class="tlv-mut" style="margin:0">'+(ok?"The write-once inscription box exists, so falcon_verify accepted this signature.":"A Falcon-1024 signature is on chain, but no write-once box confirmed the verify path.")+'</p>'
+        +'<div class="tlv-grid">'
+        +'<div class="tlv-stat"><div class="k">Header</div><div class="v tlv-gold">'+r.sig.h+'</div></div>'
+        +'<div class="tlv-stat"><div class="k">Size</div><div class="v">'+r.sig.len+' B</div></div>'
+        +'<div class="tlv-stat"><div class="k">Mode</div><div class="v">'+(r.sig.det?"deterministic":"randomized")+'</div></div>'
+        +'<div class="tlv-stat"><div class="k">Public key</div><div class="v '+(r.pub?"tlv-ok":"tlv-warn")+'">'+(r.pub?"1793 B":"not seen")+'</div></div>'
+        +'</div>'
+        +'<p class="tlv-mut" style="font-size:13px;margin-top:14px">'+(r.txid?'<a class="tlv-gold" target="_blank" rel="noopener" href="https://lora.algokit.io/testnet/transaction/'+esc(r.txid)+'">signing txn ↗</a> · ':'')+'<code>0xBA</code> = trelyan-pq’s deterministic-wrapper convention (not a NIST/FIPS field). TestNet, unaudited; reflects one indexer.</p>';
+    }
+    async function run(){var app=(inp.value||"").replace(/\D/g,"");if(!app)return;btn.disabled=true;out.innerHTML='<p class="tlv-mut"><span class="tlv-spin"></span> Querying Algorand TestNet…</p>';try{render(app,await verify(app));}catch(e){out.innerHTML='<p style="color:#E24B4A">Lookup failed: '+esc(e.message||e)+'</p>';}finally{btn.disabled=false;}}
+    btn.addEventListener("click",run);inp.addEventListener("keydown",function(e){if(e.key==="Enter")run();});run();
+  })();
+  </script>
+</section>
