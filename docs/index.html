@@ -37,7 +37,7 @@
 <div class="wrap">
   <p class="eyebrow">TRELYAN · post-quantum trust</p>
   <h1>Trust you can <em>check yourself</em> — down to the byte.</h1>
-  <p class="lede">THRONDAR signs every AI answer with post-quantum signatures, commits it to a transparency log, and anchors that log on a public chain as a Falcon-1024 inscription. None of it asks for your trust. Every layer hands you the artifacts to verify — or break — the claim.</p>
+  <p class="lede">THRONDAR signs every AI answer with post-quantum signatures, commits it to a transparency log, and anchors that log on a public chain as a Falcon-1024 inscription. None of it asks for your trust. Every layer hands you the artifacts to verify — or break — the claim. <strong>Both layers now verify in your browser</strong>: the ML-DSA-87 tree-head signature (Layer 1) and the Falcon-1024 on-chain inscription (Layer 2).</p>
 
   <div class="pills">
     <span class="pill">ML-DSA-87 + Falcon-1024</span>
@@ -51,7 +51,7 @@
     <div class="step"><div class="n">1</div><div><h3>Signed, post-quantum</h3><p>Each answer is signed with ML-DSA-87 and Falcon-1024 — signatures that hold even against a quantum adversary.</p></div></div>
     <div class="step"><div class="n">2</div><div><h3>Logged, append-only</h3><p>Every answer is committed to an RFC-6962 transparency log whose signed tree head can't be quietly rewritten.</p></div></div>
     <div class="step"><div class="n">3</div><div><h3>Anchored on-chain</h3><p>The log's tree head is inscribed on Algorand as a write-once Falcon-1024 record, verified by the <code>falcon_verify</code> opcode.</p></div></div>
-    <div class="step"><div class="n">4</div><div><h3>Verified by you</h3><p>Open the tools below. They query the chain in your browser — no server of ours in the middle.</p></div></div>
+    <div class="step"><div class="n">4</div><div><h3>Verified by you</h3><p>Open the tools below. They verify <b>both layers in your browser</b> — the ML-DSA-87 signature against a <b>pinned</b> key with <b>self-hosted</b> audited crypto, and the on-chain Falcon inscription straight from the chain. No server of ours in the middle.</p></div></div>
   </div>
 
   <h2>Verify it yourself</h2>
