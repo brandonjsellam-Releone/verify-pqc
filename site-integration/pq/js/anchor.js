@@ -1,4 +1,6 @@
 var THRONDAR="/api/pq/throndar", INDEXER="/api/pq/idx";
+var RECOGNIZED_APPS=new Set(["763809096","764917520"]); // TRELYAN inscription contracts (app-ids unforgeable)
+var INSCRIBE_SELECTOR="9d300cf2"; // inscribe(cell,commit,sig,uri) ABI method selector — commit is arg[2]
 var DOMAIN="TRELYAN-ANCHOR-v1";
 function enc(s){return new TextEncoder().encode(s);}
 function u64be(n){var a=new Uint8Array(8),b=BigInt(n);for(var i=7;i>=0;i--){a[i]=Number(b&0xffn);b>>=8n;}return a;}
@@ -46,17 +48,24 @@ async function main(){
   ap.innerHTML='<p class="mut"><span class="spin"></span> verifying '+manifest.length+' anchor(s) against the chain…</p>';
   var rows=[];
   for(var i=0;i<manifest.length;i++){
-    var m=manifest[i], want=commitment(m.sth), onchain=null, ok=false;
+    var m=manifest[i], want=commitment(m.sth), ok=false, label="", reason="";
     try{ var t=await fetch(INDEXER+"/v2/transactions/"+m.txid).then(function(r){return r.json();});
-      var args=((t.transaction||{})["application-transaction"]||{})["application-args"]||[];
-      var dec=args.map(b64); onchain=(dec.filter(function(a){return a.length===32;})[0]||null); onchain=onchain?hex(onchain):null;
-      ok=onchain===want;
-    }catch(e){}
+      var at=(t.transaction||{})["application-transaction"]||{};
+      var appId=String(at["application-id"]||"");
+      var args=(at["application-args"]||[]).map(b64);
+      var sel=args[0]?hex(args[0]):"";
+      var commitArg=(args[2]&&args[2].length===32)?hex(args[2]):null; // inscribe(cell, commit, sig, uri) -> arg[2]
+      if(!RECOGNIZED_APPS.has(appId)) reason="txn app "+appId+" is not a recognized TRELYAN contract";
+      else if(sel!==INSCRIBE_SELECTOR) reason="txn is not an inscribe() call";
+      else if(commitArg!==want) reason="on-chain commit does not match this tree head";
+      else { ok=true; label="✓ inscribed · commit matches"; }
+    }catch(e){ reason="lookup failed"; }
+    if(!ok && !reason) reason="unconfirmed";
     rows.push('<div class="row" style="padding:10px 0;border-top:.5px solid var(--line)">'
-      +'<div><div class="k mut" style="font:500 11px/1 var(--mono)">TREE SIZE '+esc(m.sth.tree_size)+' · '+esc(m.sth.timestamp)+'</div>'
+      +'<div><div class="k mut" style="font:500 11px/1 var(--mono)">TREE SIZE '+esc(m.sth.tree_size)+' · '+esc(m.sth.timestamp)+(m.app_id?" · app "+esc(m.app_id):"")+'</div>'
       +'<div class="v" style="font:500 12px/1.5 var(--mono);word-break:break-all">'+esc(want)+'</div></div>'
-      +'<div style="text-align:right"><span class="pill" style="color:'+(ok?"var(--ok)":"var(--warn)")+'">'+(ok?"✓ cross-anchor verified":"unconfirmed")+'</span><div style="margin-top:8px"><a class="gold" target="_blank" rel="noopener" href="https://lora.algokit.io/testnet/transaction/'+esc(m.txid)+'">txn ↗</a></div></div></div>');
+      +'<div style="text-align:right"><span class="pill" style="color:'+(ok?"var(--ok)":"var(--warn)")+'">'+(ok?label:esc("unverified: "+reason))+'</span><div style="margin-top:8px"><a class="gold" target="_blank" rel="noopener" href="https://lora.algokit.io/testnet/transaction/'+esc(m.txid)+'">txn ↗</a></div></div></div>');
   }
-  ap.innerHTML=rows.join("");
+  ap.innerHTML=rows.join("")+'<p class="mut" style="margin:14px 0 0;font-size:13px">A ✓ confirms <b>Layer 2</b> only: a <b>recognized</b> TRELYAN contract inscribed this exact tree-head commitment via a <code>falcon_verify</code>-gated <code>inscribe()</code> call (app-id, method selector, and commit arg all checked). It does <b>not</b> re-run the <b>Layer 1</b> ML-DSA-87 STH signature in your browser — that is shown above as THRONDAR\'s claim; cross-check it independently at <code>'+THRONDAR+'/api/transparency/ledger</code>.</p>';
 }
 main();

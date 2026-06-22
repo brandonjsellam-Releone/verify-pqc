@@ -1,5 +1,9 @@
 var INDEXER="/api/pq/idx";
 var THRONDAR="/api/pq/throndar";
+// TRELYAN inscription contracts whose TEAL gates the write-once i_ box on falcon_verify.
+// App-ids are chain-assigned + unforgeable, so a box / Falcon-shaped arg on any OTHER app
+// proves nothing about falcon_verify — the green "verified" verdict is gated on this set.
+var RECOGNIZED_APPS=new Set(["763809096","764917520"]);
 var out=document.getElementById("out"), kind=document.getElementById("kind"), note=document.getElementById("note"), btn=document.getElementById("go"), q=document.getElementById("q");
 
 function b64(b){var s=atob(b),u=new Uint8Array(s.length);for(var i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u;}
@@ -31,7 +35,8 @@ async function verifyOnChain(app){
     });
   });
   var insc=false;try{var bx=await fetch(INDEXER+"/v2/applications/"+encodeURIComponent(app)+"/boxes?limit=100").then(function(r){return r.json();});insc=(bx.boxes||[]).some(function(x){var n=b64(x.name);return n.length>=2&&n[0]===0x69&&n[1]===0x5f;});}catch(e){}
-  return {app:app,sig:sig,txid:txid,pub:pub,insc:insc,verified:!!(sig&&insc)};
+  var recognized=RECOGNIZED_APPS.has(String(app));
+  return {app:app,sig:sig,txid:txid,pub:pub,insc:insc,recognized:recognized,verified:!!(sig&&insc&&recognized)};
 }
 
 async function verifyThrondar(input,isBundle){
@@ -51,12 +56,15 @@ function light(state,title,sub){
 
 function renderOnChain(r){
   var pq = r.sig ? "on" : "warn";
-  var anchor = r.verified ? "on" : (r.sig?"warn":"warn");
+  var anchor = r.verified ? "on" : "warn";
+  var anchorSub = r.verified ? "write-once inscription on a recognized TRELYAN app"
+    : (r.insc && !r.recognized) ? "i_ box present, but NOT a recognized TRELYAN app — self-reported, not verified"
+    : (r.sig ? "signature on chain, box unconfirmed" : "none");
   out.innerHTML =
     '<div class="lights">'
     + light("warn","Provenance","on-chain mode — no AI receipt provided")
     + light(pq, "Post-quantum", r.sig? ("Falcon-1024 · header "+r.sig.header+" · "+r.sig.len+"B"):"no Falcon signature found")
-    + light(anchor,"On-chain", r.verified?"write-once inscription present":(r.sig?"signature on chain, box unconfirmed":"none"))
+    + light(anchor,"On-chain", anchorSub)
     + '</div>'
     + (r.sig?('<div class="grid">'
       + '<div class="stat"><div class="k">Header</div><div class="v gold">'+r.sig.header+'</div></div>'
@@ -67,7 +75,7 @@ function renderOnChain(r){
     + '<div class="links">'
     + (r.txid?'<a target="_blank" rel="noopener" href="https://lora.algokit.io/testnet/transaction/'+esc(r.txid)+'">Signing txn ↗</a>':"")
     + '<a target="_blank" rel="noopener" href="https://lora.algokit.io/testnet/application/'+esc(r.app)+'">App '+esc(r.app)+' ↗</a></div>';
-  note.innerHTML='<b class="gold">Reading.</b> Post-quantum = a Falcon-1024 signature is on chain. On-chain = the write-once <code>i_</code> box exists, which the contract writes only after <code>falcon_verify</code> passes. <code>0xBA</code> is trelyan-pq\'s deterministic-wrapper convention, not a NIST/FIPS field. TestNet, unaudited; reflects one indexer.';
+  note.innerHTML='<b class="gold">Reading.</b> On-chain turns green only for a <b>recognized TRELYAN app</b> ('+Array.from(RECOGNIZED_APPS).join(", ")+') whose contract writes the <code>i_</code> box only after <code>falcon_verify</code> passes — a box on any other app does not imply that, so it shows as self-reported. <code>0xBA</code> is trelyan-pq\'s deterministic-wrapper convention, not a NIST/FIPS field. TestNet, unaudited; reflects one indexer.';
 }
 
 function renderThrondar(input, t){

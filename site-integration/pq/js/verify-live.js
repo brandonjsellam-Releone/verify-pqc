@@ -1,4 +1,9 @@
 const INDEXER = "/api/pq/idx";
+// Only these app-ids are TRELYAN inscription contracts whose TEAL gates the write-once
+// i_ box on falcon_verify. App-ids are chain-assigned and unforgeable, so an attacker
+// cannot present their own app as one of these. A box / Falcon-shaped arg on ANY OTHER
+// app proves nothing about falcon_verify — so the "accepted" verdict is gated on this set.
+const RECOGNIZED_APPS = new Set(["763809096","764917520"]);
 const out = document.getElementById("out");
 const note = document.getElementById("note");
 const btn = document.getElementById("go");
@@ -31,18 +36,24 @@ function render(app, r){
     return;
   }
   const s=r.sig;
+  const recognized = RECOGNIZED_APPS.has(String(app));
   const standard = s.compressed && s.logn===10;
-  const verified = standard && r.insc; // sig present AND write-once inscription written => verify path passed
+  const verified = standard && r.insc && recognized; // only a recognized TRELYAN contract gates its i_ box on falcon_verify
+  const selfReported = standard && r.insc && !recognized;
   const dot = verified ? "var(--ok)" : "var(--warn)";
   const headline = verified
     ? `<span class="ok">Post-quantum signature accepted on-chain</span>`
-    : `<span class="warn">Falcon signature found — acceptance not confirmed</span>`;
+    : selfReported
+      ? `<span class="warn">Unrecognized app — self-reported, not verified</span>`
+      : `<span class="warn">Falcon signature found — acceptance not confirmed</span>`;
   const detTxt = s.det ? `deterministic (0x80 wrapper bit set)` : `randomized`;
   out.innerHTML = `
     <div class="verdict"><span class="dot" style="background:${dot}"></span>${headline}</div>
     <p class="muted" style="margin:0 0 4px">${verified
-      ? `The write-once inscription box exists — the contract writes it only after <code>falcon_verify</code> succeeds, so the opcode accepted this signature.`
-      : `A Falcon-1024 signature is on chain, but no write-once inscription box was found to confirm the verify path ran.`}</p>
+      ? `App ${esc(app)} is a recognized TRELYAN inscription contract — it writes the write-once box only after <code>falcon_verify</code> succeeds, so the opcode accepted this signature.`
+      : selfReported
+        ? `This app has an <code>i_</code> box and a Falcon-shaped arg, but it is <b>not</b> a recognized TRELYAN contract. On an arbitrary app a box does <b>not</b> imply <code>falcon_verify</code> ran — treat this as the app's self-report, not a verified acceptance.`
+        : `A Falcon-1024 signature is on chain, but no write-once inscription box was found to confirm the verify path ran.`}</p>
     <div class="grid">
       <div class="stat"><div class="k">Header byte</div><div class="v gold">${s.hex}</div></div>
       <div class="stat"><div class="k">Format</div><div class="v">${s.compressed?"compressed":"?"} · logn ${s.logn}</div></div>

@@ -22,22 +22,42 @@ ok(dec.length === 1236 && dec[0] === 0xBA, 'abiDecodeBytes');
 ok(F.compareSigs(det, det).identical, 'compare identical');
 ok(F.compareSigs(det, rnd).diffRegion === 'header', 'compare header diff');
 
-console.log('unit:', pass, 'pass,', fail, 'fail');
-
-// --- live: verify the real on-chain inscription (CI sets PQC_SKIP_LIVE to skip network) ---
-if (process.env.PQC_SKIP_LIVE) {
-  console.log('live: skipped (PQC_SKIP_LIVE set)');
-  console.log(fail === 0 ? 'UNIT TESTS PASS (' + pass + ')' : 'SOME TESTS FAILED (' + fail + ')');
-  process.exit(fail === 0 ? 0 : 1);
+// --- false-verify regression (offline, mocked indexer): a sig + i_ box on an UNRECOGNIZED
+//     app must NOT verify; the same on a recognized app must verify. Guards the soundness fix. ---
+function mockFetch() {
+  const sig = new Uint8Array(1236); sig[0] = 0xBA;            // Falcon-shaped arg
+  const sigB64 = Buffer.from(sig).toString('base64');
+  const boxB64 = Buffer.from([0x69, 0x5f, 0x61]).toString('base64'); // "i_a"
+  return (url) => Promise.resolve({ json: () => Promise.resolve(
+    /\/v2\/transactions\?/.test(url) ? { transactions: [{ id: 'T1', 'confirmed-round': 1, 'application-transaction': { 'application-args': [sigB64] } }] }
+    : /\/boxes/.test(url) ? { boxes: [{ name: boxB64 }] } : {}) });
 }
-F.verifyOnChain('763809096').then(function (r) {
-  console.log('live verifyOnChain(763809096):', JSON.stringify({
-    verified: r.verified, header: r.signature && r.signature.headerHex,
-    len: r.signature && r.signature.totalLen, box: r.inscriptionBox, pubkey: r.pubkey, txid: r.sigTxid
-  }, null, 2));
-  ok(r.verified === true, 'live verified');
-  ok(r.signature && r.signature.headerHex === '0xba' && r.signature.totalLen === 1236, 'live 0xBA/1236');
-  ok(r.inscriptionBox === true && r.pubkey === true, 'live box+pubkey');
-  console.log(fail === 0 ? 'ALL SDK TESTS PASS (' + pass + ')' : 'SOME TESTS FAILED (' + fail + ')');
-  process.exit(fail === 0 ? 0 : 1);
-}).catch(function (e) { console.error('live test error:', e.message); process.exit(1); });
+
+(async function () {
+  const attacker = await F.verifyOnChain('999999999', { fetch: mockFetch() });
+  ok(attacker.verified === false && attacker.recognized === false && attacker.inscriptionBox === true,
+     'unrecognized app with sig+box is NOT verified (false-verify guard)');
+  const legit = await F.verifyOnChain('763809096', { fetch: mockFetch() });
+  ok(legit.verified === true && legit.recognized === true, 'recognized app with sig+box verifies');
+
+  console.log('unit:', pass, 'pass,', fail, 'fail');
+
+  // --- live: verify the real on-chain inscription (CI sets PQC_SKIP_LIVE to skip network) ---
+  if (process.env.PQC_SKIP_LIVE) {
+    console.log('live: skipped (PQC_SKIP_LIVE set)');
+    console.log(fail === 0 ? 'UNIT TESTS PASS (' + pass + ')' : 'SOME TESTS FAILED (' + fail + ')');
+    process.exit(fail === 0 ? 0 : 1);
+  }
+  try {
+    const r = await F.verifyOnChain('763809096');
+    console.log('live verifyOnChain(763809096):', JSON.stringify({
+      verified: r.verified, header: r.signature && r.signature.headerHex,
+      len: r.signature && r.signature.totalLen, box: r.inscriptionBox, pubkey: r.pubkey, txid: r.sigTxid
+    }, null, 2));
+    ok(r.verified === true, 'live verified');
+    ok(r.signature && r.signature.headerHex === '0xba' && r.signature.totalLen === 1236, 'live 0xBA/1236');
+    ok(r.inscriptionBox === true && r.pubkey === true, 'live box+pubkey');
+    console.log(fail === 0 ? 'ALL SDK TESTS PASS (' + pass + ')' : 'SOME TESTS FAILED (' + fail + ')');
+    process.exit(fail === 0 ? 0 : 1);
+  } catch (e) { console.error('live test error:', e.message); process.exit(1); }
+})();

@@ -24,7 +24,9 @@ import argparse, base64, hashlib, json, struct, urllib.request
 THRONDAR = "https://throndar.ai"
 INDEXER = "https://testnet-idx.algonode.cloud"
 DOMAIN = b"TRELYAN-ANCHOR-v1"
-APP = 763809096  # the deployed inscription app (we USE its inscribe; we never alter it)
+APP = 763809096  # the canonical deployed inscription app (we USE its inscribe; we never alter it)
+RECOGNIZED_APPS = {"763809096", "764917520"}  # TRELYAN inscription contracts whose TEAL gates the i_ box on falcon_verify
+INSCRIBE_SELECTOR = "9d300cf2"  # inscribe(cell, commit, sig, uri) ABI method selector — commit is arg[2]
 
 
 def sha512_256(b: bytes) -> bytes:
@@ -99,12 +101,26 @@ def cmd_verify(args):
     print("matches saved record  :", rec_ok)
     if args.txid:
         t = json.loads(_get(INDEXER + "/v2/transactions/" + args.txid))
-        raw = ((t.get("transaction", {}).get("application-transaction", {}) or {}).get("application-args", []))
-        decoded = [base64.b64decode(a) for a in raw]
-        onchain = next((a.hex() for a in decoded if len(a) == 32), None)
-        chain_ok = onchain == commit.hex()
-        print("on-chain commit arg   :", onchain)
-        print("CROSS-ANCHOR VERIFIED  :", bool(rec_ok and chain_ok))
+        at = (t.get("transaction", {}).get("application-transaction", {}) or {})
+        app_id = str(at.get("application-id", ""))
+        decoded = [base64.b64decode(a) for a in at.get("application-args", [])]
+        selector = decoded[0].hex() if decoded else ""
+        commit_arg = decoded[2].hex() if len(decoded) > 2 and len(decoded[2]) == 32 else None
+        reasons = []
+        if app_id not in RECOGNIZED_APPS:
+            reasons.append(f"txn app {app_id} is not a recognized TRELYAN contract")
+        if selector != INSCRIBE_SELECTOR:
+            reasons.append("txn is not an inscribe() call")
+        if commit_arg != commit.hex():
+            reasons.append("on-chain commit arg does not match this tree head")
+        chain_ok = not reasons
+        print("on-chain app / call   :", app_id, "/", ("inscribe" if selector == INSCRIBE_SELECTOR else (selector or "(none)")))
+        print("on-chain commit arg   :", commit_arg)
+        verdict = bool(rec_ok and chain_ok)
+        print("LAYER-2 VERIFIED       :", verdict, ("" if verdict else "-> " + "; ".join(reasons)))
+        print("NOTE: confirms Layer 2 (a recognized contract inscribed this commitment via inscribe()).")
+        print("      It does NOT verify the Layer-1 ML-DSA-87 STH signature (sth_sig) — cross-check that")
+        print("      independently at", THRONDAR + "/api/transparency/ledger")
     else:
         print("(pass --txid <ALGOTXID> to also check the on-chain inscription)")
 

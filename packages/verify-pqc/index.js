@@ -94,18 +94,25 @@
       boxes = (bx.boxes || []).map(function (b) { return b64ToBytes(b.name); });
     } catch (e) { /* boxes optional */ }
     var inscription = boxes.some(function (n) { return n.length >= 2 && n[0] === 0x69 && n[1] === 0x5f; }); // "i_"
-    var verified = !!(sigInfo && sigInfo.fmt === 'compressed' && sigInfo.logn === 10 && inscription);
+    // Only recognized TRELYAN contracts gate their i_ box on falcon_verify. App-ids are
+    // chain-assigned and unforgeable, so a box / Falcon-shaped arg on ANY OTHER app proves
+    // nothing about falcon_verify — the "verified" verdict is gated on this set.
+    var recognizedApps = (opts.recognizedApps || ['763809096', '764917520']).map(String);
+    var recognized = recognizedApps.indexOf(String(appId)) !== -1;
+    var verified = !!(sigInfo && sigInfo.fmt === 'compressed' && sigInfo.logn === 10 && inscription && recognized);
     return {
-      appId: String(appId), indexer: indexer, verified: verified,
+      appId: String(appId), indexer: indexer, verified: verified, recognized: recognized,
       signature: sigInfo, signatureHex: sig ? bytesToHex(sig) : null,
       sigTxid: sigTxid, sigRound: sigRound, pubkey: pubkey, pubkeyTxid: pubTxid,
       inscriptionBox: inscription, boxCount: boxes.length,
       claim: verified
-        ? 'A Falcon-1024 signature is on chain and a write-once inscription box exists (the contract writes it only after falcon_verify passes).'
-        : (sigInfo
-          ? 'A Falcon-1024 signature is on chain, but no write-once inscription box was found to confirm the verify path ran.'
-          : 'No Falcon-1024 signature found in the last 100 application calls.'),
-      disclaimer: 'Reflects one indexer\'s view of Algorand TestNet; system is unaudited. 0xBA is trelyan-pq\'s deterministic-wrapper convention, not a NIST/FIPS field.'
+        ? 'App ' + appId + ' is a recognized TRELYAN inscription contract with a Falcon-1024 signature and a write-once box (written only after falcon_verify passes), so the opcode accepted this signature.'
+        : (inscription && !recognized
+          ? 'App ' + appId + ' has an i_ box and a Falcon-shaped arg, but it is NOT a recognized TRELYAN contract — on an arbitrary app a box does not imply falcon_verify ran, so this is self-reported, not verified.'
+          : (sigInfo
+            ? 'A Falcon-1024 signature is on chain, but no write-once inscription box on a recognized app confirms the verify path ran.'
+            : 'No Falcon-1024 signature found in the last 100 application calls.')),
+      disclaimer: 'Reflects one indexer\'s view of Algorand TestNet; unaudited. "verified" requires a recognized TRELYAN app-id (' + recognizedApps.join(', ') + '). 0xBA is trelyan-pq\'s deterministic-wrapper convention, not a NIST/FIPS field.'
     };
   }
 

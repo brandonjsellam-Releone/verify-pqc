@@ -14,14 +14,28 @@ analysis pending independent review, not a proof.
 - **Binding.** The commitment ties one specific STH to one immutable on-chain record, dated by
   the Algorand block.
 
+## What this kit's verifier checks (and what it does NOT)
+
+`anchor.html` and `anchor_sth.py verify` confirm **Layer 2 only**, and exactly these three things:
+1. the txn's app-id is a **recognized** TRELYAN inscription contract (`763809096`, `764917520`) —
+   app-ids are chain-assigned and unforgeable;
+2. the txn is an **`inscribe()`** call (method selector `9d300cf2`);
+3. the **commit arg** (`inscribe`'s 3rd argument) equals `commitment(sth)` recomputed locally.
+
+It does **NOT** re-run the **Layer-1 ML-DSA-87 STH signature** in-browser. A green ✓ therefore means
+"a recognized TRELYAN contract inscribed this exact tree-head commitment via a `falcon_verify`-gated
+call" — *not* that THRONDAR's ML-DSA signature over that STH is valid. **You must verify Layer 1
+independently** (against THRONDAR's published answer-signer key / `/api/transparency/ledger`) for the
+full two-layer guarantee. In-browser ML-DSA (WASM) re-verification is planned.
+
 ## Adversary model — what each compromise does and does not break
 
-| Adversary capability | Effect | Why the anchor holds |
+| Adversary capability | Effect | What actually stops it |
 |---|---|---|
-| **Forge ML-DSA STHs only** (Layer-1 key) | Can mint fake STHs with valid signatures. | They are not *anchored*: a fake STH has no matching on-chain commitment, and **already-anchored honest heads are immutable on-chain** and cannot be rewritten. `verify` rejects an "anchored" claim with no chain match. |
-| **Inscribe arbitrary commitments only** (Layer-2 key) | Can write junk commitments on-chain. | A commitment only validates as a THRONDAR anchor if its STH also carries a valid **ML-DSA** signature. Inscribing a commitment to an unsigned/fake STH fails verification. |
-| **Both keys** | Can produce a self-consistent fake (signed STH + matching inscription). | This is the **irreducible trust floor**. The design's value is raising the bar from one key to **two independent post-quantum keys on two independent systems**. |
-| **Algorand reorg** (TestNet) | A *recent* anchor could un-confirm. | Wait for finality before relying on an anchor; the write-once box prevents overwrite, not reorg. TestNet caveat is stated. |
+| **Forge ML-DSA STHs only** (Layer-1 key) | Mint fake STHs with valid-looking signatures. | The **independent Layer-1 check** (verify the ML-DSA sig against THRONDAR's published key) rejects a forged STH. ⚠️ The kit's verifier does NOT do this in-browser today, so a fake STH whose commitment the attacker also inscribes on a recognized app would display "Layer-2 verified" — run the Layer-1 check yourself until WASM ML-DSA ships. |
+| **Inscribe arbitrary commitments only** (Layer-2 / Falcon capability) | Inscribe any commitment on a recognized app. | Only the **Layer-1 ML-DSA verification** binds a commitment to a *genuine* THRONDAR STH. Layer 2 alone (all the kit checks) proves a recognized contract inscribed the value, not that the STH is authentic. |
+| **Both keys** | Self-consistent fake (signed STH + matching inscription). | **Irreducible trust floor** — two independent post-quantum keys on two independent systems. |
+| **Algorand reorg** (TestNet) | A *recent* anchor could un-confirm. | Wait for finality before relying on an anchor; the write-once box prevents overwrite, not reorg. |
 | **Compromise/MITM one indexer** | A verifier reading that indexer sees a false view. | Query multiple indexers / run your own; the tools disclose single-indexer trust. |
 
 ## What the second layer *adds*
