@@ -6,3 +6,4 @@ anchor/anchor-*.json
 !anchor/anchor-demo.json
 web/anchors.json.local
 *.v1.bak
+INTEROP_REPLY.md

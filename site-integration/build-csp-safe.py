@@ -16,9 +16,9 @@ INLINE = re.compile(r"<script>\s*(.*?)</script>", re.S)
 
 for name in ["verify-live", "verify-unified", "anchor"]:
     html = open(os.path.join(WEB, name + ".html"), encoding="utf-8").read()
-    html = html.replace(
-        '<script src="https://cdn.jsdelivr.net/npm/js-sha512@0.9.0/src/sha512.min.js"></script>',
-        '<script src="vendor/sha512.min.js"></script>')
+    import re as _re
+    html = _re.sub(r'<script src="https://cdn\.jsdelivr\.net/npm/js-sha512@0\.9\.0/src/sha512\.min\.js"[^>]*></script>',
+                   '<script src="vendor/sha512.min.js"></script>', html)
     m = INLINE.search(html)
     assert m, "no inline <script> in " + name
     open(os.path.join(PQ, "js", name + ".js"), "w", encoding="utf-8").write(proxy(m.group(1)))

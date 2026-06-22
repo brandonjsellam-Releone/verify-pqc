@@ -1,15 +1,23 @@
 {
   "name": "@trelyan/verify-pqc",
-  "version": "0.1.0",
-  "description": "Dependency-free toolkit to inspect Falcon-1024 signatures and verify post-quantum inscriptions on Algorand (AVM falcon_verify). Node + browser.",
+  "version": "0.2.0",
+  "description": "Dependency-free toolkit to inspect Falcon-1024 signatures and verify post-quantum inscriptions on Algorand (AVM falcon_verify). Optional ML-DSA-87 STH verification. Node + browser.",
   "license": "MIT",
   "main": "index.js",
   "browser": "index.js",
   "type": "commonjs",
-  "files": ["index.js", "README.md"],
-  "keywords": ["post-quantum", "pqc", "falcon", "falcon-1024", "fn-dsa", "algorand", "falcon_verify", "signature", "verification", "trelyan"],
+  "files": ["index.js", "mldsa.mjs", "README.md"],
+  "exports": {
+    ".": "./index.js",
+    "./mldsa": "./mldsa.mjs"
+  },
+  "keywords": ["post-quantum", "pqc", "falcon", "falcon-1024", "fn-dsa", "ml-dsa", "ml-dsa-87", "dilithium", "algorand", "falcon_verify", "signature", "verification", "trelyan"],
   "scripts": {
     "test": "node test.js"
+  },
+  "optionalDependencies": {
+    "@noble/post-quantum": "^0.6.1",
+    "@noble/hashes": "^1.8.0"
   },
   "engines": { "node": ">=18" }
 }

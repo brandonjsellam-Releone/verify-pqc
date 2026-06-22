@@ -58,7 +58,7 @@
   <p class="note" id="note"><b class="gold">Honest scope.</b> Algorand <b>TestNet</b>, unaudited. The commitment is <code>sha512_256("TRELYAN-ANCHOR-v1" ‖ log ‖ tree_size ‖ root ‖ timestamp)</code> — recomputed here in your browser and identical to <code>anchor_sth.py</code>. Inscribing an anchor is a gated owner step (it Falcon-signs + spends); this page never holds a key. A compromise of one layer alone cannot rewrite an anchored tree head.</p>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/js-sha512@0.9.0/src/sha512.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-sha512@0.9.0/src/sha512.min.js" integrity="sha384-r3ICQ3POhpARVadsTYI3uWWnM1PSOrv0exkXdU0g7hQvtBXEWLZ9+WlBMohsRBUg" crossorigin="anonymous"></script>
 <script>
 var THRONDAR="https://throndar.ai", INDEXER="https://testnet-idx.algonode.cloud";
 var RECOGNIZED_APPS=new Set(["763809096","764917520"]); // TRELYAN inscription contracts (app-ids unforgeable)
