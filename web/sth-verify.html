@@ -41,6 +41,7 @@
 
   <div class="badges">
     <span>ALGORITHM · ML-DSA-87 (FIPS 204)</span>
+    <span>DIVERSITY · + SLH-DSA-256f (FIPS 205)</span>
     <span>KEY · PINNED FULL PUBKEY</span>
     <span>CRYPTO · SELF-HOSTED</span>
     <span>NO BACKEND · IN-BROWSER</span>
@@ -52,11 +53,12 @@
 </div>
 
 <script type="module">
-import { ml_dsa87, sha256, bytesToHex } from './vendor/mldsa-bundle.js';
+import { ml_dsa87, slh_dsa_sha2_256f, sha256, bytesToHex } from './vendor/mldsa-bundle.js';
 import { THRONDAR_STH_PUBKEY_HEX, THRONDAR_STH_KEY_ID } from './vendor/throndar-sth-key.js';
+import { THRONDAR_SLH_PUBKEY_HEX, THRONDAR_SLH_KEY_ID } from './vendor/throndar-slh-key.js';
 const out=document.getElementById("out");
 const enc=s=>new TextEncoder().encode(s);
-const CTX="throndar-sth-v1", SIGHEX=4627*2, PKHEX=2592*2;
+const CTX="throndar-sth-v1", SIGHEX=4627*2, PKHEX=2592*2, SLH_SIGHEX=49856*2, SLH_PKHEX=64*2;
 document.getElementById("pin").textContent=THRONDAR_STH_KEY_ID;
 const esc=s=>String(s).replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));
 const hexBytes=(h,n)=>{ if(typeof h!=="string"||h.length!==n||!/^[0-9a-fA-F]+$/.test(h))return null; const u=new Uint8Array(h.length/2); for(let i=0;i<u.length;i++)u[i]=parseInt(h.substr(i*2,2),16); return u; };
@@ -69,7 +71,14 @@ function verify(sth){
   const ctxOk=r.context===CTX;
   const keyIdMatches=r.key_id===THRONDAR_STH_KEY_ID;
   let sigValid=false; try{ sigValid=ml_dsa87.verify(sig,canonical,pk,{context:enc(CTX)}); }catch(e){}
-  return {verified:sigValid&&digestChain&&ctxOk&&keyIdMatches, sigValid, digestChain, ctxOk, keyIdMatches, r};
+  // ADDITIVE non-authoritative SLH-DSA-256f hash-based diversity leg — NEVER enters `verified`.
+  let slhPresent=false, slhValid=false;
+  if(THRONDAR_SLH_PUBKEY_HEX && r && r.slh_sig){
+    slhPresent=true;
+    const slhPk=hexBytes(THRONDAR_SLH_PUBKEY_HEX,SLH_PKHEX), slhSig=hexBytes(r.slh_sig,SLH_SIGHEX);
+    if(slhPk&&slhSig){ try{ slhValid=slh_dsa_sha2_256f.verify(slhSig,canonical,slhPk,{context:enc(CTX)}); }catch(e){} }
+  }
+  return {verified:sigValid&&digestChain&&ctxOk&&keyIdMatches, sigValid, digestChain, ctxOk, keyIdMatches, slhPresent, slhValid, r};
 }
 function rowel(ok,label){return `<div class="chk"><span class="m ${ok?'ok':'bad'}">${ok?'✓':'✗'}</span><span>${label}</span></div>`;}
 (async()=>{
@@ -85,13 +94,14 @@ function rowel(ok,label){return `<div class="chk"><span class="m ${ok?'ok':'bad'
   out.innerHTML=`
     <div class="verdict"><span class="dot" style="background:${dot}"></span>${head}</div>
     <p class="mut" style="margin:0">${v.verified
-      ? `THRONDAR's current tree head carries a valid <b>ML-DSA-87</b> signature from the <b>pinned</b> key — verified in your browser against a key baked into this page.`
+      ? `THRONDAR's current tree head carries a valid <b>ML-DSA-87</b> signature from the <b>pinned</b> key — verified in your browser against a key baked into this page.${v.slhValid?` It <b>also</b> carries a valid <b>SLH-DSA-256f</b> hash-based co-signature — <b class="gold">two independent post-quantum families</b> (a lattice break leaves the hash-based leg standing).`:``}`
       : `One or more checks failed (${esc(v.reason||'see below')}). Do not trust this tree head.`}</p>
     <div class="checks">
       ${rowel(v.sigValid,`ML-DSA-87 signature valid <b>under the pinned key</b> (not the server's)`)}
       ${rowel(v.digestChain,`Digest chain — <code>answer_sha256 == sha256(signed)</code>`)}
       ${rowel(v.keyIdMatches,`Receipt key id matches the pin <code>${esc(THRONDAR_STH_KEY_ID)}</code>`)}
       ${rowel(v.ctxOk,`Domain context is <code>throndar-sth-v1</code>`)}
+      ${v.slhPresent?rowel(v.slhValid,`<b>SLH-DSA-256f</b> hash-based diversity co-signature valid <span class="mut">(additive — not required for the verdict)</span>`):``}
     </div>
     <div class="kv">
       <div class="k">Tree size</div><div class="v gold">${esc(treeSize)}</div>
