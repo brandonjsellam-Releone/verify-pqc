@@ -58,7 +58,9 @@ export function verifyThrondarSlh(sth, opts = {}) {
     const sig = hexToBytesStrict(slhSigHex, SIG_HEXLEN);
     if (!pk) return { slhPresent: true, slhValid: false, reason: 'pinned SLH pubkey malformed (expect 64 B hex)' };
     if (!sig) return { slhPresent: true, slhValid: false, reason: 'SLH signature is not 49856 bytes of hex' };
-    const keyIdMatches = !THRONDAR_SLH_KEY_ID || r.slh_key_id === THRONDAR_SLH_KEY_ID;
+    // key_id is a label sanity-check; the real binding is the pinned full pubkey. Bypass it when the
+    // caller supplies an explicit pubkey override (they've chosen the key directly).
+    const keyIdMatches = !!opts.pubkeyHex || !THRONDAR_SLH_KEY_ID || r.slh_key_id === THRONDAR_SLH_KEY_ID;
     const context = opts.context || STH_CONTEXT;
     let slhValid = false;
     try { slhValid = slh_dsa_sha2_256f.verify(sig, canonicalCore(r), pk, { context: enc(context) }); } catch { slhValid = false; }
