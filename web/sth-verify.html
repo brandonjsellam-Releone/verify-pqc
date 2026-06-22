@@ -4,13 +4,14 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>TRELYAN — Live post-quantum STH verifier (ML-DSA-87)</title>
-<meta name="description" content="Fetches THRONDAR's transparency-log Signed Tree Head and verifies its ML-DSA-87 (FIPS-204) post-quantum signature entirely in your browser, against a pinned public key. No backend, no trust in us — this is Layer 1 of the two-layer anchor. TestNet, unaudited." />
+<meta name="description" content="Fetches THRONDAR's transparency-log Signed Tree Head and verifies its ML-DSA-87 (FIPS-204) signature in your browser, against a PINNED public key, with self-hosted audited crypto (no third-party CDN). Layer 1 of the two-layer anchor. TestNet, unaudited." />
 <meta name="theme-color" content="#0A0E1F" />
 <style>
   :root{--bg:#0A0E1F;--panel:#10162E;--line:rgba(217,198,144,.18);--gold:#D9C690;--txt:#E8EAF2;--mut:#9AA0B6;--ok:#5DCAA5;--warn:#EF9F27;--bad:#E24B4A;--mono:'JetBrains Mono',ui-monospace,Menlo,monospace}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--txt);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.6}
   .wrap{max-width:760px;margin:0 auto;padding:48px 20px 80px}
+  .warn-banner{background:rgba(239,159,39,.1);border:.5px solid rgba(239,159,39,.4);border-radius:10px;padding:10px 14px;font:500 12px/1.5 var(--mono);color:var(--warn);margin-bottom:22px}
   .eyebrow{font:500 12px/1 var(--mono);letter-spacing:.18em;color:var(--gold);text-transform:uppercase}
   h1{font-weight:500;font-size:30px;margin:14px 0 6px}h1 em{font-style:italic;color:var(--gold)}
   .lede{color:var(--mut);max-width:62ch;margin:0 0 26px}
@@ -33,42 +34,44 @@
 </head>
 <body>
 <div class="wrap">
+  <div class="warn-banner">⚠️ TestNet · unaudited · experimental — a demonstrator, not a production assurance. The pinned key may change on rotation.</div>
   <p class="eyebrow">Layer 1 · post-quantum provenance</p>
   <h1>Verify THRONDAR's signature, <em>in your browser.</em></h1>
-  <p class="lede">This page fetches THRONDAR's transparency-log <strong>Signed Tree Head</strong> and verifies its <strong>ML-DSA-87</strong> (FIPS-204) post-quantum signature locally — against a <strong>pinned</strong> public key. No backend of ours is trusted: the verification runs entirely in your browser with audited <code>@noble/post-quantum</code>. This is <strong>Layer 1</strong> of the two-layer anchor.</p>
+  <p class="lede">This page fetches THRONDAR's transparency-log <strong>Signed Tree Head</strong> and verifies its <strong>ML-DSA-87</strong> (FIPS-204) signature against a <strong>pinned public key baked into this page</strong> — so a malicious or impersonated server can't fake a pass. The audited <code>@noble/post-quantum</code> crypto is <strong>self-hosted</strong> here (no third-party CDN). This is <strong>Layer 1</strong> of the two-layer anchor.</p>
 
   <div class="badges">
     <span>ALGORITHM · ML-DSA-87 (FIPS 204)</span>
-    <span>KEY · PINNED 0986d89f…</span>
+    <span>KEY · PINNED FULL PUBKEY</span>
+    <span>CRYPTO · SELF-HOSTED</span>
     <span>NO BACKEND · IN-BROWSER</span>
-    <span>STATUS · UNAUDITED</span>
   </div>
 
   <div class="panel" id="out"><p class="mut"><span class="spin"></span> Fetching + verifying THRONDAR's signed tree head…</p></div>
 
-  <p class="note" id="note"><b class="gold">How this works.</b> THRONDAR signs each tree head with ML-DSA-87 over the canonical receipt core <code>{v,model,answer_sha256,governance_flag,ts}</code> under context <code>throndar-sth-v1</code>, where <code>answer_sha256 = sha256(signed)</code>. A green verdict means all three hold AND the signing key is the pinned <code>0986d89fa3c74566</code> — so an attacker can't substitute their own key. Algorand TestNet, unaudited; reflects THRONDAR's live API.</p>
+  <p class="note" id="note"><b class="gold">How this works.</b> THRONDAR signs each tree head with ML-DSA-87 over the canonical core <code>{v,model,answer_sha256,governance_flag,ts}</code> under context <code>throndar-sth-v1</code>, where <code>answer_sha256 = sha256(signed)</code>. A green verdict requires all of: the signature verifies <b>against the pinned key</b> <code id="pin"></code> (not the key the server sends), the digest chain holds, the context matches, and the receipt's key id matches the pin. Crypto bundle is served from this same origin. TestNet, unaudited.</p>
 </div>
 
 <script type="module">
-import { ml_dsa87 } from 'https://esm.sh/@noble/post-quantum@0.6.1/ml-dsa';
-import { sha256 } from 'https://esm.sh/@noble/hashes@1.8.0/sha2';
-import { bytesToHex } from 'https://esm.sh/@noble/hashes@1.8.0/utils';
+import { ml_dsa87, sha256, bytesToHex } from './vendor/mldsa-bundle.js';
+import { THRONDAR_STH_PUBKEY_HEX, THRONDAR_STH_KEY_ID } from './vendor/throndar-sth-key.js';
 const out=document.getElementById("out");
 const enc=s=>new TextEncoder().encode(s);
-const PIN="0986d89fa3c74566", CTX="throndar-sth-v1";
-const hexToBytes=h=>{const u=new Uint8Array(h.length/2);for(let i=0;i<u.length;i++)u[i]=parseInt(h.substr(i*2,2),16);return u;};
+const CTX="throndar-sth-v1", SIGHEX=4627*2, PKHEX=2592*2;
+document.getElementById("pin").textContent=THRONDAR_STH_KEY_ID;
 const esc=s=>String(s).replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));
+const hexBytes=(h,n)=>{ if(typeof h!=="string"||h.length!==n||!/^[0-9a-fA-F]+$/.test(h))return null; const u=new Uint8Array(h.length/2); for(let i=0;i<u.length;i++)u[i]=parseInt(h.substr(i*2,2),16); return u; };
 function verify(sth){
-  const r=sth.receipt, signed=sth.signed, key=sth.key;
-  const pk=hexToBytes(key.public_key_hex), sig=hexToBytes(r.sig);
-  const canonical=enc(JSON.stringify({v:r.v,model:r.model,answer_sha256:r.answer_sha256,governance_flag:r.governance_flag,ts:r.ts}));
+  const r=sth.receipt, signed=sth.signed;
+  const pk=hexBytes(THRONDAR_STH_PUBKEY_HEX,PKHEX), sig=hexBytes(r&&r.sig,SIGHEX);
+  if(!pk||!sig||typeof signed!=="string") return {verified:false,reason:"malformed sig / pubkey / signed",r};
+  const canonical=enc(JSON.stringify({v:r.v,model:r.model,answer_sha256:r.answer_sha256,governance_flag:r.governance_flag,ts:Number(r.ts)}));
   const digestChain=bytesToHex(sha256(enc(signed)))===r.answer_sha256;
-  const keyRecognized=r.key_id===PIN&&key.key_id===PIN;
-  const sigValid=ml_dsa87.verify(sig,canonical,pk,{context:enc(r.context||CTX)});
-  const ctxOk=(r.context||CTX)===CTX;
-  return {verified:digestChain&&keyRecognized&&sigValid&&ctxOk, digestChain, keyRecognized, sigValid, ctxOk, r, key};
+  const ctxOk=r.context===CTX;
+  const keyIdMatches=r.key_id===THRONDAR_STH_KEY_ID;
+  let sigValid=false; try{ sigValid=ml_dsa87.verify(sig,canonical,pk,{context:enc(CTX)}); }catch(e){}
+  return {verified:sigValid&&digestChain&&ctxOk&&keyIdMatches, sigValid, digestChain, ctxOk, keyIdMatches, r};
 }
-function row(ok,label){return `<div class="chk"><span class="m ${ok?'ok':'bad'}">${ok?'✓':'✗'}</span><span>${label}</span></div>`;}
+function rowel(ok,label){return `<div class="chk"><span class="m ${ok?'ok':'bad'}">${ok?'✓':'✗'}</span><span>${label}</span></div>`;}
 (async()=>{
   let d;
   try{ d=await fetch("https://throndar.ai/api/transparency/ledger").then(r=>r.json()); }
@@ -78,22 +81,23 @@ function row(ok,label){return `<div class="chk"><span class="m ${ok?'ok':'bad'}"
   let v; try{ v=verify(sth); }catch(e){ out.innerHTML=`<p class="bad">Verification error: ${esc(e.message)}</p>`; return; }
   const dot=v.verified?"var(--ok)":"var(--bad)";
   const head=v.verified?`<span class="ok">Post-quantum signature valid</span>`:`<span class="bad">Verification FAILED</span>`;
+  let treeSize="?",root="?"; try{const s=JSON.parse(sth.signed);treeSize=s.tree_size;root=s.root_hash;}catch(e){}
   out.innerHTML=`
     <div class="verdict"><span class="dot" style="background:${dot}"></span>${head}</div>
     <p class="mut" style="margin:0">${v.verified
-      ? `THRONDAR's current tree head carries a valid <b>ML-DSA-87</b> signature from the pinned key — verified in your browser.`
-      : `One or more checks failed (see below). Do not trust this tree head.`}</p>
+      ? `THRONDAR's current tree head carries a valid <b>ML-DSA-87</b> signature from the <b>pinned</b> key — verified in your browser against a key baked into this page.`
+      : `One or more checks failed (${esc(v.reason||'see below')}). Do not trust this tree head.`}</p>
     <div class="checks">
-      ${row(v.sigValid,`ML-DSA-87 signature valid (4627-byte sig over the canonical core)`)}
-      ${row(v.digestChain,`Digest chain — <code>answer_sha256 == sha256(signed)</code>`)}
-      ${row(v.keyRecognized,`Signing key is the <b>pinned</b> THRONDAR key <code>${PIN}</code>`)}
-      ${row(v.ctxOk,`Domain context is <code>throndar-sth-v1</code>`)}
+      ${rowel(v.sigValid,`ML-DSA-87 signature valid <b>under the pinned key</b> (not the server's)`)}
+      ${rowel(v.digestChain,`Digest chain — <code>answer_sha256 == sha256(signed)</code>`)}
+      ${rowel(v.keyIdMatches,`Receipt key id matches the pin <code>${esc(THRONDAR_STH_KEY_ID)}</code>`)}
+      ${rowel(v.ctxOk,`Domain context is <code>throndar-sth-v1</code>`)}
     </div>
     <div class="kv">
-      <div class="k">Tree size</div><div class="v gold">${esc(JSON.parse(sth.signed).tree_size)}</div>
-      <div class="k">Root hash</div><div class="v">${esc(JSON.parse(sth.signed).root_hash)}</div>
-      <div class="k">Signed at</div><div class="v">${esc(v.r.ts)} <span class="mut">(${new Date(v.r.ts*1000).toISOString()})</span></div>
-      <div class="k">Public key</div><div class="v mut">${esc(v.key.public_key_hex.slice(0,48))}… (2592 B)</div>
+      <div class="k">Tree size</div><div class="v gold">${esc(treeSize)}</div>
+      <div class="k">Root hash</div><div class="v">${esc(root)}</div>
+      <div class="k">Signed at</div><div class="v">${esc(v.r.ts)} <span class="mut">(${new Date(Number(v.r.ts)*1000).toISOString()})</span></div>
+      <div class="k">Pinned key</div><div class="v mut">${esc(THRONDAR_STH_PUBKEY_HEX.slice(0,48))}… (2592 B)</div>
     </div>`;
 })();
 </script>

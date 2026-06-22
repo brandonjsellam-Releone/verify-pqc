@@ -15,8 +15,10 @@ verdict for something an attacker controls). Defenses, in order of importance:
      app-ids are unforgeable, so an attacker can't present their own app as TRELYAN's.
    - The anchor verdict is bound to a **real `inscribe()` call** (method selector + commit arg position),
      not "any 32-byte arg on any txn."
-   - **Layer-1 ML-DSA-87** verification pins THRONDAR's published key `0986d89fa3c74566` and checks the
-     digest chain — a substituted key+signature is rejected.
+   - **Layer-1 ML-DSA-87** verification pins THRONDAR's **full published public key** (the whole 2592-byte
+     key, not just the `0986d89fa3c74566` thumbprint) and verifies against *that* — so even an attacker who
+     controls the **entire** `throndar.ai` response (their own keypair + a spoofed key id) cannot forge a
+     green verdict. **Proven against exactly that attack** (`packages/verify-pqc/test-mldsa.mjs`).
    - A **regression test** (`packages/verify-pqc/test.js`) asserts a sig+box on an unrecognized app does
      **not** verify, so the fix can't silently regress.
    - These came from an **adversarial review that found and fixed 4 real false-verify paths** — see the git history.
@@ -27,9 +29,9 @@ verdict for something an attacker controls). Defenses, in order of importance:
    - **Dependabot** (`.github/dependabot.yml`) watches npm + GitHub-Actions deps.
    - The SDK core is **dependency-free**; the only added crypto (`@noble/post-quantum`, audited) is an
      *optional* module, version-pinned.
-   - ⚠️ **Honest caveat:** the in-browser ML-DSA page loads `@noble` from `esm.sh` (a dynamic CDN). For a
-     production deployment, **vendor `@noble` locally** (or self-host) so the verifier's own crypto can't
-     be swapped by a CDN compromise. The npm module (`@trelyan/verify-pqc/mldsa`) is the vendored path.
+   - ✅ **Fixed (Apex-council review):** the in-browser ML-DSA page loads `@noble` from a **self-bundled,
+     same-origin** file (`web/vendor/mldsa-bundle.js`), **not** a third-party CDN — so a CDN compromise can
+     no longer swap in a `verify() => true`. The bundle is reproducible (`build-pin.mjs` + esbuild) and SRI-hashable.
 
 3. **Injection / XSS.** All rendered on-chain/API values pass through `esc()`; the CSP-safe drop-in
    (`site-integration/`) keeps trelyan.foundation's strict `script-src 'self'` / `connect-src 'self'`
@@ -41,7 +43,8 @@ verdict for something an attacker controls). Defenses, in order of importance:
 ## Residual risks we do NOT pretend away
 - **TestNet, unaudited** — no external security/crypto audit yet (the standing #1 action).
 - **Single-indexer trust** — verifiers reflect one indexer's view; cross-check ≥2 / self-host for assurance.
-- **esm.sh CDN** for the ML-DSA page (above) — vendor before production.
+- **Key rotation** — the pinned STH public key is baked into the verifier; if THRONDAR rotates its STH
+  signer, regenerate the pin (`build-pin.mjs`) or legit STHs will fail. A rotation/agility plan is the open item.
 - **Layer-1 for historical anchors** — the existing anchor predates receipt-capture, so its Layer-1 STH
   signature isn't re-verifiable from stored data; future anchors capture the receipt.
 

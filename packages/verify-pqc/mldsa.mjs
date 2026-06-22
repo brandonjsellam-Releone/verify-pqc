@@ -1,66 +1,69 @@
 /*!
  * @trelyan/verify-pqc/mldsa — in-browser ML-DSA-87 verification of THRONDAR's
- * transparency-log Signed Tree Head. This is **Layer 1** of the two-layer anchor:
- * proving the STH is genuinely signed by THRONDAR's post-quantum answer-signer,
- * not merely asserted. PROVEN against the live /api/transparency/ledger STH.
+ * transparency-log Signed Tree Head. **Layer 1** of the two-layer anchor.
  *
- * Peer dependency: @noble/post-quantum (audited, pure-JS ML-DSA / FIPS-204) + @noble/hashes.
- * Isomorphic: works in Node and the browser. MIT.
+ * ROOT OF TRUST (hardened per Apex-council review): the signature is verified against a
+ * PINNED full public key (packages/verify-pqc/throndar-sth-key.js, the whole 2592-byte
+ * ML-DSA-87 key), NOT the key the server sends and NOT a truncated thumbprint. So a
+ * malicious/MITM'd server (or a key_id-grinding attacker) cannot get a false "verified".
  *
- * The exact construction is reverse-derived from THRONDAR's signer
- * (lib/provenance-canonical.ts): the signature covers the canonical core
- *   {"v","model","answer_sha256","governance_flag","ts"}   (FIXED key order, not sorted)
- * under ML-DSA context "throndar-sth-v1", and answer_sha256 == sha256(signed).
+ * Peer dependency: @noble/post-quantum + @noble/hashes (audited, pure-JS FIPS-204).
+ * The construction is reverse-derived from THRONDAR's signer (lib/provenance-canonical.ts):
+ * ML-DSA over the canonical core {"v","model","answer_sha256","governance_flag","ts"}
+ * (FIXED key order) under context "throndar-sth-v1", with answer_sha256 == sha256(signed).
  */
 import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
+import { THRONDAR_STH_PUBKEY_HEX, THRONDAR_STH_KEY_ID } from './throndar-sth-key.mjs';
 
 const enc = (s) => new TextEncoder().encode(s);
-function hexToBytes(h) { const u = new Uint8Array(h.length / 2); for (let i = 0; i < u.length; i++) u[i] = parseInt(h.substr(i * 2, 2), 16); return u; }
+const STH_CONTEXT = 'throndar-sth-v1';
+const SIG_HEXLEN = 4627 * 2, PK_HEXLEN = 2592 * 2;
 
-/** Published THRONDAR STH-signer key thumbprint. Pinning this rejects an
- *  attacker-substituted key+signature (they can't forge this published id). */
-export const THRONDAR_STH_KEY_ID = '0986d89fa3c74566';
-export const STH_CONTEXT = 'throndar-sth-v1';
+function hexToBytesStrict(hex, expectHexLen) {
+  if (typeof hex !== 'string' || hex.length !== expectHexLen || !/^[0-9a-fA-F]+$/.test(hex)) return null;
+  const u = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < u.length; i++) u[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return u;
+}
 
-/** The exact bytes ML-DSA covers: canonical receipt core, FIXED key order. */
+/** EXACT signed bytes: canonical core, fixed key order, ts coerced to integer. */
 function canonicalCore(r) {
   return enc(JSON.stringify({
     v: r.v, model: r.model, answer_sha256: r.answer_sha256,
-    governance_flag: r.governance_flag, ts: r.ts,
+    governance_flag: r.governance_flag, ts: Number(r.ts),
   }));
 }
 
 /**
- * Verify a THRONDAR `signed_tree_head` object (from GET /api/transparency/ledger).
- * Returns { verified, keyRecognized, digestChain, sigValid, reason }.
- *
- *   verified === true  ⇒  this STH is genuinely signed by the PINNED THRONDAR
- *   ML-DSA-87 key, over a receipt whose digest binds the exact STH content.
+ * Verify a THRONDAR `signed_tree_head` (from GET /api/transparency/ledger) against the
+ * PINNED key. Returns { verified, sigValid, digestChain, ctxOk, keyIdMatches, reason }.
+ * Pass opts.pubkeyHex only to test against a rotated key.
  */
 export function verifyThrondarSth(sth, opts = {}) {
-  const pinnedKeyId = opts.pinnedKeyId || THRONDAR_STH_KEY_ID;
   try {
-    const r = sth.receipt, signed = sth.signed, key = sth.key;
-    if (!r || !signed || !key) return { verified: false, reason: 'missing receipt/signed/key' };
-    const pk = hexToBytes(key.public_key_hex);
-    const sig = hexToBytes(r.sig);
-    // 1) digest chain — answer_sha256 must equal sha256(signed); binds the receipt to the STH content
+    const r = sth && sth.receipt, signed = sth && sth.signed;
+    if (!r || typeof signed !== 'string') return { verified: false, reason: 'missing receipt/signed' };
+    const pk = hexToBytesStrict(opts.pubkeyHex || THRONDAR_STH_PUBKEY_HEX, PK_HEXLEN);
+    const sig = hexToBytesStrict(r.sig, SIG_HEXLEN);
+    if (!pk) return { verified: false, reason: 'pinned pubkey malformed' };
+    if (!sig) return { verified: false, reason: 'signature is not 4627 bytes of hex' };
     const digestChain = bytesToHex(sha256(enc(signed))) === r.answer_sha256;
-    // 2) key pinning — both key ids must be the published THRONDAR STH signer
-    const keyRecognized = r.key_id === pinnedKeyId && key.key_id === pinnedKeyId;
-    // 3) ML-DSA-87 signature over the canonical core, context-bound
-    const sigValid = ml_dsa87.verify(sig, canonicalCore(r), pk, { context: enc(r.context || STH_CONTEXT) });
-    const ctxOk = (r.context || STH_CONTEXT) === STH_CONTEXT;
-    const verified = digestChain && keyRecognized && sigValid && ctxOk;
+    const ctxOk = r.context === STH_CONTEXT;
+    const keyIdMatches = r.key_id === THRONDAR_STH_KEY_ID; // label sanity-check; real binding is the pinned pk
+    let sigValid = false;
+    try { sigValid = ml_dsa87.verify(sig, canonicalCore(r), pk, { context: enc(STH_CONTEXT) }); } catch { sigValid = false; }
+    const verified = sigValid && digestChain && ctxOk && keyIdMatches;
     return {
-      verified, keyRecognized, digestChain, sigValid,
+      verified, sigValid, digestChain, ctxOk, keyIdMatches,
       reason: verified ? 'ok'
-        : !keyRecognized ? `key_id ${r.key_id} is not the pinned THRONDAR STH signer ${pinnedKeyId}`
+        : !sigValid ? 'ML-DSA-87 signature invalid under the PINNED THRONDAR key'
         : !digestChain ? 'answer_sha256 != sha256(signed) — receipt does not bind this STH'
-        : !sigValid ? 'ML-DSA-87 signature is invalid'
-        : 'STH context mismatch',
+        : !ctxOk ? 'context is not throndar-sth-v1'
+        : 'receipt key_id does not match the pinned key',
     };
   } catch (e) { return { verified: false, reason: 'error: ' + (e && e.message || e) }; }
 }
+
+export { THRONDAR_STH_KEY_ID, THRONDAR_STH_PUBKEY_HEX };
