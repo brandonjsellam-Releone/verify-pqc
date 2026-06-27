@@ -46,10 +46,12 @@ export function verifyTimestamp(tst, trustedTsaPub) {
  try { // TOTAL (fuzz): throwing getter/Proxy/BigInt field fails CLOSED, never DoS
   if (!tst || typeof tst !== 'object' || Array.isArray(tst)) return { verified: false, pinned: false, sigOk: false, claims: null };
   const { sig, tsa_pub, cosigs, ...core } = tst; // cosigs excluded from the signed body
-  const pinned = !trustedTsaPub || String(tsa_pub).toLowerCase() === bytesToHex(trustedTsaPub).toLowerCase();
+  // pinned = a TSA key was SUPPLIED and it MATCHES — so a caller can't read pinned:true as "authentic" when they
+  // didn't pin (validity-vs-trust). verified is unchanged: unpinned -> sigOk (self-consistent); pinned -> match && sigOk.
+  const pinned = !!trustedTsaPub && String(tsa_pub).toLowerCase() === bytesToHex(trustedTsaPub).toLowerCase();
   let sigOk = false;
   try { sigOk = ml_dsa87.verify(hexToBytes(sig), utf8ToBytes(canon(core)), trustedTsaPub ? trustedTsaPub : hexToBytes(tsa_pub), { context: TST_CTX }); } catch { sigOk = false; }
-  return { verified: pinned && sigOk, pinned, sigOk, claims: core };
+  return { verified: (trustedTsaPub ? pinned : true) && sigOk, pinned, sigOk, claims: core };
  } catch { return { verified: false, pinned: false, sigOk: false, claims: null }; }
 }
 
@@ -69,7 +71,7 @@ export function verifyTimestampThreshold(tst, trustedTsaPubs, minSigners = 1) {
     let ok = false; try { ok = ml_dsa87.verify(hexToBytes(a.sig), body, hexToBytes(a.tsa_pub), { context: TST_CTX }); } catch { ok = false; }
     if (ok && trusted.includes(a.tsa_pub.toLowerCase())) signers.add(a.tsa_pub.toLowerCase());
   }
-  return { verified: signers.size >= minSigners, signer_count: signers.size, threshold: minSigners };
+  return { verified: signers.size >= Math.max(1, minSigners), signer_count: signers.size, threshold: minSigners };
 }
 
 /* ---------- legacy-signature re-stamping ---------- */

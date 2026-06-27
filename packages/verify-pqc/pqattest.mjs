@@ -50,6 +50,7 @@ function bindingBytes({ policy_id, artifact_sha256, artifact_sha512, tst, sth, a
 export function attest(artifactBytes, { signers, tsas, log, logSk, logPub = null, witnesses = [], policy_id = 'trelyan-pqattest-baseline', min_tsa = null, ts = null }) {
   if (!signers || !signers.length || !tsas || !tsas.length || !log || !logSk) throw new Error('pqattest: signers, tsas, log, logSk required');
   const threshold = min_tsa ?? tsas.length;
+  if (!(Number.isInteger(threshold) && threshold >= 1)) throw new Error('pqattest: min_tsa must be a positive integer (a 0 threshold would make the WHEN leg vacuous)');
   const artifact_sha256 = bytesToHex(sha256(artifactBytes));   // for the TSA token's content_sha256 field
   const artifact_sha512 = bytesToHex(sha512(artifactBytes));   // the STRONG binding the seal commits to
   // WHEN: timestamp the artifact hash; every extra TSA cosigns the SAME token body (threshold)
@@ -70,8 +71,10 @@ export function attest(artifactBytes, { signers, tsas, log, logSk, logPub = null
   return { v: ATTEST_V, policy_id, artifact_sha256, artifact_sha512, min_tsa: threshold, min_witness, suite, tst, anchor: { entry, inclusion, sth, witness_cosigs }, seal };
 }
 
-/** verifyAttest(artifactBytes, att, {trusted, requireSuite, tsaPubs, logPub}) — ALL must pass (AND). For authenticity,
- *  pass trusted (pqseal per-family pins) + tsaPubs (the expected TSAs) + logPub (the pinned log key). */
+/** verifyAttest(artifactBytes, att, {trusted, requireSuite, tsaPubs, logPub, trustedWitnessPubs, requireSealTrust?, now?, maxAgeMs?, minTs?}) — ALL must pass (AND).
+ *  For authenticity, pass trusted (pqseal per-family pins) + tsaPubs (expected TSAs) + logPub (pinned log key); with `trusted` set the seal
+ *  must be FULLY trust-anchored. Optional FRESHNESS: pass now + maxAgeMs (and/or minTs) to require the sealed timestamp to be recent —
+ *  ABSENT these, a pass proves existence-at-the-sealed-time ONLY (a notary proof), never liveness/recency. Do NOT use as a freshness gate without them. */
 export function verifyAttest(artifactBytes, att, opts = {}) {
   try {
     if (!att || att.v !== ATTEST_V || !att.anchor || !att.tst || !att.seal) return failA();
@@ -88,8 +91,21 @@ export function verifyAttest(artifactBytes, att, opts = {}) {
     // recompute the composite the seal MUST cover — any swap of tst/sth/threshold(s)/policy/index/suite breaks this
     const binding = bindingBytes({ policy_id: att.policy_id, artifact_sha256: att.artifact_sha256, artifact_sha512: att.artifact_sha512, tst: att.tst, sth: att.anchor.sth, anchor_index: att.anchor.inclusion.index, min_tsa: att.min_tsa, min_witness: mw, suite: att.suite });
     const sealRes = pqseal.openSeal(binding, att.seal, { trusted: opts.trusted, requireSuite: opts.requireSuite });
-    const verified = !!(hashOk && tstBindOk && tstRes.verified && anchorRes.verified && witnessRes.verified && sealRes.verified);
-    return { verified, hashOk, tstBindOk, timestampOk: tstRes.verified, anchorOk: anchorRes.verified, witnessOk: witnessRes.verified, witnessCount: witnessRes.witness_count, sealOk: sealRes.verified, sealTrustAnchored: sealRes.fullyAnchored, signerCount: tstRes.signer_count, kinds: sealRes.kinds };
+    // HARDENING (code-review, defense-in-depth on top of the seal binding):
+    //  (1) the logged anchor entry must correspond to THIS tst's primary signer — localizes the WHEN<->WHERE-LOGGED bond;
+    //  (2) min_tsa must be a positive integer — a 0 threshold can never be vacuously "timestamped";
+    //  (3) when the caller pins authenticity (opts.trusted), require the seal to be FULLY trust-anchored, not merely self-consistent;
+    //  (4) optional freshness gate (opts.now + maxAgeMs/minTs) — ABSENT it, a pass proves existence-at-the-sealed-T only, NOT recency.
+    const anchorBindOk = !!att.anchor.entry && att.anchor.entry.sig_sha256 === bytesToHex(sha512(utf8ToBytes(att.tst.sig))) && att.anchor.entry.tsa_pub === att.tst.tsa_pub;
+    const minTsaOk = Number.isInteger(att.min_tsa) && att.min_tsa >= 1;
+    const requireSealTrust = opts.requireSealTrust ?? !!opts.trusted;
+    const sealTrustOk = !requireSealTrust || sealRes.fullyAnchored;
+    const freshOk = (opts.now == null || (opts.maxAgeMs == null && opts.minTs == null)) ? true
+      : (att.tst.tsa_time != null
+         && (opts.maxAgeMs == null || (att.tst.tsa_time >= opts.now - opts.maxAgeMs && att.tst.tsa_time <= opts.now))
+         && (opts.minTs == null || att.tst.tsa_time >= opts.minTs));
+    const verified = !!(hashOk && tstBindOk && minTsaOk && tstRes.verified && anchorRes.verified && anchorBindOk && witnessRes.verified && sealRes.verified && sealTrustOk && freshOk);
+    return { verified, hashOk, tstBindOk, minTsaOk, anchorBindOk, freshOk, sealTrustOk, timestampOk: tstRes.verified, anchorOk: anchorRes.verified, witnessOk: witnessRes.verified, witnessCount: witnessRes.witness_count, sealOk: sealRes.verified, sealTrustAnchored: sealRes.fullyAnchored, signerCount: tstRes.signer_count, kinds: sealRes.kinds };
   } catch { return failA(); }
 }
 function failA() { return { verified: false, hashOk: false, tstBindOk: false, timestampOk: false, anchorOk: false, witnessOk: false, sealOk: false, sealTrustAnchored: false }; }
@@ -157,6 +173,14 @@ function selfTest() {
   ok(verifyAttest(artifact, wdrop, { ...vopts, trustedWitnessPubs: trustedWit }).verified === false, '0-DOWNGRADE: drop a witness cosig -> FAILS (sealed min_witness=2 unmet)');
   const wlower = JSON.parse(JSON.stringify(watt)); wlower.min_witness = 1;
   ok(verifyAttest(artifact, wlower, { ...vopts, trustedWitnessPubs: trustedWit }).verified === false, 'lower the sealed min_witness -> FAILS (min_witness is in the seal binding)');
+
+  // HARDENING regression (code-security review): freshness gate, min_tsa>=1 guard, anchor<->tst binding
+  ok(verifyAttest(artifact, att, { ...vopts, now: 1000, maxAgeMs: 10000 }).verified === true, 'freshness: timestamp within [now-maxAge, now] -> verifies');
+  ok(verifyAttest(artifact, att, { ...vopts, now: 9999999, maxAgeMs: 1000 }).verified === false, 'freshness: timestamp stale beyond maxAge -> FAILS');
+  let threw = false; try { attest(artifact, { signers: [A, B, E], tsas: [tsa1, tsa2], log: fresh(), logSk: logKp.secretKey, min_tsa: 0, ts: 1000 }); } catch { threw = true; }
+  ok(threw, 'construction: min_tsa:0 is rejected (no vacuous WHEN leg)');
+  const abind = JSON.parse(JSON.stringify(att)); abind.anchor.entry.tsa_pub = 'deadbeef';
+  ok(verifyAttest(artifact, abind, vopts).verified === false, 'anchor<->tst bind: tampering the logged entry -> FAILS');
 
   console.log('pqattest self-test: ' + pass + ' pass, ' + fail + ' fail');
   if (typeof process !== 'undefined' && process.exit) process.exit(fail ? 1 : 0);
