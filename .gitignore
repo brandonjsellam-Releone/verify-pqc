@@ -16,3 +16,7 @@ INTEROP_REPLY.md
 .redeem-codes*
 # regenerable demo output (run examples/demo/run-demo.mjs to recreate)
 packages/verify-pqc/examples/demo/demo-out/
+# dev/agent scratch (reproduction probes, ad-hoc verifier tests) — never publish
+_probe*.mjs
+_vtest*.mjs
+packages/verify-pqc/_*.mjs
