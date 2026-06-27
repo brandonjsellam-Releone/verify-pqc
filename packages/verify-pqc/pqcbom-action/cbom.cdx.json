@@ -1,0 +1,51 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "metadata": {
+    "tools": [
+      {
+        "vendor": "TRELYAN",
+        "name": "pqcbom",
+        "version": "0.2.0-draft"
+      }
+    ],
+    "properties": [
+      {
+        "name": "trelyan:quantum-grade",
+        "value": "D"
+      },
+      {
+        "name": "trelyan:quantum-score",
+        "value": "88"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "cryptographic-asset",
+      "name": "ECDSA",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "signature"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-broken"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "migrate to ML-DSA-87 (keep ECDSA only as a HYBRID leg)"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-User-OneDrive---releone-llc-Desktop-New-folder\\\\733ceb70-8c30-445b-9797-545dbd11e1ac\\\\scratchpad\\\\supp\\\\a.js\",\"lines\":[2]}]"
+        }
+      ]
+    }
+  ]
+}
