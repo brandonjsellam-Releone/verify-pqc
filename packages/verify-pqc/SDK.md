@@ -10,7 +10,7 @@ ChaCha20-Poly1305. Falcon-1024 is the **on-chain / provenance leg only** (draft 
 **Crypto-agility + attestation (apex):** `pqseal` is a reusable **N-of-N AND-composition** signer over an algorithm-
 family registry (ML-DSA-87 ∧ SLH-DSA-256f ∧ Ed25519) — add/rotate a family without changing the format; anti-downgrade.
 `pqattest` composes `pqseal` ∧ a threshold PQ timestamp (`pqtsa`) ∧ an RFC-6962 transparency-log inclusion proof ∧
-(optional) witness co-signatures, with the seal computed LAST to **countersign** the timestamp + tree-head (0-downgrade,
+(optional) witness co-signatures, with the seal computed LAST to **countersign** the timestamp + tree-head (downgrade-detecting under its trust model,
 council-reviewed; the design + spec each had a downgrade caught and closed). Honest claim discipline: **not** an eIDAS
 "qualified" timestamp, **not** "maximal" / "military-grade".
 
@@ -48,7 +48,7 @@ council-reviewed; the design + spec each had a downgrade caught and closed). Hon
 | `pqcbom-server` | CBOM scorecard badge (shields.io), CI **policy gate (fail-closed on misconfig)**, HTTP handler, signed-Evidence-Pack tier, PREVIEW notice | 12 |
 | `pqcbom-report` | **PQC Migration Evidence Pack** — the paid deliverable: **hybrid-signed (ML-DSA-87 ∧ SLH-DSA-256f)** report (scorecard + roadmap + crosswalk + CBOM); `verifyEvidencePack` recomputes the grade **+ risk tallies from the findings** and binds the rendered report (anti grade-forgery); `trustAnchored` validity-vs-trust | 19 |
 | `pqseal` | **Crypto-agility signer** — N-of-N AND-composition over an algorithm-family registry (ML-DSA-87 ∧ SLH-DSA-256f ∧ Ed25519); add/rotate a family without changing the format; anti-downgrade (each leg binds the full ordered key-set + payload hash); `requireSuite`/`requireKinds`/`requirePinned` policy (DeepSeek-red-teamed) | 18 |
-| `pqattest` | **0-downgrade attestation** — composes `pqseal` ∧ threshold PQ timestamp (`pqtsa`) ∧ RFC-6962 transparency inclusion ∧ optional witness co-signing; the seal countersigns the timestamp + tree-head + both thresholds (swap-TST / drop-cosigner / swap-STH / drop-witness all fail). 10-seat council reviewed the design + spec | 14 |
+| `pqattest` | **downgrade-detecting attestation** — composes `pqseal` ∧ threshold PQ timestamp (`pqtsa`) ∧ RFC-6962 transparency inclusion ∧ optional witness co-signing; the seal countersigns the timestamp + tree-head + both thresholds (swap-TST / drop-cosigner / swap-STH / drop-witness all fail, under the declared trust model). 10-seat council reviewed the design + spec | 14 |
 | `pqverify-api` | **Hosted public verify endpoint** — one surface to verify an Evidence Pack / PQEF bundle / sign-bundle / TST / KT-proof without installing the SDK; honest trust model (validity vs pinned-trust), stateless, fail-closed/total | 14 |
 | `pqpki` | **Hybrid PQ certificate authority** — issues certs binding subject Ed25519 + ML-DSA-87 keys (PQ can't be stripped), CA-signed hybrid; chain verify (CA-constraint + RFC-5280 path_len + root pinning) + signed CRL | 13 |
 | `pqvault` | **Long-term confidentiality vault** — HNDL-safe hybrid X25519+ML-KEM-1024 envelopes + a signed append-only manifest (pqsign Merkle) + crypto-agility rotation; per-entry end-to-end verify | 9 |

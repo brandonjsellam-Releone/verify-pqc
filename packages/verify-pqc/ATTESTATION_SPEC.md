@@ -90,7 +90,9 @@ verified = hashOk ∧ tstBindOk ∧ timestampOk ∧ anchorOk ∧ witnessOk ∧ s
 - `witnessOk`: if `min_witness > 0`, ≥ `min_witness` distinct **trusted** witnesses co-signed *this* STH.
 - `sealOk`: the seal verifies over the **recomputed** `binding` (so a swap of tst / sth / threshold / policy / index / suite breaks it).
 
-### 3.3 Downgrade resistance (the "0-downgrade" property)
+### 3.3 Downgrade resistance — downgrade-DETECTING under the §4 trust model
+We say **downgrade-detecting**, not "0-downgrade" in any absolute sense: verification *fails closed* on each attack below **given §4's trust assumptions** (correctly pinned keys; an honest threshold of TSAs / witnesses; sound underlying primitives). It detects/rejects a downgrade — it does not "prevent" one if those assumptions are violated.
+
 Because `binding` includes `sha512(tst)`, `sha512(sth)`, `min_tsa`, and `min_witness`, and the seal signs `binding`:
 
 | Attack | Why it fails |
