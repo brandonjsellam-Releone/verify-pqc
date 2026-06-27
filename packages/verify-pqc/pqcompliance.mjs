@@ -18,6 +18,7 @@ import { scanFiles, gradeOf, riskTally } from './pqcbom.mjs';
 
 const COMP_CTX = utf8ToBytes('trelyan-pqcompliance-report-v1');
 function canon(v) {
+  if (v === undefined) return 'null';   // total: JSON.stringify would drop it; treat as null so canon() never hits Object.keys(undefined)
   if (v === null || typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string') return JSON.stringify(v);
   if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
   return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}';
@@ -73,7 +74,7 @@ export function signComplianceReport(report, sk, pub) {
 }
 // verify: (a) the embedded findings hash to the signed findings_sha512 (binds findings); (b) the controls RECOMPUTE
 // from those authenticated findings; (c) the signature is valid under the pinned key. Defeats findings-tamper + doctored status.
-export function verifyComplianceReport(report, trustedPub) {
+export function verifyComplianceReport(report, trustedPub, opts = {}) {
   try {
     const fhOk = report.findings_sha512 === findingsHash(report.findings);
     const recomputed = assessCompliance({ findings: report.findings, grade: report.grade, summary: report.summary });
@@ -90,8 +91,11 @@ export function verifyComplianceReport(report, trustedPub) {
     const pinned = !trustedPub || (s && s.signer_pub_hex && s.signer_pub_hex.toLowerCase() === bytesToHex(trustedPub).toLowerCase());
     let sigOk = false;
     if (s && s.sig_hex) sigOk = ml_dsa87.verify(hexToBytes(s.sig_hex), utf8ToBytes(canon(core(report))), trustedPub ? trustedPub : hexToBytes(s.signer_pub_hex), { context: COMP_CTX });
-    return { verified: !!(consistent && pinned && sigOk), findingsBound: fhOk, gradeOk, consistent, pinned, sigOk };
-  } catch { return { verified: false, findingsBound: false, consistent: false, pinned: false, sigOk: false }; }
+    // validity-vs-trust (mirror verifyEvidencePack): with NO trustedPub a pass proves self-consistency ONLY, not
+    // authenticity (an attacker can self-sign a "no gaps" report). trustAnchored exposes this; opts.requirePinned enforces a real anchor.
+    const trustAnchored = !!trustedPub && pinned && sigOk;
+    return { verified: !!(consistent && pinned && sigOk && (!opts.requirePinned || trustAnchored)), findingsBound: fhOk, gradeOk, consistent, pinned, sigOk, trustAnchored };
+  } catch { return { verified: false, findingsBound: false, consistent: false, pinned: false, sigOk: false, trustAnchored: false }; }
 }
 
 /* ---------- self-test: node pqcompliance.mjs ---------- */
@@ -131,6 +135,15 @@ function selfTest() {
   f3.summary = { ...f3.summary, broken_classical: 0, quantum_broken: 0, quantum_weakened: 0, classical_hybrid_ok: 0, quantum_safe: 0 };
   f3.grade = { letter: 'A', score: 100, label: 'Quantum-safe', badge: 'Quantum-Safe: A' };
   ok(verifyComplianceReport(f3, signer.publicKey).verified === false, 'forged clean summary+grade over bad findings -> verify FAILS (tallies recomputed from findings)');
+
+  // REGRESSION (code-security review): unpinned verify proves self-consistency ONLY, not authenticity (an attacker can
+  // self-sign a clean "no gaps" report). trustAnchored exposes that; opts.requirePinned enforces a real trust anchor.
+  const attackerKey = ml_dsa87.keygen(new Uint8Array(32).fill(200));
+  const evilClean = signComplianceReport(assessCompliance(safeScan, { subject: 'VictimCorp', generated_ts: 1 }), attackerKey.secretKey, attackerKey.publicKey);
+  const unpinnedV = verifyComplianceReport(evilClean);
+  ok(unpinnedV.verified === true && unpinnedV.trustAnchored === false, 'unpinned self-signed report: self-consistent but trustAnchored=false (authenticity NOT established)');
+  ok(verifyComplianceReport(evilClean, null, { requirePinned: true }).verified === false, 'requirePinned closes the fail-open: self-signed report with no trust anchor -> verified FALSE');
+  ok(verifyComplianceReport(signed, signer.publicKey).trustAnchored === true, 'pinned + matching signer -> trustAnchored=true');
 
   console.log('pqcompliance self-test: ' + pass + ' pass, ' + fail + ' fail');
   if (typeof process !== 'undefined' && process.exit) process.exit(fail ? 1 : 0);

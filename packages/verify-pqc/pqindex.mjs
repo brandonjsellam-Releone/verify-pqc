@@ -167,6 +167,7 @@ export function absenceProof(shard, term) {
   return { term, tree_size: ts.length, pred: mk(predIdx), succ: succIdx < 0 ? null : mk(succIdx) };
 }
 export function verifyAbsence(merkleRootHex, proofObj) {
+ try { // TOTAL (fuzz): a throwing getter/Proxy on a proof field fails CLOSED (false), never DoS
   const { term, pred, succ, tree_size } = proofObj || {};
   if (typeof term !== 'string' || typeof tree_size !== 'number' || tree_size < 1) return false; // empty index: verify tree_size 0 separately
   const inclOk = (nb) => !!nb && nb.tree_size === tree_size && verifyTermInclusion(merkleRootHex, nb);
@@ -174,16 +175,19 @@ export function verifyAbsence(merkleRootHex, proofObj) {
   if (!pred && succ) return succ.index === 0 && term < succ.term && inclOk(succ);             // term sorts before the first entry
   if (pred && !succ) return pred.index === tree_size - 1 && pred.term < term && inclOk(pred);  // term sorts after the last entry
   return false;
+ } catch { return false; }
 }
 // SOUND absence (council/Grok): ties the proof to a verifyShard-validated shard — which RECOMPUTES the root from the
 // SORTED terms (so the global sort order is cryptographically enforced) + binds tree_size (anti-replay). Use THIS in
 // production; bare verifyAbsence(root, …) only holds atop an already-validated sorted root.
 export function verifyAbsenceInShard(shard, proofObj, trustedSignerPub) {
+ try { // TOTAL (fuzz): a throwing getter/Proxy on a proof field fails CLOSED (false), never DoS
   if (!verifyShard(shard, trustedSignerPub).verified) return false;
   if (!proofObj || proofObj.tree_size !== shard.tree_size) return false;
   if (proofObj.pred && proofObj.pred.tree_size !== shard.tree_size) return false;
   if (proofObj.succ && proofObj.succ.tree_size !== shard.tree_size) return false;
   return verifyAbsence(shard.merkle_root, proofObj);
+ } catch { return false; }
 }
 
 /* ---------- self-test: node pqindex.mjs ---------- */

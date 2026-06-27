@@ -23,6 +23,7 @@ const REPORT_CTX = utf8ToBytes('trelyan-pqcbom-evidence-pack-v1');
 // diversity vs the lattice ML-DSA-87, so a forgery must break BOTH families (AND-composition). Same core bytes.
 const REPORT_SLH_CTX = utf8ToBytes('trelyan-pqcbom-evidence-pack-slh-v1');
 function canon(v) {
+  if (v === undefined) return 'null';   // total: JSON.stringify would drop it; treat as null so canon() never hits Object.keys(undefined)
   if (v === null || typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string') return JSON.stringify(v);
   if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
   return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}';

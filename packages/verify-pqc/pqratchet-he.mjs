@@ -100,16 +100,25 @@ export function ratchetDecrypt(st, message, ad = EMPTY) {
   // skipped: trial-decrypt the header with each stored header key
   for (let i = 0; i < st.MKSKIPPED.length; i++) {
     const e = st.MKSKIPPED[i]; const h = hDecrypt(e.hk, enc_header);
-    if (h && h.n === e.n) { st.MKSKIPPED.splice(i, 1); return aead(e.mk, concatBytes(ad, utf8ToBytes(enc_header))).decrypt(ctBytes); }
+    if (h && h.n === e.n) {
+      const pt = aead(e.mk, concatBytes(ad, utf8ToBytes(enc_header))).decrypt(ctBytes); // decrypt BEFORE consuming the skipped key (a bad tag doesn't burn it)
+      st.MKSKIPPED.splice(i, 1);
+      return pt;
+    }
   }
-  // current chain header key, else next-header-key (=> a DH ratchet happened)
-  let header = st.HKr ? hDecrypt(st.HKr, enc_header) : null;
+  // COMMIT-ON-SUCCESS (code-security review): run the header-key trial + skip + DH-ratchet on a CLONE and adopt it only
+  // AFTER the AEAD decrypt succeeds, so a forged/tampered current-chain packet can't wedge the live session (the pre-throw
+  // st.CKr/DHr mutation was the real defect — same class fixed in pqratchet.mjs).
+  const w = cloneState(st);
+  let header = w.HKr ? hDecrypt(w.HKr, enc_header) : null;
   let ratchet = false;
-  if (!header) { header = hDecrypt(st.NHKr, enc_header); if (!header) throw new Error('header decrypts under no known header key'); ratchet = true; }
-  if (ratchet) { skipMessageKeys(st, header.pn); dhRatchet(st, header); }
-  skipMessageKeys(st, header.n);
-  const { mk, ck } = chainKDF(st.CKr); st.CKr = ck; st.Nr += 1;
-  return aead(mk, concatBytes(ad, utf8ToBytes(enc_header))).decrypt(ctBytes);
+  if (!header) { header = hDecrypt(w.NHKr, enc_header); if (!header) throw new Error('header decrypts under no known header key'); ratchet = true; }
+  if (ratchet) { skipMessageKeys(w, header.pn); dhRatchet(w, header); }
+  skipMessageKeys(w, header.n);
+  const { mk, ck } = chainKDF(w.CKr); w.CKr = ck; w.Nr += 1;
+  const pt = aead(mk, concatBytes(ad, utf8ToBytes(enc_header))).decrypt(ctBytes); // bad tag -> throws -> live st UNTOUCHED
+  Object.assign(st, w); // commit the advanced ratchet state only on a successful decrypt
+  return pt;
 }
 
 export function cloneState(st) {
@@ -163,6 +172,17 @@ function selfTest() {
   const tm = ratchetEncrypt(A, 'x'); tm.ct = tm.ct.slice(0, -2) + (tm.ct.slice(-2) === '00' ? '01' : '00');
   let aeadFail = false; try { ratchetDecrypt(B, tm); } catch { aeadFail = true; }
   ok(aeadFail, 'tampered ciphertext -> AEAD authentication fails');
+
+  // 7. REGRESSION (code-security review): a tampered current-chain packet must NOT wedge the live session
+  //    (commit-on-success — the receive ratchet advances only AFTER the AEAD decrypt succeeds).
+  const bobW = newBobPrekeys();
+  const Aw = initAlice(SK, bobW.dh.pub, bobW.kem.publicKey), Bw = initBob(SK, bobW.dh, bobW.kem);
+  ratchetDecrypt(Bw, ratchetEncrypt(Aw, 'warmup'));            // establish the A->B current chain at Bw
+  const realMsg = ratchetEncrypt(Aw, 'the real payload');
+  const evilMsg = { ...realMsg, ct: realMsg.ct.slice(0, -2) + (realMsg.ct.slice(-2) === '00' ? '01' : '00') };
+  let wedgeThrew = false; try { ratchetDecrypt(Bw, evilMsg); } catch { wedgeThrew = true; }
+  ok(wedgeThrew, 'tampered current-chain packet is rejected (bad AEAD tag)');
+  ok(dec(ratchetDecrypt(Bw, realMsg)) === 'the real payload', 'WEDGE FIX: the genuine message still decrypts after a tampered one (live session not wedged)');
 
   console.log('pqratchet-he self-test: ' + pass + ' pass, ' + fail + ' fail');
   if (typeof process !== 'undefined' && process.exit) process.exit(fail ? 1 : 0);
