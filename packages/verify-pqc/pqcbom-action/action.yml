@@ -1,0 +1,31 @@
+name: 'TRELYAN Quantum-Safe Scorecard'
+description: 'Scan your repo for quantum-vulnerable cryptography, emit a CycloneDX CBOM + an A–F Quantum-Safe grade, and optionally fail the build on banned crypto (CNSA 2.0 / NIS2 / CRA readiness).'
+author: 'TRELYAN'
+branding:
+  icon: 'shield'
+  color: 'purple'
+inputs:
+  path:
+    description: 'Directory to scan'
+    required: false
+    default: '.'
+  fail-on:
+    description: 'Comma-separated risk classes that fail the build (e.g. broken-classical,quantum-broken)'
+    required: false
+    default: 'broken-classical'
+  min-grade:
+    description: 'Minimum acceptable grade (A–F); build fails below it. Empty = no grade gate.'
+    required: false
+    default: ''
+outputs:
+  grade:
+    description: 'Quantum-Safe grade (A–F)'
+  score:
+    description: 'Quantum-Safe score (0–100)'
+  sarif-file:
+    description: 'Path to the SARIF 2.1.0 report (upload via github/codeql-action/upload-sarif to populate the Security tab)'
+  cbom-file:
+    description: 'Path to the CycloneDX CBOM (cbom.cdx.json)'
+runs:
+  using: 'node20'
+  main: 'run.mjs'

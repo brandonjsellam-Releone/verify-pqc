@@ -1,0 +1,9 @@
+name = "quantum-safe-scorecard"
+main = "worker.mjs"
+compatibility_date = "2026-01-01"
+# Free tier (badge + scorecard) needs no secrets.
+# Paid tier (full CBOM) is gated by env PAID_KEYS (comma-separated API keys) — set via `wrangler secret put PAID_KEYS`.
+# DEPLOY IS OWNER-GATED — see DEPLOY.md. Do NOT `wrangler deploy` without explicit direction.
+# [vars]
+#   (none required for free tier)
+# routes = [ "scan.trelyan.dev/*" ]   # owner attaches the domain

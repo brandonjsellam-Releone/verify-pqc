@@ -1,0 +1,148 @@
+/*!
+ * pqtransport — HYBRID-PQ secure-transport handshake (reference, DRAFT, standalone).
+ *
+ * HYBRID PQ/classical (X25519 is classical; post-quantum confidentiality rests on ML-KEM-1024).
+ * Mutually-authenticated + forward-secret (ephemeral X25519 + ephemeral ML-KEM-1024 both sides).
+ * SIGMA/TLS-1.3-class, hardened per the 11-seat council review:
+ *   - Both identity public keys are BOUND INTO the signed transcript (defeats unknown-key-share).
+ *   - Initiator vs responder sign under DISTINCT contexts (defeats reflection/role-confusion).
+ *   - Channel uses DETERMINISTIC per-direction COUNTER nonces + seq in AAD (no GCM nonce reuse);
+ *     separate i2r / r2i AES-256-GCM keys.
+ *   - Auth = ML-DSA-87 signature over the transcript hash + out-of-band identity pinning.
+ *
+ * New, self-contained reference (no production keys). Caller manages per-direction seq counters
+ * and rekeys before wrap. Deferred: encrypt identities for initiator privacy; explicit key-confirm
+ * message + a strict "no key use before msg3 verified" state machine. Self-test: node pqtransport.mjs
+ */
+import { ml_kem1024 } from '@noble/post-quantum/ml-kem.js';
+import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
+import { x25519 } from '@noble/curves/ed25519.js';
+import { gcm } from '@noble/ciphers/aes.js';
+import { hkdf } from '@noble/hashes/hkdf.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { sha3_256 } from '@noble/hashes/sha3.js';
+import { randomBytes, bytesToHex, hexToBytes, concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+
+export const SUITE_ID = 'TRLN-TLS-1'; // hybrid X25519+ML-KEM-1024 / ML-DSA-87 auth / AES-256-GCM
+const AUTH_CTX_I = utf8ToBytes('trelyan-transport-auth-v1/initiator');
+const AUTH_CTX_R = utf8ToBytes('trelyan-transport-auth-v1/responder');
+const KEK_LABEL = utf8ToBytes('TRELYAN-TRANSPORT-v1');
+
+export function generateIdentity(seed) { return ml_dsa87.keygen(seed || randomBytes(32)); }
+
+// transcript binds BOTH identities + all ephemeral contributions + the suite (downgrade + UKS defence)
+function transcriptHash(t) {
+  return sha3_256(concatBytes(
+    utf8ToBytes(t.suite_id), t.i_identity_pub, t.i_random, t.i_eph_x, t.i_eph_mlkem,
+    t.r_identity_pub, t.r_random, t.r_eph_x, t.mlkem_ct));
+}
+function deriveSession(ss_x, ss_m, th) {
+  const kek = hkdf(sha256, concatBytes(ss_x, ss_m), th, KEK_LABEL, 32);
+  return { i2r: hkdf(sha256, kek, th, utf8ToBytes('i2r'), 32), r2i: hkdf(sha256, kek, th, utf8ToBytes('r2i'), 32) };
+}
+
+/* ---------- 3-message handshake ---------- */
+// I -> R : msg1 (now carries I's identity so it can be bound into th)
+export function initiatorStart(iIdentity, opts = {}) {
+  const i_eph_x_priv = randomBytes(32), i_eph_x = x25519.getPublicKey(i_eph_x_priv);
+  const mk = ml_kem1024.keygen();
+  const i_random = opts.i_random || randomBytes(32);
+  const msg1 = { suite_id: SUITE_ID, i_identity_pub: bytesToHex(iIdentity.publicKey), i_random: bytesToHex(i_random), i_eph_x: bytesToHex(i_eph_x), i_eph_mlkem: bytesToHex(mk.publicKey) };
+  return { state: { i_eph_x_priv, i_eph_mlkem_priv: mk.secretKey, i_random, i_eph_x, i_eph_mlkem: mk.publicKey, i_identity_pub: iIdentity.publicKey }, msg1 };
+}
+
+// R receives msg1 -> derives keys, signs (responder context) -> msg2
+export function responderRespond(msg1, rIdentity, opts = {}) {
+  if (msg1.suite_id !== SUITE_ID) throw new Error('unsupported suite: ' + msg1.suite_id);
+  const i_identity_pub = hexToBytes(msg1.i_identity_pub), i_random = hexToBytes(msg1.i_random), i_eph_x = hexToBytes(msg1.i_eph_x), i_eph_mlkem = hexToBytes(msg1.i_eph_mlkem);
+  const r_eph_x_priv = randomBytes(32), r_eph_x = x25519.getPublicKey(r_eph_x_priv);
+  const r_random = opts.r_random || randomBytes(32);
+  const { cipherText: mlkem_ct, sharedSecret: ss_m } = ml_kem1024.encapsulate(i_eph_mlkem);
+  const ss_x = x25519.getSharedSecret(r_eph_x_priv, i_eph_x);
+  const t = { suite_id: SUITE_ID, i_identity_pub, i_random, i_eph_x, i_eph_mlkem, r_identity_pub: rIdentity.publicKey, r_random, r_eph_x, mlkem_ct };
+  const th = transcriptHash(t);
+  const r_sig = ml_dsa87.sign(th, rIdentity.secretKey, { context: AUTH_CTX_R });
+  const session = deriveSession(ss_x, ss_m, th);
+  const msg2 = { r_random: bytesToHex(r_random), r_eph_x: bytesToHex(r_eph_x), mlkem_ct: bytesToHex(mlkem_ct), r_identity_pub: bytesToHex(rIdentity.publicKey), r_sig: bytesToHex(r_sig) };
+  return { state: { th, session, i_identity_pub }, msg2 };
+}
+
+// I receives msg2 -> derives keys, verifies R (responder context + pin), signs (initiator context) -> msg3
+export function initiatorFinish(msg2, iState, iIdentity, expectedRIdentityPubHex) {
+  const r_identity_pub = hexToBytes(msg2.r_identity_pub), r_random = hexToBytes(msg2.r_random), r_eph_x = hexToBytes(msg2.r_eph_x), mlkem_ct = hexToBytes(msg2.mlkem_ct);
+  const ss_x = x25519.getSharedSecret(iState.i_eph_x_priv, r_eph_x);
+  const ss_m = ml_kem1024.decapsulate(mlkem_ct, iState.i_eph_mlkem_priv);
+  const t = { suite_id: SUITE_ID, i_identity_pub: iState.i_identity_pub, i_random: iState.i_random, i_eph_x: iState.i_eph_x, i_eph_mlkem: iState.i_eph_mlkem, r_identity_pub, r_random, r_eph_x, mlkem_ct };
+  const th = transcriptHash(t);
+  let rSigOk = false; try { rSigOk = ml_dsa87.verify(hexToBytes(msg2.r_sig), th, r_identity_pub, { context: AUTH_CTX_R }); } catch { rSigOk = false; }
+  const rPinOk = !expectedRIdentityPubHex || msg2.r_identity_pub.toLowerCase() === expectedRIdentityPubHex.toLowerCase();
+  const i_sig = ml_dsa87.sign(th, iIdentity.secretKey, { context: AUTH_CTX_I });
+  const session = deriveSession(ss_x, ss_m, th);
+  // th = the public handshake transcript hash (binds suite + both identities + all ephemerals); exposed so a PQC
+  // gateway can bind its session attestation to the REAL transcript (see pqgateway-session.mjs).
+  return { msg3: { i_sig: bytesToHex(i_sig) }, session, th: bytesToHex(th), R_auth_ok: rSigOk && rPinOk, rSigOk, rPinOk };
+}
+
+// R receives msg3 -> verifies I (initiator context + pin against the identity seen in msg1)
+export function responderFinish(msg3, rState, expectedIIdentityPubHex) {
+  let iSigOk = false; try { iSigOk = ml_dsa87.verify(hexToBytes(msg3.i_sig), rState.th, rState.i_identity_pub, { context: AUTH_CTX_I }); } catch { iSigOk = false; }
+  const iPinOk = !expectedIIdentityPubHex || bytesToHex(rState.i_identity_pub).toLowerCase() === expectedIIdentityPubHex.toLowerCase();
+  return { session: rState.session, th: bytesToHex(rState.th), I_auth_ok: iSigOk && iPinOk, iSigOk, iPinOk };
+}
+
+/* ---------- AEAD channel: deterministic per-direction COUNTER nonces (no reuse) ---------- */
+function nonceFromSeq(seq) { const n = new Uint8Array(12); new DataView(n.buffer).setBigUint64(4, BigInt(seq)); return n; }
+export function channelSeal(key, plaintext, seq) {
+  const nonce = nonceFromSeq(seq), aad = nonce.slice(4);
+  return { seq, ct: bytesToHex(gcm(key, nonce, aad).encrypt(typeof plaintext === 'string' ? utf8ToBytes(plaintext) : plaintext)) };
+}
+export function channelOpen(key, sealed) {
+  const nonce = nonceFromSeq(sealed.seq), aad = nonce.slice(4);
+  return gcm(key, nonce, aad).decrypt(hexToBytes(sealed.ct));
+}
+
+/* ---------- self-test: node pqtransport.mjs ---------- */
+function selfTest() {
+  let pass = 0, fail = 0; const ok = (c, m) => { if (c) pass++; else { fail++; console.error('FAIL:', m); } };
+  const I = generateIdentity(new Uint8Array(32).fill(1)), R = generateIdentity(new Uint8Array(32).fill(2));
+  const Ipub = bytesToHex(I.publicKey), Rpub = bytesToHex(R.publicKey);
+
+  const a = initiatorStart(I);
+  const b = responderRespond(a.msg1, R);
+  const c = initiatorFinish(b.msg2, a.state, I, Rpub);
+  const d = responderFinish(c.msg3, b.state, Ipub);
+
+  ok(bytesToHex(c.session.i2r) === bytesToHex(d.session.i2r) && bytesToHex(c.session.r2i) === bytesToHex(d.session.r2i), 'both sides derive identical session keys');
+  ok(c.R_auth_ok === true, 'initiator authenticates responder (sig + pin)');
+  ok(d.I_auth_ok === true, 'responder authenticates initiator (sig + pin)');
+
+  // counter-nonce channel round-trip (I->R), seq 0 then 1
+  const s0 = channelSeal(c.session.i2r, 'msg-0 over a hybrid-PQ tunnel', 0);
+  const s1 = channelSeal(c.session.i2r, 'msg-1', 1);
+  ok(new TextDecoder().decode(channelOpen(d.session.i2r, s0)) === 'msg-0 over a hybrid-PQ tunnel' && new TextDecoder().decode(channelOpen(d.session.i2r, s1)) === 'msg-1', 'AEAD counter-nonce channel I->R round-trips (seq 0,1)');
+  let wrongDir = false; try { channelOpen(d.session.r2i, s0); } catch { wrongDir = true; }
+  ok(wrongDir, 'wrong-direction key cannot open the message');
+
+  // UKS / MITM identity: attacker answers with its own identity -> pin fails AND sig binds attacker id
+  const M = generateIdentity(new Uint8Array(32).fill(9));
+  const bM = responderRespond(a.msg1, M);
+  const cM = initiatorFinish(bM.msg2, a.state, I, Rpub); // initiator pins the REAL R
+  ok(cM.R_auth_ok === false && cM.rPinOk === false, 'MITM with wrong identity -> responder auth FAILS (pin mismatch)');
+
+  // reflection / role separation: R's signature (responder ctx) must NOT verify as an initiator sig
+  let rSigAsInitiator = true; try { rSigAsInitiator = ml_dsa87.verify(hexToBytes(b.msg2.r_sig), b.state.th, R.publicKey, { context: AUTH_CTX_I }); } catch { rSigAsInitiator = false; }
+  ok(rSigAsInitiator === false, "responder's signature does NOT verify under the initiator context (role separation)");
+
+  // transcript tamper: flip r_eph_x -> recomputed th differs -> R sig fails
+  const tamper = JSON.parse(JSON.stringify(b.msg2));
+  tamper.r_eph_x = tamper.r_eph_x.slice(0, -2) + (tamper.r_eph_x.endsWith('00') ? '11' : '00');
+  ok(initiatorFinish(tamper, a.state, I, Rpub).R_auth_ok === false, 'tampered transcript -> responder signature verification FAILS');
+
+  // identity binding: if an attacker swaps the identity in msg1 (so th would differ), R signs a different th than I expects -> auth fails
+  const downgradeRejected = (() => { try { responderRespond({ ...a.msg1, suite_id: 'WEAK-RSA-1' }, R); return false; } catch { return true; } })();
+  ok(downgradeRejected, 'downgrade to an unsupported suite -> rejected');
+
+  console.log('pqtransport self-test: ' + pass + ' pass, ' + fail + ' fail');
+  if (typeof process !== 'undefined' && process.exit) process.exit(fail ? 1 : 0);
+}
+if (typeof process !== 'undefined' && process.argv && /pqtransport\.mjs$/.test(process.argv[1] || '')) selfTest();

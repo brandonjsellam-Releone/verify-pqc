@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write   # required for npm provenance (Sigstore/SLSA attestation)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -16,11 +17,11 @@ jobs:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Test (offline)
-        run: PQC_SKIP_LIVE=1 node packages/verify-pqc/test.js
+      - name: Full assurance suite (offline gate)
+        run: PQC_SKIP_LIVE=1 node packages/verify-pqc/test-all.mjs
 
-      - name: Publish @trelyan/verify-pqc
-        run: npm publish --access public
+      - name: Publish @trelyan/verify-pqc (with provenance)
+        run: npm publish --access public --provenance
         working-directory: packages/verify-pqc
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

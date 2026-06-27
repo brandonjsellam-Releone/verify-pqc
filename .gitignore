@@ -7,3 +7,12 @@ anchor/anchor-*.json
 web/anchors.json.local
 *.v1.bak
 INTEROP_REPLY.md
+# secrets — never publish (defense-in-depth; none currently tracked)
+.env
+.env.*
+*.key
+*.pem
+*.plain
+.redeem-codes*
+# regenerable demo output (run examples/demo/run-demo.mjs to recreate)
+packages/verify-pqc/examples/demo/demo-out/

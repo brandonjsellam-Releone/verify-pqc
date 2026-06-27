@@ -1,0 +1,4 @@
+# SSH host keys + key exchange
+HostKey ssh-rsa                                    # quantum-broken
+HostKey ssh-ed25519                               # classical, OK as a hybrid leg
+KexAlgorithms sntrup761x25519-sha512@openssh.com  # post-quantum hybrid KEX — quantum-safe

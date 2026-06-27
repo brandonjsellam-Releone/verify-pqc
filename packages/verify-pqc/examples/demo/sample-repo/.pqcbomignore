@@ -1,0 +1,3 @@
+# Accept the classical hybrid legs (X25519/Ed25519/ssh-ed25519) during the migration window — re-evaluate next quarter.
+# One algo label OR risk class per line; '#' starts a comment. Accepted findings are counted (summary.suppressed), not graded.
+classical-hybrid-ok

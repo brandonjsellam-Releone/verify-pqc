@@ -1,0 +1,34 @@
+# OpenSSF Scorecard — supply-chain security posture, published to the Security tab + the public Scorecard API.
+# A high score is a credibility signal that funded-audit programs (OSTIF/NLnet) and enterprise adopters look for.
+# NOTE: for the top Scorecard "Pinned-Dependencies" score, pin the actions below to full commit SHAs (tags shown for readability).
+name: Scorecard supply-chain security
+on:
+  branch_protection_rule:
+  schedule:
+    - cron: '0 6 * * 1'   # weekly, Monday 06:00 UTC
+  push:
+    branches: [ main ]
+permissions: read-all
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write   # upload SARIF to code-scanning
+      id-token: write          # publish results to the public Scorecard API (OIDC)
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run Scorecard
+        uses: ossf/scorecard-action@v2
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true   # adds the public Scorecard badge/score
+      - name: Upload SARIF to code-scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif

@@ -1,0 +1,24 @@
+# Full assurance suite on every push/PR — a publicly-verifiable green build (what adopters + auditors check, and an
+# OpenSSF Scorecard "CI-Tests" signal). Runs the WHOLE suite (test-all.mjs: every module self-test + tamper-binding,
+# fuzz, property-based, accuracy-benchmark, 42k-case differential), unlike the partial conformance.yml test.js.
+name: ci
+on:
+  push:
+    branches: [ main, 'sdk-*' ]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  assurance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install (verify-pqc)
+        run: npm ci || npm install
+        working-directory: packages/verify-pqc
+      - name: Full assurance suite (test-all.mjs)
+        run: node test-all.mjs
+        working-directory: packages/verify-pqc

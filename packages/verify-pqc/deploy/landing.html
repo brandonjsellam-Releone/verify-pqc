@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TRELYAN Quantum-Safe Scorecard — PREVIEW</title>
+<meta name="description" content="Scan your code for quantum-vulnerable cryptography, get an A–F Quantum-Safe grade and a CycloneDX CBOM, and verify post-quantum evidence — built on ML-KEM-1024 / ML-DSA-87. Preview, unaudited reference." />
+<!-- OWNER: set this to your deployed worker URL (e.g. https://scan.trelyan.dev). '' = same origin. -->
+<script>const API_BASE = '';</script>
+<style>
+  :root{--bg:#0b0e14;--panel:#131826;--ink:#e6e9ef;--mut:#9aa4b2;--line:#222a3a;--ok:#33c27f;--warn:#e0a83d;--bad:#e0533d;--acc:#6ea8fe}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  a{color:var(--acc)}.wrap{max-width:920px;margin:0 auto;padding:24px}
+  .banner{background:#2a1d10;border:1px solid var(--warn);color:#f0d49a;padding:10px 14px;border-radius:8px;font-size:14px;margin-bottom:20px}
+  h1{font-size:30px;margin:.2em 0}.tag{color:var(--mut);font-size:18px}
+  .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin:22px 0}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+  .card h3{margin:.1em 0 .4em}.card p{color:var(--mut);font-size:14px;margin:.2em 0}
+  textarea,input,select{width:100%;background:#0c111c;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px;font:13px/1.5 ui-monospace,Menlo,Consolas,monospace}
+  textarea{min-height:120px;resize:vertical}button{background:var(--acc);color:#06122e;border:0;border-radius:8px;padding:10px 16px;font-weight:600;cursor:pointer;margin-top:8px}
+  pre{background:#0c111c;border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto;font-size:12px;max-height:340px}
+  .pill{display:inline-block;font-weight:700;border-radius:6px;padding:2px 10px}.A{background:#0f3a28;color:var(--ok)}.B{background:#173a28;color:var(--ok)}.C{background:#3a3214;color:var(--warn)}.D{background:#3a2414;color:var(--warn)}.F{background:#3a1714;color:var(--bad)}
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:18px 0}td,th{border:1px solid var(--line);padding:8px 10px;text-align:left}
+  .mut{color:var(--mut)}.sec{margin-top:34px}footer{margin:40px 0 20px;color:var(--mut);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="banner"><strong>PREVIEW.</strong> Built on <code>@trelyan/verify-pqc</code> — <strong>unaudited reference crypto</strong>, not FIPS-140-3 validated. The scanner is <strong>lexical</strong>: treat findings as leads to verify, not a complete inventory. Not for production reliance until the third-party audit.</div>
+
+  <h1>Quantum-Safe Scorecard</h1>
+  <div class="tag">Is your code ready for the post-quantum era? Scan it, grade it (A–F), get a CycloneDX CBOM, and verify post-quantum evidence — built on ML-KEM-1024 / ML-DSA-87.</div>
+
+  <div class="grid">
+    <div class="card"><h3>① Free badge</h3><p>Scan a repo, get a shareable <code>quantum-safe: A–F</code> badge (shields.io) for your README.</p></div>
+    <div class="card"><h3>② Free verifier</h3><p>Paste any signed TRELYAN artifact (Evidence Pack, sign-bundle, timestamp, KT proof) and confirm it — no install.</p></div>
+    <div class="card"><h3>③ Paid Evidence Pack</h3><p>An ML-DSA-87-signed PQC Migration Evidence Pack: findings, roadmap, CNSA 2.0 / NIS2 / CRA / DORA crosswalk. <span class="mut">Contact for the audit engagement.</span></p></div>
+  </div>
+
+  <div class="sec card">
+    <h3>Try the scanner</h3>
+    <p class="mut">Paste code or config. Nothing is stored (stateless). The grade is conservative by design.</p>
+    <textarea id="code">const key = RSA.generateKeyPair(2048);
+sign(msg, 'ECDSA', 'secp256k1');
+cipher = 'AES-128-CBC'; hash = 'MD5';
+// TODO: migrate to ML-KEM-1024 + ML-DSA-87</textarea>
+    <button onclick="runScan()">Scan</button>
+    <div id="scanout"></div>
+  </div>
+
+  <div class="sec card">
+    <h3>Verify an artifact</h3>
+    <p class="mut">A verdict confirms cryptographic validity and reports the signer. <strong>Trust is yours</strong>: paste the expected signer public key (hex) to pin — without it, "verified" means internally consistent, not trusted.</p>
+    <select id="vtype"><option value="evidence-pack">evidence-pack</option><option value="sign-bundle">sign-bundle</option><option value="tst">tst</option><option value="pqef">pqef</option><option value="kt-inclusion">kt-inclusion</option></select>
+    <textarea id="vartifact" placeholder='{ "kind":"pqcbom-evidence-pack", ... }'></textarea>
+    <input id="vpin" placeholder="trust: signer/tsa/log public key (hex) — optional but recommended" />
+    <button onclick="runVerify()">Verify</button>
+    <div id="vout"></div>
+  </div>
+
+  <div class="sec">
+    <h3>Pricing</h3>
+    <table>
+      <tr><th>Tier</th><th>What you get</th><th>Price</th></tr>
+      <tr><td>Badge / Verifier</td><td>Free scan → A–F badge; free public artifact verification</td><td>Free</td></tr>
+      <tr><td>Evidence Pack</td><td>Signed report + full CycloneDX CBOM + migration roadmap + compliance crosswalk</td><td>Crypto-Agility Audit engagement</td></tr>
+      <tr><td>Monitoring</td><td>Continuous CBOM + drift alerts + CI policy gate</td><td>Annual SaaS</td></tr>
+    </table>
+    <p class="mut">Mandates that make this due diligence: CNSA 2.0, NIS2, CRA, DORA, EO 14409. The crosswalk is <em>informational, not a certification or legal opinion.</em></p>
+  </div>
+
+  <div class="sec">
+    <h3>Honest limitations</h3>
+    <ul class="mut">
+      <li>Lexical/pattern scanner — no AST, dependency-graph, or live TLS/cert/cloud-KMS discovery yet. Verify findings.</li>
+      <li>Reference crypto, <strong>unaudited</strong> and not constant-time. Don't rely on it in production until the third-party audit clears.</li>
+      <li>"quantum-broken" = broken by Shor (RSA/ECC/DH). X25519/Ed25519 are flagged but fine as the classical leg of a <em>hybrid</em>.</li>
+    </ul>
+  </div>
+
+  <footer>
+    TRELYAN · post-quantum provenance &amp; verification · <a href="/verify">/verify API</a> · <a href="/.well-known/security.txt">security.txt</a><br/>
+    PREVIEW build — see <code>SECURITY_REVIEW.md</code>, <code>THREAT_MODEL.md</code>, and <code>AUDIT_READINESS.md</code> in the repo.
+  </footer>
+</div>
+
+<script>
+async function post(path, body){
+  const r = await fetch((API_BASE||'') + path, {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(body)});
+  return r.json();
+}
+function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+async function runScan(){
+  const out = document.getElementById('scanout'); out.innerHTML = '<p class="mut">scanning…</p>';
+  try{
+    const res = await post('/scan', {files:[{name:'input', text: document.getElementById('code').value}]});
+    const g = res.scorecard ? res.scorecard.grade : '?';
+    out.innerHTML = '<p>Grade <span class="pill '+esc(g)+'">'+esc(g)+'</span> '
+      + (res.scorecard? '· score '+esc(res.scorecard.score)+'/100 · '+esc(res.scorecard.label):'') + '</p>'
+      + '<pre>'+esc(JSON.stringify(res.scorecard||res, null, 2))+'</pre>'
+      + (res.notice? '<p class="mut">'+esc(res.notice)+'</p>':'');
+  }catch(e){ out.innerHTML = '<p class="mut">endpoint not reachable — set API_BASE to your deployed worker. ('+esc(e.message)+')</p>'; }
+}
+async function runVerify(){
+  const out = document.getElementById('vout'); out.innerHTML = '<p class="mut">verifying…</p>';
+  let artifact; try{ artifact = JSON.parse(document.getElementById('vartifact').value||'{}'); }catch(e){ out.innerHTML='<p class="mut">artifact is not valid JSON.</p>'; return; }
+  const type = document.getElementById('vtype').value, pin = document.getElementById('vpin').value.trim();
+  const trust = {}; if(pin){ trust.signer_pub_hex=pin; trust.tsa_pub_hex=pin; trust.log_pub_hex=pin; }
+  try{
+    const res = await post('/verify', {type, artifact, trust});
+    out.innerHTML = '<pre>'+esc(JSON.stringify(res, null, 2))+'</pre>'
+      + (res.notice? '<p class="mut">'+esc(res.notice)+'</p>':'');
+  }catch(e){ out.innerHTML = '<p class="mut">endpoint not reachable — set API_BASE to your deployed worker. ('+esc(e.message)+')</p>'; }
+}
+</script>
+</body>
+</html>
