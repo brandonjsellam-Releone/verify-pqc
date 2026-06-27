@@ -7,7 +7,7 @@
 ## Usage
 ```yaml
 - name: Quantum-Safe Scorecard
-  uses: trelyan/quantum-safe-scorecard@v1
+  uses: brandonjsellam-Releone/verify-pqc/packages/verify-pqc/pqcbom-action@main   # path-ref works today; becomes trelyan/quantum-safe-scorecard@v1 once published to the Marketplace
   with:
     path: .
     fail-on: broken-classical,quantum-broken   # fail the build on banned crypto (optional)
@@ -20,7 +20,7 @@ The Action writes a SARIF 2.1.0 report (`pqcbom.sarif`) with **repo-relative** p
 ```yaml
 - name: Quantum-Safe Scorecard
   id: pqc
-  uses: trelyan/quantum-safe-scorecard@v1
+  uses: brandonjsellam-Releone/verify-pqc/packages/verify-pqc/pqcbom-action@main   # path-ref works today; becomes trelyan/quantum-safe-scorecard@v1 once published to the Marketplace
   with: { path: . }
 - name: Upload to code-scanning
   if: always()                                   # publish findings even if the gate failed the build
@@ -50,3 +50,11 @@ RSA / ECDSA / ECDH / DH / EC curves (quantum-broken by Shor) · AES-128/192, SHA
 
 ## Honest limits
 Lexical scan (flags algorithm names in code/comments — verify findings; production adds AST + cloud/cert/KMS discovery). The evidence-signing (ML-DSA-87) is real. Not legal advice; maps to but does not certify CNSA 2.0 / NIS2 / CRA / DORA.
+
+## Publishing to the GitHub Marketplace (owner-gated)
+The Action **works today** via the path-reference above. To get a clean Marketplace listing (`uses: <owner>/quantum-safe-scorecard@v1`), GitHub requires the **`action.yml` at a repository root** — it can't be published from a monorepo subdirectory. Owner steps (Claude can scaffold the files; only the owner can create the public repo + accept the Marketplace agreement):
+1. Create a dedicated **public** repo `quantum-safe-scorecard` and copy this folder's files (`action.yml`, `run.mjs`, `README.md`) to its **root** — or use a release-publishing workflow that stages them at root.
+2. Ensure `action.yml` `name:` is **globally unique** on the Marketplace (the current "TRELYAN Quantum-Safe Scorecard" likely is — verify on publish).
+3. Tag a release (`v1`), then on the release page tick **"Publish this Action to the GitHub Marketplace"** and accept the agreement (one-time, owner).
+4. Add a category (Security / Code quality) + the icon/color are already set (`shield`/`purple`).
+> Until then, every consumer can already adopt it with the path-reference — no Marketplace required.
