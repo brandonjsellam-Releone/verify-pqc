@@ -119,7 +119,9 @@ export function verifyChain(chain, trustedRootPub, opts = {}) {
 // this_update/next_update bound the CRL's validity so a relying party rejects a STALE signed CRL (replay that would
 // hide later revocations). crl_number is monotonic (anti-rollback). Set both for any security-relevant use.
 export function makeCRL({ revoked, number, thisUpdate, nextUpdate, ts }, ca) {
-  const tbs = { v: '0.1', issuer_kid: pubOf(ca).kid, crl_number: number ?? 0, this_update: thisUpdate ?? null, next_update: nextUpdate ?? null, ts: ts ?? null, revoked: (revoked || []).slice().sort() };
+  // serials are canonicalized to STRINGS (mirrors issueCert's `serial: String(serial)`) so a numeric-serial CRL can't
+  // silently miss in checkRevocation's string compare (a revoked cert reporting revoked:false — revocation fail-open).
+  const tbs = { v: '0.1', issuer_kid: pubOf(ca).kid, crl_number: number ?? 0, this_update: thisUpdate ?? null, next_update: nextUpdate ?? null, ts: ts ?? null, revoked: (revoked || []).map(String).sort() };
   return { tbs, sig: bytesToHex(ml_dsa87.sign(utf8ToBytes(canon(tbs)), ca.pq.secretKey, { context: CRL_CTX })) };
 }
 // opts.at = current time → enforces this_update <= at <= next_update. opts.minCrlNumber → anti-rollback (reject a
@@ -133,7 +135,8 @@ export function checkRevocation(crl, caPub, serial, opts = {}) {
   const fresh = at == null || crl.tbs.next_update == null ? true : (at >= (crl.tbs.this_update ?? -Infinity) && at <= crl.tbs.next_update);
   const notRolledBack = opts.minCrlNumber == null || crl.tbs.crl_number >= opts.minCrlNumber;
   const usable = sigOk && fresh && notRolledBack;
-  return { crl_valid: sigOk, fresh, notRolledBack, usable, revoked: usable && crl.tbs.revoked.includes(String(serial)),
+  const revSet = new Set(crl.tbs.revoked.map(String));   // string-canonicalized at BOTH ends → numeric/string serials match
+  return { crl_valid: sigOk, fresh, notRolledBack, usable, revoked: usable && revSet.has(String(serial)),
     reason: !sigOk ? 'CRL signature invalid' : !fresh ? 'CRL STALE (outside this_update..next_update) — fetch a fresh CRL; fail closed for high assurance' : !notRolledBack ? 'CRL rolled back (number < highest seen)' : 'ok' };
  } catch { return { crl_valid: false, fresh: false, notRolledBack: false, usable: false, revoked: false, reason: 'malformed CRL' }; }
 }
@@ -188,6 +191,10 @@ function selfTest() {
   const crl = makeCRL({ revoked: ['3'], number: 1, thisUpdate: 1400, nextUpdate: 1600, ts: 1500 }, inter);
   ok(checkRevocation(crl, pubOf(inter), 3, { at: 1500 }).revoked === true, 'revoked serial reported revoked under a fresh CRL');
   ok(checkRevocation(crl, pubOf(inter), 2, { at: 1500 }).revoked === false, 'non-revoked serial -> not revoked');
+  // REGRESSION (code-security review): a CRL listing serials as NUMBERS must still match — serial type-confusion fail-open
+  const crlNum = makeCRL({ revoked: [3], number: 1, thisUpdate: 1400, nextUpdate: 1600, ts: 1500 }, inter);
+  ok(checkRevocation(crlNum, pubOf(inter), 3, { at: 1500 }).revoked === true, 'numeric-serial CRL revoked:[3] matches serial 3 (no type-confusion miss)');
+  ok(checkRevocation(crlNum, pubOf(inter), '3', { at: 1500 }).revoked === true, 'numeric-serial CRL also matches string serial "3"');
   ok(checkRevocation(crl, rootPub, 3, { at: 1500 }).crl_valid === false, 'CRL under a wrong issuer key -> crl_valid false');
   // STALE-CRL replay is rejected (OpenAI/DeepSeek fix): at past next_update -> not fresh, not usable
   const stale = checkRevocation(crl, pubOf(inter), 3, { at: 5000 });

@@ -81,6 +81,7 @@ export function verifyPrekeyBundle(bundle, opts = {}) {
 
 // INITIATOR (Alice). Returns { ok, SK, initialMessage }.
 export function initiateHandshake(bobBundle, aliceIdentity) {
+ try { // TOTAL: malformed bundle key material fails CLOSED ({ok:false}), never throws on first-contact wire input
   if (!verifyPrekeyBundle(bobBundle)) return { ok: false, reason: 'bundle signature invalid (possible prekey substitution)' };
   const ek = genDH();
   const ikB = hexToBytes(bobBundle.ik_dh_pub), spkB = hexToBytes(bobBundle.spk_pub);
@@ -93,10 +94,12 @@ export function initiateHandshake(bobBundle, aliceIdentity) {
   labelled.push(L('pqx3dh-kem'), sharedSecret);
   const th = transcriptHash({ proto: 'pqx3dh-v1', suite: SUITE, ik_a_dh: hx(aliceIdentity.dh.pub), ik_b_dh: bobBundle.ik_dh_pub, ek_a: hx(ek.pub), spk_b: bobBundle.spk_pub, kem_used_pub: kemUsedPub, kem_used_id: kemUsedId, kem_ct: hx(cipherText), opk_b: bobBundle.onetime_pub || null, opk_id: bobBundle.onetime_id || null, bundle_sig: bobBundle.bundle_sig });
   return { ok: true, SK: deriveSK(labelled, th), initialMessage: { ik_dh_pub: hx(aliceIdentity.dh.pub), ik_sig_pub: hx(aliceIdentity.sig.publicKey), ek_pub: hx(ek.pub), kem_ct: hx(cipherText), kem_used_id: kemUsedId, used_onetime_id: bobBundle.onetime_id || null } };
+ } catch { return { ok: false, reason: 'malformed bundle key material' }; }
 }
 
 // RESPONDER (Bob). Needs his published bundle + its secrets. Consumes one-time prekeys (mutates bobSecrets).
 export function respondHandshake(initialMessage, bobIdentity, bobBundle, bobSecrets) {
+ try { // TOTAL: a malformed handshake message fails CLOSED ({ok:false}); the throwing sites are before any prekey is consumed
   if (bobSecrets.consumed.has(initialMessage.kem_ct)) return { ok: false, reason: 'replay: this handshake was already consumed' };
   let kemSk, kemUsedPub;
   if (initialMessage.kem_used_id === 'lastresort') { kemSk = bobSecrets.kem_lastresort_sk; kemUsedPub = bobBundle.kem_lastresort_pub; }
@@ -114,6 +117,7 @@ export function respondHandshake(initialMessage, bobIdentity, bobBundle, bobSecr
   if (initialMessage.kem_used_id === bobSecrets.kem_ot_id) bobSecrets.kem_ot_sk = null; // consume one-time KEM
   if (opkId) bobSecrets.onetime_priv = null;                    // consume one-time DH prekey
   return { ok: true, SK };
+ } catch { return { ok: false, reason: 'malformed handshake message' }; }
 }
 
 /* ---------- self-test: node pqx3dh.mjs ---------- */

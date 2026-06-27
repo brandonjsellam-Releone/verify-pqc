@@ -82,11 +82,22 @@ function dhRatchet(st, header) {
 export function ratchetDecrypt(st, message, ad = EMPTY) {
   const header = message.header, ctBytes = hexToBytes(message.ct);
   const sk = skipKey(header.dh, header.n);
-  if (st.MKSKIPPED.has(sk)) { const mk = st.MKSKIPPED.get(sk); st.MKSKIPPED.delete(sk); return aead(mk, concatBytes(ad, canon(header))).decrypt(ctBytes); }
-  if (!st.DHr || header.dh !== bytesToHex(st.DHr)) { skipMessageKeys(st, header.pn); dhRatchet(st, header); }
-  skipMessageKeys(st, header.n);
-  const { mk, ck } = chainKDF(st.CKr); st.CKr = ck; st.Nr += 1;
-  return aead(mk, concatBytes(ad, canon(header))).decrypt(ctBytes);
+  if (st.MKSKIPPED.has(sk)) {
+    const mk = st.MKSKIPPED.get(sk);
+    const pt = aead(mk, concatBytes(ad, canon(header))).decrypt(ctBytes); // decrypt BEFORE consuming the skipped key (a bad tag doesn't burn it)
+    st.MKSKIPPED.delete(sk);
+    return pt;
+  }
+  // COMMIT-ON-SUCCESS (code-security review): run skip + DH-ratchet on a CLONE and adopt it only AFTER the AEAD
+  // decrypt succeeds. A malformed or forged header throws here WITHOUT mutating the live session, so a single
+  // injected packet can no longer wedge an established session (the pre-throw st.DHr mutation was the real defect).
+  const w = cloneState(st);
+  if (!w.DHr || header.dh !== bytesToHex(w.DHr)) { skipMessageKeys(w, header.pn); dhRatchet(w, header); }
+  skipMessageKeys(w, header.n);
+  const { mk, ck } = chainKDF(w.CKr); w.CKr = ck; w.Nr += 1;
+  const pt = aead(mk, concatBytes(ad, canon(header))).decrypt(ctBytes); // bad tag -> throws -> live st UNTOUCHED
+  Object.assign(st, w); // commit the advanced ratchet state only on a successful decrypt
+  return pt;
 }
 
 export function cloneState(st) {
