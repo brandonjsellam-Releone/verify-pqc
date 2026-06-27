@@ -7,13 +7,13 @@ validated, not constant-time. Node ≥18.
 ```bash
 cd trelyan-interop/packages/verify-pqc
 npm i            # @noble/post-quantum, @noble/hashes, @noble/ciphers, @noble/curves
-node test-all.mjs            # every module self-test + unified surface (~320 assertions)
+node test-all.mjs            # every module self-test + the four assurance harnesses (run node test-all.mjs → ALL MODULES PASS)
 node kat-conformance.mjs     # deterministic NIST-style KATs (ML-KEM-1024 / ML-DSA-87 / SLH-DSA-SHAKE-256s)
 node spine-vectors.mjs       # PINNED transparency-spine vectors (must reproduce the hex)
 node vectors-crosscheck.mjs  # 42,574-case differential vs an independent RFC-6962 reference
 node fuzz-robustness.mjs     # negative/fuzz sweep (58 adversarial classes) — asserts 0 fail-open + verifier totality
-node tamper-binding.mjs      # signature-coverage — flips every signed field across 10 verifiers, asserts each is bound
-node domain-separation.mjs   # 0 bare sign/verify (98 sites), 23 distinct contexts, cross-context rejection
+node tamper-binding.mjs      # signature-coverage — flips every signed field across 15 verifiers, asserts each is bound
+node domain-separation.mjs   # 0 bare sign/verify (104 sites), 25 distinct contexts, cross-context rejection
 node canon-determinism.mjs   # canon() byte-identical across 10 modules + deterministic/injective
 ```
 All four assurance harnesses (`fuzz-robustness`, `tamper-binding`, `domain-separation`, `canon-determinism`) plus the
@@ -37,7 +37,7 @@ side-channel/constant-time (the class the harnesses cannot cover).
 ## Suggested scope priority (per the council's diligence flag)
 Audit the **spine first** (pqsign Merkle/STH/inclusion/consistency) — everything else inherits its guarantees. Then
 the hybrid handshake (pqtransport), the KEM envelope (polarseek), and the signature-context domain separation. The
-~30 modules are breadth; the spine + the 4 primitives are the depth that matters.
+29 modules are breadth; the spine + the 4 primitives are the depth that matters.
 
 ## What to focus on
 - Second-preimage / domain-separation on leaf (`0x00`) vs node (`0x01`) bytes; index/tree_size binding; consistency

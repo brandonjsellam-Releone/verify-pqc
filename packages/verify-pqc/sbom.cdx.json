@@ -3,7 +3,7 @@
   "specVersion": "1.6",
   "version": 1,
   "metadata": {
-    "component": { "type": "library", "name": "@trelyan/pq-sdk", "version": "0.8.0-draft", "description": "TRELYAN post-quantum SDK (reference, UNAUDITED). Built only on the audited @noble pure-JS crypto." },
+    "component": { "type": "library", "name": "@trelyan/pq-sdk", "version": "0.16.0-draft", "description": "TRELYAN post-quantum SDK (reference, UNAUDITED). Built only on the widely-reviewed @noble pure-JS crypto." },
     "properties": [
       { "name": "trelyan:audit_status", "value": "UNAUDITED reference; third-party crypto/side-channel audit pending" },
       { "name": "trelyan:runtime", "value": "Node.js >=18 (tested on v24.16.0); pure-JS, no native addons" },

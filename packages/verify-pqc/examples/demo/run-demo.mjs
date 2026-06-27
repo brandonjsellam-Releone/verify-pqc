@@ -52,7 +52,7 @@ writeFileSync(join(out, 'evidence-pack.md'), pack.markdown);
 const v = verifyEvidencePack(pack, mldsa.publicKey, { trustedSlhPub: slh.publicKey });
 
 // 3b) FULL ATTESTATION (pqattest): the signed pack is ALSO sealed by 3 algorithm families ∧ threshold-timestamped by
-//     2 TSAs ∧ logged in an RFC-6962 transparency tree. The seal countersigns the timestamp + tree-head (0-downgrade).
+//     2 TSAs ∧ logged in an RFC-6962 transparency tree. The seal countersigns the timestamp + tree-head (downgrade-detecting under its trust model).
 const edsk = new Uint8Array(32).fill(125);
 const signers = [
   { alg: 'ML-DSA-87', secretKey: mldsa.secretKey, publicKey: mldsa.publicKey },

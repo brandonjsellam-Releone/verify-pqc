@@ -2,7 +2,7 @@
 
 Companion to `AUDIT_READINESS.md` and `SECURITY_REVIEW.md`. Scope: the reference SDK's cryptographic/protocol logic.
 Out of scope: side-channels (not constant-time), deployment/operations, the underlying `@noble` primitives (widely
-validated; cross-check vs NIST ACVP is the auditor step). `SDK_VERSION 0.3.0-draft`.
+validated; cross-check vs NIST ACVP is the auditor step). `SDK_VERSION 0.16.0-draft`.
 
 ## Assets
 - **A1** Authenticity/integrity of signed artifacts, attestations, timestamps, and evidence bundles.

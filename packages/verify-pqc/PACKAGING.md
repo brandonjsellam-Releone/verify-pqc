@@ -8,7 +8,7 @@ This directory holds **two distinct things** that must ship as **two distinct pa
 - **⚠️ Guard:** the `files` allowlist deliberately **excludes** every SDK reference module (pqcbom*, pqgateway*, pqkt, pqtsa, pqsign, pqef, polarseek, pqratchet*, pqindex, pqassistant, pqverify-api, witness-service, fuzz/crosscheck, etc.). A plain `npm publish` therefore does **not** ship unaudited crypto. **Do not add SDK modules to `files`/`exports` of this package.**
 
 ## 2. `@trelyan/pq-sdk` — the full reference SDK (HELD until the third-party audit)
-- **What:** `sdk.mjs` + the ~25 reference modules (the Tier-1 PQ stack, the CBOM revenue product, KT, gateway, etc.).
+- **What:** `sdk.mjs` + the 29 reference modules (the Tier-1 PQ stack, the CBOM revenue product, KT, gateway, etc.).
 - **Status:** **NOT for publication yet.** Unaudited reference code, not FIPS-140-3 validated, not constant-time. See `SDK.md`, `SECURITY_REVIEW.md`, `THREAT_MODEL.md`, `AUDIT_READINESS.md`.
 - **Intended manifest when the audit clears (owner action):** a separate package (own dir or workspace) with:
   - `"name": "@trelyan/pq-sdk"`, `"type": "module"`, `"private": true` until release.

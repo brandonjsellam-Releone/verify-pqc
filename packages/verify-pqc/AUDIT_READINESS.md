@@ -2,7 +2,7 @@
 
 Prepared so an external cryptographic auditor can start cold. The audit itself is an **owner/external** step — this
 package scopes it. Status: reference implementation, **TRL ~5–6, NOT FIPS-140-3 validated, NOT constant-time, no
-production keys touched.** `SDK_VERSION 0.3.0-draft`.
+production keys touched.** `SDK_VERSION 0.16.0-draft`.
 
 ## 1. Scope for audit (priority order)
 
@@ -46,7 +46,7 @@ outside the gateway's explicit interop-fallback ladder.
 
 ## 4. What the auditor receives
 
-- 23 self-testing modules, **~273 assertions**, all green: `node test-all.mjs`.
+- 29 self-testing modules; every module self-test + the four assurance harnesses pass (run `node test-all.mjs` → ALL MODULES PASS).
 - Deterministic conformance vectors: `node kat-conformance.mjs` (drift detection) + `fips-conformance.mjs`.
 - `SECURITY_REVIEW.md` — every internal council review, with findings APPLIED vs **rejected-with-reason** (e.g. the
   header-encryption "fixes" rejected as regressions; the POLARSEEK label item assessed as low-risk-no-change).

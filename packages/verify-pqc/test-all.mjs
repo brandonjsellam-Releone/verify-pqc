@@ -21,7 +21,7 @@ for (const m of mods) {
 try {
   const sdk = await import('./sdk.mjs');
   const haveAll = sdk.pqef && sdk.polarseek && sdk.pqsign && sdk.pqtransport && sdk.pqanswer && sdk.pqcouncil && sdk.pqguard && sdk.pqinduct && sdk.pqmoa && sdk.pqclaimgate && sdk.pqverify && sdk.pqratchet && sdk.pqratchetHE && sdk.pqindex && sdk.pqassistant && sdk.pqcbom && sdk.pqgateway && sdk.pqgatewaySession && sdk.pqtsa && sdk.pqkt && sdk.pqseal && sdk.pqattest && sdk.verifyPQC && sdk.SDK_VERSION;
-  console.log(haveAll ? '✓ sdk.mjs surface loads (23 named exports incl. pqseal + pqattest 0-downgrade attestation) v' + sdk.SDK_VERSION : '✗ sdk.mjs missing exports');
+  console.log(haveAll ? '✓ sdk.mjs surface loads (core exports incl. pqseal + pqattest downgrade-detecting attestation) v' + sdk.SDK_VERSION : '✗ sdk.mjs missing exports');
   if (!haveAll) failed++;
 } catch (e) { failed++; console.error('✗ sdk.mjs load failed: ' + e.message); }
 

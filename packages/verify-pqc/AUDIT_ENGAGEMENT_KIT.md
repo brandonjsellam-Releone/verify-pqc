@@ -16,7 +16,7 @@ FIPS 140-3 CMVP; CAVP/ACVP algorithm validation is the nearer-term federal check
 > those are owner actions. Cost/lead-time figures below are *typical industry ranges to confirm in a scoping call*,
 > not quotes. Nothing here represents any module as production-ready until an audit closes and lifts the caveat.
 
-## What an auditor receives (already turnkey, offline-reproducible)
+## What an auditor receives (already offline-reproducible)
 `AUDIT_RFP.md` (scope/SOW) + the materials in its §4 — incl. the two new meta-harnesses (`tamper-binding.mjs`,
 `domain-separation.mjs`) and `SECURITY_REVIEW.md` logging the **5 real gaps the harnesses already caught and we fixed**
 (pqindex shard `ts`; pqx3dh one-time PQ prekeys / Signal-PQXDH HNDL; pqcompliance `summary`/`disclaimer`/`posture`
@@ -42,7 +42,7 @@ needs in one engagement). If budget is tight and side-channel is deferred to a l
 cost-effective JS-implementation review. If the EU regulatory story is the priority, **Quarkslab**.
 
 ## Typical engagement shape (confirm in scoping — NOT a quote)
-- For a ~10k-LOC JS/TS crypto SDK: a focused code review + crypto-correctness pass is commonly a **2–4 week**
+- For a ~5,500 LOC JS/TS crypto SDK: a focused code review + crypto-correctness pass is commonly a **2–4 week**
   engagement; adding a **constant-time / side-channel** assessment extends scope/fee. Lead time to *start* is often
   **several weeks to a quarter** (book early). Fees scale with scope/firm tier — get **2–3 written scoping bids**.
 - Phasing option to control cost: **Phase 1** = spine + domain-separation + signature-coverage confirmation +
@@ -53,7 +53,7 @@ cost-effective JS-implementation review. If the EU regulatory story is the prior
 > **`AUDIT_OUTREACH.md`** — copy-paste-send from your own email.
 
 ## Cover-email template (owner sends; fill the brackets)
-> Subject: PQC SDK security audit — scoping request (~10k-LOC JS/TS, @noble/post-quantum)
+> Subject: PQC SDK security audit — scoping request (~5,500 LOC JS/TS, @noble/post-quantum)
 >
 > Hi [name],
 >
@@ -61,7 +61,7 @@ cost-effective JS-implementation review. If the EU regulatory story is the prior
 > SLH-DSA / Falcon-1024-on-chain) in JavaScript on the audited `@noble/post-quantum` primitives, and we're seeking an
 > independent crypto code review + side-channel/constant-time assessment before production use.
 >
-> The codebase is ~10k LOC across ~28 modules built on a single RFC-6962 transparency spine. It ships with a turnkey
+> The codebase is ~5,500 LOC across 29 modules built on a single RFC-6962 transparency spine. It ships with an offline-reproducible
 > audit package: formal spec, threat + adversary models, reproducibility/SBOM, a 42k-case differential validator, a
 > fuzz/fail-closed sweep, a signature-coverage (tamper-binding) harness, and a domain-separation harness — plus a full
 > review log of issues we've already found and fixed. We'd like the engagement to confirm our harnesses and focus on

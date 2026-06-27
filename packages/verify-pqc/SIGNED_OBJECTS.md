@@ -25,15 +25,15 @@ over the stated cases — not formal proofs; the third-party audit is the gate).
 | pqgateway | capability offer | `…gateway-offer-v1` | `verifyOffer` | **✓ tamper (6)** + fuzz |
 | pqgateway | session attestation | `…gateway-session-v1` | `verifySession` | **✓ tamper (12)** + fuzz |
 | pqgateway | client countersignature | `…gateway-client-countersig-v1` | `acceptSession` path | fuzz · *tracked* |
-| pqcompliance | compliance report | `…pqcompliance-report-v1` | `verifyComplianceReport` | **✓ tamper (102)** + fuzz · summary/disclaimer/posture now bound |
-| pqcbom-report | PQC Evidence Pack (PAID) | `…pqcbom-evidence-pack-v1` | `verifyEvidencePack` | **✓ tamper (158, PAID)** |
+| pqcompliance | compliance report | `…pqcompliance-report-v1` | `verifyComplianceReport` | **✓ tamper (111)** + fuzz · summary/disclaimer/posture now bound |
+| pqcbom-report | PQC Evidence Pack (PAID) | `…pqcbom-evidence-pack-v1` | `verifyEvidencePack` | **✓ tamper (170, PAID)** |
 | pqvault / polarseek | KMS custody record | `…kms-custody-v1` | `verifyCustodyRecord` / `pqvault.verifyEntry` | fuzz (vault entry) · *tracked for tamper* |
 | pqinduct | order credential | `…lemniscate-credential-v1` | induction verify | self-test · *tracked* |
 | pqinduct | inner-ring grant | `…lemniscate-inner-ring-v1` | induction verify | self-test · *tracked* |
 | pqinduct | induction manifest | `…lemniscate-manifest-v1` | induction verify | self-test · *tracked* |
 | pqguard | dual-control approval token | `…dual-control-approval-v1` | guard verify | self-test · *tracked* |
 
-**23 distinct contexts** — matches `domain-separation.mjs`. ✓tamper = **13 verifiers** (incl. the spine, the paid
+**23 distinct contexts** — matches `domain-separation.mjs`. ✓tamper = **15 verifiers** (incl. the spine, the paid
 deliverable, revocation, marketplace attestation, and key-transparency events). All surfaces are in the fuzz/total
 sweep + their own module self-tests.
 

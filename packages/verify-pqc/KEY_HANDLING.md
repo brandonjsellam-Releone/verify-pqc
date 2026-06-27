@@ -13,7 +13,7 @@ takes keys as explicit arguments and holds no key state:
   cryptographic operations and the *evidence* that an operation occurred.
 
 ## 2. Key generation & RNG assumptions
-- Keygen is delegated to the audited primitives: `ml_kem1024.keygen` / `ml_dsa87.keygen` / `slh_dsa_*.keygen`
+- Keygen is delegated to the widely-reviewed @noble primitives (cross-check vs NIST ACVP is an auditor step): `ml_kem1024.keygen` / `ml_dsa87.keygen` / `slh_dsa_*.keygen`
   (`@noble/post-quantum`), `x25519` / `ed25519` (`@noble/curves`). The SDK adds **no custom keygen or RNG**.
 - Randomness comes from `@noble/hashes` `randomBytes`, which uses the **host platform CSPRNG**
   (`crypto.getRandomValues` in browsers / `node:crypto` randomness on the server). **Assumption the auditor must

@@ -8,7 +8,7 @@
  * SUFFICIENT — that allows a downgrade by swapping in a different valid timestamp/log entry for the same hash. So the
  * SEAL is computed LAST and signs a COMPOSITE that commits to the timestamp + the signed tree head + the policy +
  * the threshold (Sigstore "countersign the signature, not the artifact"). Swapping the tst, the STH, the threshold,
- * the policy, or the index breaks the multi-family seal. This is the only construction that preserves "0 downgrade".
+ * the policy, or the index breaks the multi-family seal. This is the construction that makes pqattest downgrade-detecting under the stated trust model.
  *
  * HONESTY (council): NOT an eIDAS "qualified" timestamp (we are not an accredited QTSP); NOT a legal/court
  * determination; NOT "maximal" / "military-grade". The crypto is the (independently-audited) @noble primitives;

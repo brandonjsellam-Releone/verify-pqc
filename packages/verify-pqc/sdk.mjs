@@ -52,7 +52,7 @@ export const SUITES = {
   signature: 'ML-DSA-87 (FIPS 204)',
   diversity: 'SLH-DSA-256s (FIPS 205)',
   agileSigning: 'pqseal — N-leg AND-composition (ML-DSA-87 ∧ SLH-DSA-256f ∧ Ed25519), crypto-agile + anti-downgrade',
-  attestation: 'pqattest — seal ∧ threshold-timestamp ∧ transparency-log; seal countersigns the timestamp+STH (0-downgrade)',
+  attestation: 'pqattest — seal ∧ threshold-timestamp ∧ transparency-log; seal countersigns the timestamp+STH (downgrade-detecting under its trust model)',
   onchain: 'Falcon-1024 (draft FIPS 206 — provenance only)',
   aead: 'AES-256-GCM',
 };

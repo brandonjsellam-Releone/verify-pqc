@@ -128,7 +128,7 @@ All six are **demonstrated** by `node pqattest.mjs` (14 test cases) under the as
 
 ⛔ "qualified" (eIDAS-reserved; not an accredited QTSP) · ⛔ "maximal" / "military-grade" / "unbreakable" · ⛔ legal / court-admissibility effect · ⛔ FIPS-140-3 validation (uses FIPS *algorithms*; the composition is unaudited) · ⛔ that Ed25519 is post-quantum (it is the classical interop leg).
 
-**Honest one-liner:** *an artifact signed by N independent algorithm families, whose signature also countersigns a threshold post-quantum timestamp, an RFC-6962 transparency-log inclusion proof, and optional witness co-signatures — each verifiable offline against pinned keys, and provably resistant to component downgrade.*
+**Honest one-liner:** *an artifact signed by N independent algorithm families, whose signature also countersigns a threshold post-quantum timestamp, an RFC-6962 transparency-log inclusion proof, and optional witness co-signatures — each verifiable offline against pinned keys, and downgrade-detecting under the stated trust model (§4).*
 
 ---
 

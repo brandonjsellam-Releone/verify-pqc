@@ -1,6 +1,6 @@
 # TRELYAN PQ SDK — Audit Dossier (cold-start for the third-party crypto audit)
 
-SDK 0.8.0-draft. This is the single entry point for an external crypto / side-channel audit. It indexes the other
+SDK 0.16.0-draft. This is the single entry point for an external crypto / side-channel audit. It indexes the other
 docs and adds the formal cross-module crypto details an auditor needs first. **Posture:** reference implementations,
 **unaudited**, **not** FIPS-140-3 validated, **not** constant-time. Hybrid-PQ + fail-closed by design.
 
@@ -11,7 +11,7 @@ docs and adds the formal cross-module crypto details an auditor needs first. **P
 4. `SDK.md` — module catalog + test counts. `AUDIT_READINESS.md` — scope/inventory. `PACKAGING.md` — release split.
 
 ## 1. Scope
-- **In scope (this dir):** the reference SDK — `sdk.mjs` + the ~28 modules. Built ONLY on `@noble/post-quantum`,
+- **In scope (this dir):** the reference SDK — `sdk.mjs` + the 29 modules. Built ONLY on `@noble/post-quantum`,
   `@noble/hashes`, `@noble/ciphers`, `@noble/curves` (audited, pure-JS).
 - **Two packages (see PACKAGING.md):** the lean, publishable `@trelyan/verify-pqc` browser verifier (narrow `files`
   allowlist — excludes all SDK modules) vs `@trelyan/pq-sdk` (the full SDK, HELD until this audit clears).
@@ -70,7 +70,7 @@ pqtransport (SIGMA, UKS/reflection/downgrade); pqgateway (downgrade/replay/lying
 (transcript-bound attestation + client countersig); pqkt (CONIKS authority chaining, monotonic seq, post-revoke-rebind
 block, equivocation/rollback); pqpki (hybrid strip-resistance, path_len, root-pinning); pqratchet-he (metadata privacy);
 pqtsa (legacy re-stamp + multi-TSA threshold); pqef/pqcbom-report (typed allowlist, grade-recompute anti-forgery).
-Negative coverage: `fuzz-robustness.mjs` — 0 fail-open observed across 1,856 adversarial calls (32 verifiers × 58 input classes); verdict verifiers returned no throw across the corpus. Plus `tamper-binding.mjs` (signature coverage, 13 verifiers), `domain-separation.mjs` (0 bare / 23 distinct contexts), `canon-determinism.mjs` (canonicalization consistency).
+Negative coverage: `fuzz-robustness.mjs` — 0 fail-open observed across 1,856 adversarial calls (32 verifiers × 58 input classes); verdict verifiers returned no throw across the corpus. Plus `tamper-binding.mjs` (signature coverage, 15 verifiers), `domain-separation.mjs` (0 bare / 25 distinct contexts), `canon-determinism.mjs` (canonicalization consistency).
 
 ## 7. Known limits / OUT of audit scope to fix (documented, not defects to "find")
 - NOT constant-time; timing/side-channel hardening is a primary audit deliverable.
@@ -79,6 +79,6 @@ Negative coverage: `fuzz-robustness.mjs` — 0 fail-open observed across 1,856 a
   witness is owner-operational). pqtsa is not an accredited eIDAS QTSA. polarseek/pqvault custody keys are long-lived by design.
 
 ## 8. Test inventory
-`node test-all.mjs` runs every module self-test + the unified surface smoke test (~300 self-tests across 28 files),
+`node test-all.mjs` runs every module self-test + the four assurance harnesses (run `node test-all.mjs` → ALL MODULES PASS),
 plus `node kat-conformance.mjs` (deterministic KATs), `node vectors-crosscheck.mjs` (42k+ differential), and the
-fuzz sweep. All green at 0.8.0-draft.
+fuzz sweep. All green at 0.16.0-draft.

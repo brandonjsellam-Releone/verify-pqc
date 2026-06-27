@@ -15,7 +15,7 @@ reproduce every test, vector, and root from a clean checkout. Reference code, **
 git checkout <commit>           # pin the exact tree
 cd trelyan-interop/packages/verify-pqc
 npm ci                          # install from the lockfile (NOT `npm i`) for a reproducible tree
-node test-all.mjs               # all module self-tests + unified surface (~330 assertions)
+node test-all.mjs               # every module self-test + the four assurance harnesses (run node test-all.mjs → ALL MODULES PASS)
 node kat-conformance.mjs        # deterministic NIST-style KATs (seed-pinned)
 node spine-vectors.mjs          # pinned transparency-spine vectors (roots + proof bytes)
 node vectors-crosscheck.mjs     # 42,574-case differential vs an independent RFC-6962 reference

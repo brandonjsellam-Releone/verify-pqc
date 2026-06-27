@@ -65,7 +65,7 @@ return sn == 0 and fr == root1 and sr == root2
 ```
 
 ## 5. Signed Tree Head (STH)
-`STH = { tree_size, root_hex, ts }`, signature = `ML-DSA-87.sign( canon({tree_size, root: root_hex, ts}), sk, ctx=sth-v1 )`.
+`STH = { tree_size, root_hex, ts }`, signature = `ML-DSA-87.sign( JSON.stringify({tree_size, root: root_hex, ts}), sk, ctx=sth-v1 )` (fixed key order tree_size,root,ts — NOT canon's sorted order; see CANONICALIZATION_SPEC §5).
 `verifySTH` recomputes `canon` and verifies under the **pinned** log public key. The root in the STH MUST equal `MTH`
 of the first `tree_size` leaves (conformance vector confirms `sth_root == root@7`).
 

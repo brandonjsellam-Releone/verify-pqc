@@ -30,7 +30,7 @@ current contact form).
 > code is ~5,500 LOC; it is research-grade and **unaudited**, and I'd like to get it independently reviewed before
 > recommending production use.
 >
-> Is this a fit for an OSTIF-brokered, funder-backed audit? I have a turn-key reviewer package ready (formal spec,
+> Is this a fit for an OSTIF-brokered, funder-backed audit? I have a reviewer package ready (formal spec,
 > threat model, reproducibility/SBOM, a differential validator against an independent RFC-6962 re-implementation, and
 > negative-test harnesses). Repo: [public URL]. I'd welcome guidance on whether to pursue this via OSTIF and how to
 > apply. Thank you — [name].
