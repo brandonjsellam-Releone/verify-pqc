@@ -113,7 +113,9 @@ function verifyConsistency(m, n, root1, root2, proof) {
 }
 
 /* ---------- artifact attestation ---------- */
-const attCore = (a) => utf8ToBytes(JSON.stringify({ artifact_sha256: a.artifact_sha256, meta: a.meta, suite: a.suite, ts: a.ts }));
+// canonical (sorted-key) — matches entryLeafHash/STH/pqseal so a second conformant verifier
+// re-serializing `meta` in a different key order recomputes identical signed bytes (cross-impl determinism).
+const attCore = (a) => utf8ToBytes(canon({ artifact_sha256: a.artifact_sha256, meta: a.meta, suite: a.suite, ts: a.ts }));
 
 export function signArtifact(artifactBytes, signerSecret, meta = {}, opts = {}) {
   const att = { artifact_sha256: bytesToHex(sha256(artifactBytes)), meta, suite: 'ML-DSA-87', ts: opts.ts ?? Date.now() };

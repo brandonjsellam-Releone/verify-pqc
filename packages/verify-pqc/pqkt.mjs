@@ -83,22 +83,24 @@ export function resolveIssuerKey(events, issuer_id, opts = {}) {
   events.forEach((e, index) => {
     if (!e || e.kind !== 'pqkt-key-event' || e.issuer_id !== issuer_id) return;
     if (e.ts != null && e.ts > atTime) return;
-    const core = coreOf(e);
     const rej = (reason) => rejected.push({ index, seq: e.seq, reason });
-    if (e.op === 'bind') {
-      if (state === 'unseen') {
-        const pinOk = opts.expectedBootstrap ? keyHash(e.pubkey_hex) === opts.expectedBootstrap : !!opts.allowTofu;
-        if (e.prev_key_hex === null && e.seq === 0 && sigOk(core, e.auth_sig, e.pubkey_hex, AUTH_CTX) && pinOk) { cur = { pubkey_hex: e.pubkey_hex, pubkey_hash: keyHash(e.pubkey_hex), alg: e.alg, seq: 0, index, valid_from: e.valid_from, bootstrap: true }; state = 'active'; }
-        else rej(e.prev_key_hex !== null || e.seq !== 0 ? 'bad bootstrap shape (prev/seq)' : !pinOk ? 'bootstrap not pinned + TOFU not allowed' : 'bootstrap signature invalid');
-      } else if (state === 'active') { // rotation: authorized by CURRENT key + possession by NEW key + exact next seq
-        if (e.prev_key_hex === cur.pubkey_hex && e.seq === cur.seq + 1 && sigOk(core, e.auth_sig, cur.pubkey_hex, AUTH_CTX) && e.possession_sig && sigOk(core, e.possession_sig, e.pubkey_hex, POSS_CTX))
-          cur = { pubkey_hex: e.pubkey_hex, pubkey_hash: keyHash(e.pubkey_hex), alg: e.alg, seq: e.seq, index, valid_from: e.valid_from, bootstrap: false };
-        else rej('unauthorized/stale rotation (prev/seq/auth/possession)');
-      } else rej('bind after REVOKED (post-revoke rebind blocked; re-enrollment is out-of-band)');
-    } else if (e.op === 'revoke') {
-      if (state === 'active' && e.pubkey_hex === cur.pubkey_hex && e.seq === cur.seq + 1 && sigOk(core, e.auth_sig, cur.pubkey_hex, AUTH_CTX)) { cur = null; state = 'revoked'; }
-      else rej('unauthorized/stale revoke');
-    }
+    try { // TOTAL: a malformed leaf (e.g. non-hex pubkey_hex) is IGNORED per the contract, never thrown
+      const core = coreOf(e);
+      if (e.op === 'bind') {
+        if (state === 'unseen') {
+          const pinOk = opts.expectedBootstrap ? keyHash(e.pubkey_hex) === opts.expectedBootstrap : !!opts.allowTofu;
+          if (e.prev_key_hex === null && e.seq === 0 && sigOk(core, e.auth_sig, e.pubkey_hex, AUTH_CTX) && pinOk) { cur = { pubkey_hex: e.pubkey_hex, pubkey_hash: keyHash(e.pubkey_hex), alg: e.alg, seq: 0, index, valid_from: e.valid_from, bootstrap: true }; state = 'active'; }
+          else rej(e.prev_key_hex !== null || e.seq !== 0 ? 'bad bootstrap shape (prev/seq)' : !pinOk ? 'bootstrap not pinned + TOFU not allowed' : 'bootstrap signature invalid');
+        } else if (state === 'active') { // rotation: authorized by CURRENT key + possession by NEW key + exact next seq
+          if (e.prev_key_hex === cur.pubkey_hex && e.seq === cur.seq + 1 && sigOk(core, e.auth_sig, cur.pubkey_hex, AUTH_CTX) && e.possession_sig && sigOk(core, e.possession_sig, e.pubkey_hex, POSS_CTX))
+            cur = { pubkey_hex: e.pubkey_hex, pubkey_hash: keyHash(e.pubkey_hex), alg: e.alg, seq: e.seq, index, valid_from: e.valid_from, bootstrap: false };
+          else rej('unauthorized/stale rotation (prev/seq/auth/possession)');
+        } else rej('bind after REVOKED (post-revoke rebind blocked; re-enrollment is out-of-band)');
+      } else if (e.op === 'revoke') {
+        if (state === 'active' && e.pubkey_hex === cur.pubkey_hex && e.seq === cur.seq + 1 && sigOk(core, e.auth_sig, cur.pubkey_hex, AUTH_CTX)) { cur = null; state = 'revoked'; }
+        else rej('unauthorized/stale revoke');
+      }
+    } catch { rej('malformed event'); }
   });
   if (cur) { cur.state = state; cur.rejected = rejected; }
   return cur;
@@ -106,12 +108,14 @@ export function resolveIssuerKey(events, issuer_id, opts = {}) {
 
 /* ---------- the MONITOR ---------- */
 export function monitorUpdate(pinnedSTH, newSTH, consistencyProof, logPub) {
-  if (!verifySTH(newSTH, logPub)) return { accept: false, alert: 'new STH signature invalid / not the pinned log key' };
-  if (newSTH.tree_size < pinnedSTH.tree_size) return { accept: false, alert: 'new STH is SMALLER than the pinned one (truncation / rollback)' };
-  if (newSTH.tree_size === pinnedSTH.tree_size) return newSTH.root_hex === pinnedSTH.root_hex ? { accept: true, sameView: true } : { accept: false, alert: 'EQUIVOCATION: same tree_size, different root (split view)' };
-  const proof = (consistencyProof || []).map((h) => (typeof h === 'string' ? hexToBytes(h) : h));
-  const consistent = verifyConsistency(pinnedSTH.tree_size, newSTH.tree_size, hexToBytes(pinnedSTH.root_hex), hexToBytes(newSTH.root_hex), proof);
-  return consistent ? { accept: true, advanced_to: newSTH.tree_size } : { accept: false, alert: 'NON-APPEND-ONLY: not a consistent extension (log rewrote history)' };
+  try { // TOTAL: fail-closed (accept:false) on any malformed pinned anchor / proof element, never throw
+    if (!verifySTH(newSTH, logPub)) return { accept: false, alert: 'new STH signature invalid / not the pinned log key' };
+    if (newSTH.tree_size < pinnedSTH.tree_size) return { accept: false, alert: 'new STH is SMALLER than the pinned one (truncation / rollback)' };
+    if (newSTH.tree_size === pinnedSTH.tree_size) return newSTH.root_hex === pinnedSTH.root_hex ? { accept: true, sameView: true } : { accept: false, alert: 'EQUIVOCATION: same tree_size, different root (split view)' };
+    const proof = (consistencyProof || []).map((h) => (typeof h === 'string' ? hexToBytes(h) : h));
+    const consistent = verifyConsistency(pinnedSTH.tree_size, newSTH.tree_size, hexToBytes(pinnedSTH.root_hex), hexToBytes(newSTH.root_hex), proof);
+    return consistent ? { accept: true, advanced_to: newSTH.tree_size } : { accept: false, alert: 'NON-APPEND-ONLY: not a consistent extension (log rewrote history)' };
+  } catch { return { accept: false, alert: 'malformed STH / consistency proof' }; }
 }
 export function detectEquivocation(sthA, sthB, logPub) {
   if (!verifySTH(sthA, logPub) || !verifySTH(sthB, logPub)) return { equivocation: false, reason: 'one or both STHs not validly signed by the log key' };
