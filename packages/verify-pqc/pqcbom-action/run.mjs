@@ -1,7 +1,7 @@
 /*! TRELYAN Quantum-Safe Scorecard — GitHub Action runner. Scans the repo, emits a CycloneDX CBOM + grade,
  *  writes the shields badge endpoint, sets outputs/step-summary, and fails the build per policy. */
-import { scanDirectory, toCycloneDX, toSARIF } from '../pqcbom.mjs';
-import { scorecardBadge, policyGate } from '../pqcbom-server.mjs';
+import { scanDirectory, toCycloneDX, toSARIF } from './pqcbom.mjs';      // vendored (zero-dep) — see vendor.sh
+import { scorecardBadge, policyGate } from './action-lib.mjs';           // zero-dep subset of pqcbom-server (no @noble)
 import { writeFileSync, appendFileSync } from 'fs';
 
 const path = process.env.INPUT_PATH || '.';

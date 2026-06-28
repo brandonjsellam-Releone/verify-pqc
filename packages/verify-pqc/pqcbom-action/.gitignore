@@ -1,0 +1,4 @@
+# runtime outputs the action writes into the consumer workspace — never commit
+cbom.cdx.json
+pqcbom.sarif
+quantum-safe-badge.json
