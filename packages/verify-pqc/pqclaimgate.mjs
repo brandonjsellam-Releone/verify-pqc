@@ -116,7 +116,8 @@ export function attestClaimGate(env, order, opts = {}) {
 }
 // verify with a PINNED order key: signature valid AND the envelope's claims still match the signed manifest.
 export function verifyClaimGate(env, trustedOrderPub) {
-  const a = env.attestation;
+ try { // TOTAL (3rd sweep): a malformed envelope fails CLOSED, never throws
+  const a = env && env.attestation;
   if (!a) return { verified: false, reason: 'no attestation' };
   let sigOk = false;
   try { sigOk = a.signer_pub_hex.toLowerCase() === bytesToHex(trustedOrderPub).toLowerCase() && ml_dsa87.verify(hexToBytes(a.sig_hex), utf8ToBytes(canonicalize(a.manifest)), trustedOrderPub, { context: CTX }); } catch { sigOk = false; }
@@ -126,6 +127,7 @@ export function verifyClaimGate(env, trustedOrderPub) {
   const claimsMatch = canonicalize(manifestOf(env).claims) === canonicalize(a.manifest.claims);
   const verified = sigOk && manifestMatch;
   return { verified, sigOk, manifestMatch, claimsMatch, reason: verified ? 'attestation valid; the FULL manifest (query/mode/policy/coverage/claims/ts) binds the envelope' : !sigOk ? 'signature invalid / not the pinned order key' : 'envelope does not match the signed manifest (tampered query/coverage/policy/mode/claims/ts)' };
+ } catch { return { verified: false, sigOk: false, manifestMatch: false, claimsMatch: false, reason: 'malformed envelope' }; }
 }
 
 /* ---------- reference (stub) verifiers — pluggable; real ones wrap RAG/NLI/code-exec/pqef ---------- */

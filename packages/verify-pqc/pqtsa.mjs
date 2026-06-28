@@ -104,8 +104,9 @@ export function verifyRestamp(rt, trustedTsaPub, opts = {}) {
 
 /* ---------- anchor a TST in the pqsign transparency log (third-party verifiable) ---------- */
 export function anchor(log, tst) { const entry = { kind: 'pqtsa-tst', tsa_pub: tst.tsa_pub, sig_sha256: sha(tst.sig) }; return { index: log.append(entry), entry }; }
-export function verifyAnchor({ entry, inclusion, sth }, logPub) {
- try { // TOTAL (3rd sweep): a malformed anchor proof fails CLOSED, never throws (fuzz-robustness)
+export function verifyAnchor(anchor, logPub) {
+ try { // TOTAL (3rd sweep): a malformed anchor proof fails CLOSED, never throws (destructure INSIDE so null/garbage can't throw at the param)
+  const { entry, inclusion, sth } = anchor || {};
   if (!entry || typeof entry !== 'object' || !inclusion || typeof inclusion !== 'object' || !sth || typeof sth !== 'object') return { verified: false, sthOk: false, incOk: false, leafBound: false, treeSizeOk: false };
   const sthOk = verifySTH(sth, logPub);
   const expectedLeaf = entryLeafHash(entry);

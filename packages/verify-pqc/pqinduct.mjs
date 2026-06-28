@@ -170,9 +170,11 @@ export function solverProve({ cycleId, recovered, solverId, solverKey, opts = {}
   return { challenge, pk_hex: bytesToHex(solverKey.publicKey), sig_hex: bytesToHex(sig) };
 }
 // the Order verifies a submission against the cycle's TRUE nonce + TRUE cipher key (known only to the Order until solved)
-export function verifySubmission({ submission, cycleId, trueNonce, trueCipherKeyHex }) {
- try { // TOTAL (fail-closed): a malformed/non-hex submission must DENY cleanly, never throw (DoS)
-  const c = submission.challenge;
+export function verifySubmission(args) {
+ try { // TOTAL (fail-closed): destructure INSIDE the try so a null/Proxy arg can't throw at the parameter (DoS)
+  const { submission, cycleId, trueNonce, trueCipherKeyHex } = args || {};
+  const c = (submission || {}).challenge;
+  if (!c || typeof c !== 'object') return { valid: false, cycleOk: false, nonceOk: false, pkBound: false, solutionOk: false, sigOk: false, reason: 'malformed submission' };
   const cycleOk = c.cycle === cycleId;
   const nonceOk = c.nonce === trueNonce;            // proves the puzzle was solved (public once shared)
   const pkBound = c.pk_sha256 === sha(hexToBytes(submission.pk_hex)); // challenge commits the solver's own key
