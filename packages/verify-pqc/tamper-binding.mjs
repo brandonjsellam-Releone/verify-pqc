@@ -29,6 +29,7 @@ import * as pqseal from './pqseal.mjs';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import * as pqcompliance from './pqcompliance.mjs';
 import * as pqkt from './pqkt.mjs';
+import * as pqclaimgate from './pqclaimgate.mjs';
 
 const seed = (n) => new Uint8Array(32).fill(n);
 // flip one leaf to a DIFFERENT same-typed value (hex-safe for hex strings)
@@ -187,6 +188,31 @@ function selfTest() {
   const ktLogKey = ml_dsa87.keygen(seed(132));
   const ktSth = ktLog.signedTreeHead(ktLogKey.secretKey, { ts: 2000 });
   runScenario({ label: 'pqkt.verifyKeyEventInclusion', obj: { event: ktLog.entries[ktIdx], inclusion: ktLog.inclusion(ktIdx), sth: ktSth }, verify: (o) => pqkt.verifyKeyEventInclusion(o, ktLogKey.publicKey).verified === true }, ok);
+
+  // 14) pqclaimgate attested answer (the zero-unflagged-hallucination envelope) — EVERY displayed field must be bound:
+  //     query/mode/policy/coverage, each claim's id/claim/status/reason/confidence + evidence/consensus/verifiers (hashed),
+  //     bucket membership (verified/abstained/rejected ids), sources, moa, the rendered answer, status, AND the
+  //     honesty_note caveat. The 7th code-security sweep CAUGHT honesty_note unsigned here (a MITM could strip/invert
+  //     "verified != ground truth, not a certification" on a PQ-'verified' answer) — bound now via honesty_note_sha256,
+  //     and this scenario is the regression that mechanically proves NO displayed field escapes the signed manifest.
+  //     attestation.sig_hex is the signature itself; signer_pub_hex is matched against the external pin (tamper -> bound).
+  const cgOrder = ml_dsa87.keygen(seed(141));
+  const cgEnv = {
+    query: 'What are the PQC parameter sizes?', mode: 'gated', policy: 'strict', coverage: 0.5,
+    emitted: { verified_claims: [{ id: 'A', claim: 'ML-KEM-1024 ciphertext is 1568 bytes.', status: 'verified', confidence: 0.85,
+        evidence_refs: [{ ref: 'src:fips203', selector: '1568', grounded: true }],
+        consensus: { strength: 0.8, total_considered: 3, dissent: { count: 0 } },
+        verifiers: [{ type: 'pqef', verdict: 'PASS', score: 0.85 }] }],
+      rendered: 'ML-KEM-1024 ciphertext is 1568 bytes.', status: 'partial' },
+    abstained: [{ id: 'B', claim: 'The key was rotated last Tuesday.', status: 'abstained', reason_code: 'NO_EVIDENCE', confidence: 0 }],
+    rejected: [{ id: 'C', claim: 'ML-DSA private keys are 12 bytes.', status: 'rejected', reason_code: 'VERIFIER_FAIL', confidence: 0 }],
+    sources: [{ ref: 'src:fips203', grounded: true }], moa: { consensus: 'agree' },
+    honesty_note: 'verified = passed policy gates, NOT ground truth; this is not a certification.',
+  };
+  pqclaimgate.attestClaimGate(cgEnv, cgOrder, { ts: 1000 });
+  runScenario({ label: 'pqclaimgate.verifyClaimGate (attested answer)', obj: cgEnv, verify: (o) => pqclaimgate.verifyClaimGate(o, cgOrder.publicKey).verified, skipPaths: ['attestation.sig_hex'] }, ok);
+  const cgOther = ml_dsa87.keygen(seed(142));
+  ok(!pqclaimgate.verifyClaimGate(cgEnv, cgOther.publicKey).verified, 'pqclaimgate.verifyClaimGate: swapped order key -> FALSE (key binding)');
 
   console.log('tamper-binding: ' + pass + ' pass, ' + fail + ' fail');
   if (typeof process !== 'undefined' && process.exit) process.exit(fail ? 1 : 0);

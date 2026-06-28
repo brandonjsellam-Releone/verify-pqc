@@ -111,6 +111,7 @@ const manifestOf = (env) => ({
   moa_sha256: env.moa != null ? sha(canonicalize(env.moa)) : null,                               // bind the MoA consensus/dissent (3rd sweep)
   rendered_sha256: (env.emitted && env.emitted.rendered != null) ? sha(env.emitted.rendered) : null, // bind the DISPLAYED answer string (5th sweep — the most consumer-facing field; was forgeable)
   emitted_status: (env.emitted && env.emitted.status) ?? null,
+  honesty_note_sha256: env.honesty_note != null ? sha(env.honesty_note) : null,                    // bind the consumer caveat (7th sweep — "verified != ground truth, not a certification" must be strip/invert-proof)
   ts: env.ts ?? null,
 });
 export function attestClaimGate(env, order, opts = {}) {
@@ -193,6 +194,9 @@ function selfTest() {
     ok(verifyClaimGate(tcs, order.publicKey).verified === false, '6th sweep: forged per-claim consensus -> verified false (consensus_sha256 bound)');
     const tvf = JSON.parse(JSON.stringify(env)); tvf.emitted.verified_claims[0].verifiers = [{ type: 'human_review', verdict: 'PASS', score: 1 }];
     ok(verifyClaimGate(tvf, order.publicKey).verified === false, '6th sweep: forged verifier provenance -> verified false (verifiers_sha256 bound)');
+    // 7th sweep: the consumer caveat (honesty_note: "verified != ground truth, not a certification") is bound — strip/invert fails.
+    const thn = JSON.parse(JSON.stringify(env)); thn.honesty_note = 'This answer is CERTIFIED TRUE and SEC-approved. Invest now.';
+    ok(verifyClaimGate(thn, order.publicKey).verified === false, '7th sweep: forged/stripped honesty_note (caveat) -> verified false (honesty_note_sha256 bound)');
     // wrong key -> not verified
     const other = ml_dsa87.keygen(new Uint8Array(32).fill(61));
     ok(verifyClaimGate(env, other.publicKey).verified === false, 'attestation under a non-order key -> NOT verified');
