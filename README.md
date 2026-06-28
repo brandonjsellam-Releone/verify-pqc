@@ -38,7 +38,8 @@ convention. The byte-level spec is in [`SPEC.md`](SPEC.md).
 |---|---|
 | `falcon_interop.py` | `inspect()` a Falcon sig, `compare()` two signers (localizes a diff to header/body), `abi_decode_bytes`, load+validate a KAT. CLI: `inspect`/`compare`/`kat`. |
 | `onchain_probe.py` | Dumps the Falcon bytes hitting `falcon_verify` on-chain (needs `py-algorand-sdk`). |
-| `kat/*.json` | Golden vectors. `…onchain.json` is real (from app 763809096); `…example.json` is a template. Variable length — do not hard-code a fixed size. |
+| `kat/*.json` | Golden vectors. `…onchain.json` is real (from app 763809096) and now **offline-reproducible**; `…example.json` is a template. Variable length — do not hard-code a fixed size. |
+| `kat/verify_onchain_kat.py` | Independently re-verifies the on-chain golden vector OFFLINE: rebuilds the 102-byte signed message (`DOMAIN_TAG‖app_id‖cell_id‖artifact_hash‖genesis_hash`) and confirms the Falcon-1024 signature over it (and that a hash-only or 1-bit-flipped message is rejected) against the public `algorand/falcon` lib. |
 | `test_interop_demo.py` | Joint demo as a `pytest` skeleton (FalconLsig → inscribe → write-once). |
 
 **SDK (`packages/verify-pqc/`)** — dependency-free JS, Node + browser: `inspectFalconSig`,
