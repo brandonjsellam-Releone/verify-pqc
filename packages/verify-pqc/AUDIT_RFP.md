@@ -57,9 +57,8 @@ against the pinned vectors, and a written opinion on which modules are fit to dr
 
 ## 6. Candidate auditors (PQ-capable; owner selects — not an endorsement)
 NCC Group, Trail of Bits, Kudelski Security, SandboxAQ, PQShield, Cure53, Quarkslab, or an academic applied-crypto
-group. Prefer a firm with both **PQC** and **side-channel** practice. **→ See `AUDIT_ENGAGEMENT_KIT.md`** for the
-firm-selection matrix (fit / JS-TS / side-channel), a primary recommendation (Trail of Bits or NCC Group), a
-ready-to-send cover email, typical engagement shape, and the owner readiness checklist.
+group. Prefer a firm with both **PQC** and **side-channel** practice. The maintainer keeps a private firm-selection
+matrix (fit / JS-TS / side-channel), funded-audit outreach sequence, and readiness checklist — request it directly.
 
 ## 7. Out of scope (separate tracks)
 Deployment/operations (owner); the multi-witness gossip network (operational, not code); eIDAS QTSP accreditation;

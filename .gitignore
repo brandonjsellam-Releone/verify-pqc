@@ -20,3 +20,7 @@ packages/verify-pqc/examples/demo/demo-out/
 _probe*.mjs
 _vtest*.mjs
 packages/verify-pqc/_*.mjs
+
+# Internal audit-strategy / budget docs — keep LOCAL, never publish (standing constraint: business docs stay out of the public repo)
+packages/verify-pqc/AUDIT_OUTREACH.md
+packages/verify-pqc/AUDIT_ENGAGEMENT_KIT.md
