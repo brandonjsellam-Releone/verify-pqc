@@ -60,6 +60,11 @@ export function verifyOffer(offer, trustedPeerPub) {
 export function negotiate({ localSuites, remoteOffer, policy = {}, trustedPeerPub }) {
   if (!verifyOffer(remoteOffer, trustedPeerPub)) return { ok: false, downgrade_suspected: true, reason: 'capability offer signature invalid — possible downgrade/MITM (pin the peer key)' };
   if (policy.expectedChallenge && remoteOffer.challenge !== policy.expectedChallenge) return { ok: false, replay_suspected: true, reason: 'offer challenge mismatch — replayed / cross-session offer' };
+  // FRESHNESS (code-security review): without expectedChallenge a signed offer replays across sessions. When the caller
+  // wants freshness (policy.now + policy.maxAgeMs) and no challenge pinned the offer, require a recent offer ts.
+  if (!policy.expectedChallenge && policy.now != null && policy.maxAgeMs != null
+      && !(typeof remoteOffer.ts === 'number' && remoteOffer.ts >= policy.now - policy.maxAgeMs && remoteOffer.ts <= policy.now))
+    return { ok: false, replay_suspected: true, reason: 'offer not fresh (no challenge pinned + stale/absent ts) — replay suspected' };
   const requirePQ = policy.requirePQ ?? true;
   const mutual = SUITES.filter((s) => localSuites.includes(s.id) && remoteOffer.suites.includes(s.id)); // priority order
   const best = mutual[0];
@@ -94,15 +99,19 @@ export function verifySession(att, trustedGatewayPub, opts = {}) {
   let sigOk = false;
   try { sigOk = ml_dsa87.verify(hexToBytes(sig), utf8ToBytes(canon(core)), trustedGatewayPub ? trustedGatewayPub : hexToBytes(gateway_pub), { context: ATT_CTX }); } catch { sigOk = false; }
   const transcriptOk = !opts.expectedTranscript || core.transcript_sha256 === opts.expectedTranscript;
-  return { verified: pinned && sigOk && transcriptOk, pinned, sigOk, transcriptOk, claims: core };
+  // FRESHNESS (code-security review): a static attestation replays forever unless the verifier bounds its age. When
+  // opts.now + opts.maxAgeMs are supplied, require att.ts present + within [now-maxAgeMs, now]. Absent them, no age gate.
+  const freshOk = (opts.now == null || opts.maxAgeMs == null) ? true
+    : (typeof core.ts === 'number' && core.ts >= opts.now - opts.maxAgeMs && core.ts <= opts.now);
+  return { verified: pinned && sigOk && transcriptOk && freshOk, pinned, sigOk, transcriptOk, freshOk, claims: core };
  } catch { return { verified: false, pinned: false, sigOk: false, transcriptOk: false, claims: null }; }
 }
 // consumer-side gate: only accept sessions PROVEN PQ. requireTranscriptBinding rejects bare signed-claims;
 // policy.expectedTranscript binds to the verifier's own transcript (the real anti-lying-gateway control).
 export function acceptSession(att, trustedGatewayPub, policy = {}) {
  try { // TOTAL (fuzz): throwing getter/Proxy/BigInt field fails CLOSED, never DoS
-  const v = verifySession(att, trustedGatewayPub, { expectedTranscript: policy.expectedTranscript });
-  if (!v.verified) return { accept: false, reason: v.transcriptOk === false ? 'attestation not bound to the verifier transcript (possible lying gateway)' : 'attestation invalid / not from the pinned gateway' };
+  const v = verifySession(att, trustedGatewayPub, { expectedTranscript: policy.expectedTranscript, now: policy.now, maxAgeMs: policy.maxAgeMs });
+  if (!v.verified) return { accept: false, reason: v.freshOk === false ? 'attestation STALE (outside the freshness window) — replay suspected' : v.transcriptOk === false ? 'attestation not bound to the verifier transcript (possible lying gateway)' : 'attestation invalid / not from the pinned gateway' };
   if ((policy.requireTranscriptBinding ?? false) && !att.transcript_sha256) return { accept: false, reason: 'no transcript binding (signed-claim only, not proof)' };
   if ((policy.requirePQ ?? true) && !att.pq) return { accept: false, reason: 'session was not post-quantum (classical/fallback)' };
   if (policy.noFallback && att.fallback) return { accept: false, reason: 'session used a downgrade/fallback' };

@@ -160,10 +160,14 @@ export function verifyEvidencePack(pack, trustedSignerPub, opts = {}) {
     const meetsHybridReq = !opts.requireHybrid || (hybrid && slhValid); // caller can demand dual-signing
     // authenticity (not just self-consistency): a caller trust anchor was supplied AND matched (both legs, if hybrid)
     const trustAnchored = !!trustedSignerPub && pinned && sigOk && (!hybrid || (!!opts.trustedSlhPub && slhValid));
+    // SLH leg trust, surfaced independently (code-security review): requireHybrid ALONE proves a VALID 2nd leg is
+    // present, NOT that it is pinned — without trustedSlhPub it's verified under the pack's OWN embedded SLH key.
+    // High-assurance callers should combine requireHybrid + trustedSlhPub + requirePinned (which forces this true).
+    const slhTrustAnchored = !!opts.trustedSlhPub && hybrid && slhConsistent && slhValid;
     const selfConsistent = summaryConsistent && gradeConsistent && pinned && sigOk && hybridOk && meetsHybridReq;
     const verified = !!(selfConsistent && (!opts.requirePinned || trustAnchored));
-    return { verified, trustAnchored, summaryConsistent, gradeConsistent, pinned, sigOk, hybrid, slhValid, slhConsistent };
-  } catch { return { verified: false, trustAnchored: false, summaryConsistent: false, gradeConsistent: false, pinned: false, sigOk: false, hybrid: false, slhValid: false, slhConsistent: false }; }
+    return { verified, trustAnchored, slhTrustAnchored, summaryConsistent, gradeConsistent, pinned, sigOk, hybrid, slhValid, slhConsistent };
+  } catch { return { verified: false, trustAnchored: false, slhTrustAnchored: false, summaryConsistent: false, gradeConsistent: false, pinned: false, sigOk: false, hybrid: false, slhValid: false, slhConsistent: false }; }
 }
 
 /* ---------- self-test: node pqcbom-report.mjs ---------- */

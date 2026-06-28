@@ -30,11 +30,14 @@ const KEK_LABEL = utf8ToBytes('TRELYAN-TRANSPORT-v1');
 
 export function generateIdentity(seed) { return ml_dsa87.keygen(seed || randomBytes(32)); }
 
-// transcript binds BOTH identities + all ephemeral contributions + the suite (downgrade + UKS defence)
+// transcript binds BOTH identities + all ephemeral contributions + the suite (downgrade + UKS defence).
+// LENGTH-FRAMED (uint32-BE length prefix per field, code-security review) so the concatenation is INJECTIVE — a
+// shifted field boundary can never yield the same transcript hash, even for a future variable-length field or suite.
 function transcriptHash(t) {
+  const lp = (b) => { const n = new Uint8Array(4); new DataView(n.buffer).setUint32(0, b.length, false); return concatBytes(n, b); };
   return sha3_256(concatBytes(
-    utf8ToBytes(t.suite_id), t.i_identity_pub, t.i_random, t.i_eph_x, t.i_eph_mlkem,
-    t.r_identity_pub, t.r_random, t.r_eph_x, t.mlkem_ct));
+    lp(utf8ToBytes(t.suite_id)), lp(t.i_identity_pub), lp(t.i_random), lp(t.i_eph_x), lp(t.i_eph_mlkem),
+    lp(t.r_identity_pub), lp(t.r_random), lp(t.r_eph_x), lp(t.mlkem_ct)));
 }
 function deriveSession(ss_x, ss_m, th) {
   const kek = hkdf(sha256, concatBytes(ss_x, ss_m), th, KEK_LABEL, 32);
