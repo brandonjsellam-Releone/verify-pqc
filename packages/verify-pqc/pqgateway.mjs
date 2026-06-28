@@ -57,7 +57,7 @@ export function verifyOffer(offer, trustedPeerPub) {
 }
 
 /* ---------- negotiation with downgrade protection + policy ---------- */
-export function negotiate({ localSuites, remoteOffer, policy = {}, trustedPeerPub }) {
+function _negotiate({ localSuites, remoteOffer, policy = {}, trustedPeerPub }) {
   if (!verifyOffer(remoteOffer, trustedPeerPub)) return { ok: false, downgrade_suspected: true, reason: 'capability offer signature invalid — possible downgrade/MITM (pin the peer key)' };
   if (policy.expectedChallenge && remoteOffer.challenge !== policy.expectedChallenge) return { ok: false, replay_suspected: true, reason: 'offer challenge mismatch — replayed / cross-session offer' };
   // FRESHNESS (code-security review): without expectedChallenge a signed offer replays across sessions. When the caller
@@ -78,6 +78,13 @@ export function negotiate({ localSuites, remoteOffer, policy = {}, trustedPeerPu
     return { ok: true, chosen: best.id, pq: best.pq, fallback: true, downgrade_logged: true };
   }
   return { ok: true, chosen: best.id, pq: best.pq, fallback: false };
+}
+// trust_anchored surfaces whether downgrade protection was REAL (peer key PINNED) vs trust-on-first-use against the
+// embedded offer key — so a caller never mistakes a TOFU "ok" for a pinned, downgrade-protected negotiation. (Without a
+// pin a MITM can present its OWN self-signed offer and it "verifies"; the result then reflects only TOFU, not authenticity.)
+export function negotiate(args) {
+  const r = _negotiate(args);
+  return { ...r, trust_anchored: !!(args && args.trustedPeerPub) };
 }
 
 /* ---------- signed session attestation (the operational proof) ---------- */
@@ -118,6 +125,15 @@ export function acceptSession(att, trustedGatewayPub, policy = {}) {
   if ((policy.requireTranscriptBinding ?? false) && !att.transcript_sha256) return { accept: false, reason: 'no transcript binding (signed-claim only, not proof)' };
   if ((policy.requirePQ ?? true) && !att.pq) return { accept: false, reason: 'session was not post-quantum (classical/fallback)' };
   if (policy.noFallback && att.fallback) return { accept: false, reason: 'session used a downgrade/fallback' };
+  // SUITE-LEVEL floor (not just "is it PQ"): downgrade_prevented=true only means "strongest MUTUAL suite", which can
+  // still be a level-3 PQ suite. A verifier that needs level-5 must say so — fail CLOSED on an unknown/below-floor suite.
+  if (policy.minLevel != null) { const lvl = (byId(att.suite) || {}).level; if (typeof lvl !== 'number' || lvl < policy.minLevel) return { accept: false, reason: 'session suite level ' + (lvl ?? '?') + ' < required minLevel ' + policy.minLevel + ' (suite=' + att.suite + ')' }; }
+  if (policy.expectedSuite && att.suite !== policy.expectedSuite) return { accept: false, reason: 'session suite ' + att.suite + ' != required ' + policy.expectedSuite };
+  // OFFER BINDING (anti-splice): offer_sha256 is signed INTO the attestation, but it is only PROOF if the verifier
+  // confirms it against the specific capability offer it saw — same discipline as expectedTranscript (presence != proof).
+  if ((policy.requireOfferBinding ?? false) && (typeof policy.expectedOffer !== 'string' || !policy.expectedOffer)) return { accept: false, reason: 'offer binding required but no expectedOffer supplied' };
+  if ((policy.requireOfferBinding ?? false) && !att.offer_sha256) return { accept: false, reason: 'no offer binding (attestation not tied to a capability offer)' };
+  if (policy.expectedOffer && att.offer_sha256 !== policy.expectedOffer) return { accept: false, reason: 'attestation offer_sha256 != verifier expectedOffer (possible spliced/substituted capability offer)' };
   return { accept: true };
  } catch { return { accept: false, reason: 'malformed attestation' }; }
 }
@@ -177,6 +193,28 @@ function selfTest() {
   // 10. transcript binding defeats a LYING gateway (DeepSeek fix): accept only if bound to the verifier's transcript
   ok(acceptSession(att, gw.publicKey, { requirePQ: true, requireTranscriptBinding: true, expectedTranscript: TRANSCRIPT }).accept === true, 'attestation bound to the real transcript -> accepted (proof, not just a claim)');
   ok(acceptSession(att, gw.publicKey, { requirePQ: true, expectedTranscript: bytesToHex(sha256(utf8ToBytes('a-different-classical-handshake'))) }).accept === false, 'attestation NOT matching the verifier transcript -> rejected (lying-gateway defense)');
+
+  // 11. negotiate surfaces trust_anchored: PINNED vs trust-on-first-use (false-assurance guard)
+  ok(n1.trust_anchored === true, 'negotiation with a pinned peer key -> trust_anchored true');
+  const tofu = negotiate({ localSuites: ALL, remoteOffer: offer, policy: { requirePQ: true } }); // no trustedPeerPub
+  ok(tofu.ok === true && tofu.trust_anchored === false, 'negotiation WITHOUT a pinned key -> ok but trust_anchored FALSE (TOFU, not real downgrade protection)');
+
+  // 12. acceptSession enforces a suite-LEVEL floor — "PQ + no fallback" can still be a level-3 suite (downgrade_prevented = strongest MUTUAL, not strongest POSSIBLE)
+  const att768 = attestSession({ session_id: 's-3', chosen: 'hybrid-mlkem768-x25519-mldsa65', pq: true, fallback: false, peer_id: 'peerC', transcript_sha256: TRANSCRIPT }, gw.secretKey, gw.publicKey, { ts: 1002 });
+  ok(acceptSession(att768, gw.publicKey, { requirePQ: true }).accept === true, 'level-3 PQ session accepted when no minLevel set');
+  ok(acceptSession(att768, gw.publicKey, { requirePQ: true, minLevel: 5 }).accept === false, 'level-3 PQ session REJECTED under minLevel 5');
+  ok(acceptSession(att, gw.publicKey, { requirePQ: true, minLevel: 5 }).accept === true, 'level-5 PQ session accepted under minLevel 5');
+  ok(acceptSession(att768, gw.publicKey, { expectedSuite: 'hybrid-mlkem1024-x25519-mldsa87' }).accept === false, 'wrong suite rejected under expectedSuite');
+  const attFake = attestSession({ session_id: 's-4', chosen: 'super-quantum-9000', pq: true, fallback: false, transcript_sha256: TRANSCRIPT }, gw.secretKey, gw.publicKey, { ts: 1003 });
+  ok(acceptSession(attFake, gw.publicKey, { requirePQ: true, minLevel: 3 }).accept === false, 'a lying gateway claiming an UNKNOWN suite id cannot meet a minLevel floor (fail-closed)');
+
+  // 13. acceptSession offer-binding (anti-splice): offer_sha256 is signed in, but is only PROOF if the verifier supplies expectedOffer
+  const OFFER_HASH = bytesToHex(sha256(utf8ToBytes('the-pinned-capability-offer-bytes')));
+  const attOffer = attestSession({ session_id: 's-5', chosen: n1.chosen, pq: true, fallback: false, transcript_sha256: TRANSCRIPT, offer_sha256: OFFER_HASH }, gw.secretKey, gw.publicKey, { ts: 1004 });
+  ok(acceptSession(attOffer, gw.publicKey, { requirePQ: true, requireOfferBinding: true, expectedOffer: OFFER_HASH }).accept === true, 'attestation bound to the verifier offer hash -> accepted');
+  ok(acceptSession(attOffer, gw.publicKey, { requirePQ: true, requireOfferBinding: true }).accept === false, 'requireOfferBinding with NO expectedOffer supplied -> rejected (presence != proof)');
+  ok(acceptSession(attOffer, gw.publicKey, { requirePQ: true, expectedOffer: 'deadbeef' }).accept === false, 'attestation offer_sha256 != expectedOffer -> rejected (spliced offer)');
+  ok(acceptSession(att, gw.publicKey, { requirePQ: true, requireOfferBinding: true, expectedOffer: OFFER_HASH }).accept === false, 'attestation with NO offer_sha256 under requireOfferBinding -> rejected');
 
   console.log('pqgateway self-test: ' + pass + ' pass, ' + fail + ' fail');
   if (typeof process !== 'undefined' && process.exit) process.exit(fail ? 1 : 0);
