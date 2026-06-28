@@ -14,7 +14,10 @@
  * far lower false-positive than a bare string). HONEST LIMITS (still true): no full AST/data-flow, no live TLS/cert
  * handshake probing, no runtime/binary/firmware or cloud-KMS-API discovery — findings are leads to verify, not a
  * guaranteed-complete inventory. "quantum-broken" = broken by Shor (RSA/ECC/DH); classical curves (X25519/Ed25519) are
- * flagged but OK as the CLASSICAL leg of a HYBRID. Self-test: node pqcbom.mjs
+ * flagged but OK as the CLASSICAL leg of a HYBRID. v0.3 ADDS: BROKEN PQ candidates (SIKE/SIDH, GeMSS — a project using
+ * these has a FALSE sense of PQ security), stateful hash sigs (XMSS, NIST SP 800-208), more broken/legacy primitives
+ * (Blowfish/CAST5, MD4/MD2, RIPEMD, 192-bit/binary-field EC curves, NTLM/WEP), and more libraries (wolfSSL/mbedTLS/
+ * BoringSSL, CIRCL, PyNaCl, JWT/JOSE). Self-test: node pqcbom.mjs
  */
 const RULES = [
   // classically broken (a bug regardless of quantum)
@@ -53,6 +56,17 @@ const RULES = [
   { re: /\bsntrup761(x25519)?\b/i, algo: 'sntrup761 (SSH PQ KEX)', family: 'kem', risk: 'quantum-safe', rec: 'OK — PQ-hybrid SSH key exchange' },
   { re: /\b(AWS[-\s]?KMS|Azure[-\s]?Key[-\s]?Vault|(GCP|Google[-\s]?Cloud)[-\s]?KMS|CloudHSM|PKCS#?11|\bHSM\b)\b/i, algo: 'managed KMS/HSM', family: 'keymgmt', risk: 'classical-hybrid-ok', rec: 'managed crypto — verify the provider PQ roadmap + key-type support' },
   { re: /\b(Classic[-\s]?McEliece|FrodoKEM|NTRU(-?HPS|-?HRSS)?|NTRU[-\s]?Prime)\b/i, algo: 'Classic McEliece / Frodo / NTRU', family: 'kem', risk: 'quantum-safe', rec: 'OK — PQ KEM (NIST round/alternate)' },
+  // --- v0.3: PQ candidates BROKEN during/after the NIST process — using these is a FALSE sense of PQ security (unique flag) ---
+  { re: /\b(SIKE|SIDH)\b/, algo: 'SIKE/SIDH (BROKEN PQ)', family: 'kem', risk: 'broken-classical', rec: 'BROKEN — Castryck-Decru 2022 classical poly-time key recovery; do NOT use; migrate to ML-KEM-1024' }, // case-sensitive: avoid "sike"/"sidh" noise
+  { re: /\bGeMSS\b/, algo: 'GeMSS (BROKEN PQ)', family: 'signature', risk: 'broken-classical', rec: 'BROKEN multivariate scheme; do NOT use; migrate to ML-DSA-87 / SLH-DSA' },
+  // stateful hash-based signatures — quantum-safe (NIST SP 800-208) but one-time-state reuse is catastrophic
+  { re: /\bXMSS(MT)?\b/, algo: 'XMSS (stateful hash sig)', family: 'signature', risk: 'quantum-safe', rec: 'OK — stateful hash-based sig (NIST SP 800-208); NEVER reuse one-time key state' }, // LMS/HSS dropped (Learning-Mgmt-System / telecom false positives)
+  // --- v0.3: more classically broken / weak primitives ---
+  { re: /\b(Blowfish|CAST-?5|CAST-?128)\b/i, algo: 'Blowfish/CAST5', family: 'cipher', risk: 'broken-classical', rec: 'legacy 64-bit-block cipher (Sweet32) — REMOVE; use AES-256-GCM' }, // IDEA/RC2 dropped ("idea" word / "rc2" release-candidate false positives)
+  { re: /\b(MD4|MD2)\b/i, algo: 'MD4/MD2', family: 'hash', risk: 'broken-classical', rec: 'REMOVE — badly broken hash; use SHA-512 / SHA3-512' },
+  { re: /\bRIPEMD(-?(128|160|256|320))?\b/i, algo: 'RIPEMD', family: 'hash', risk: 'quantum-weakened', rec: 'legacy hash; prefer SHA-512 / SHA3-512' },
+  { re: /\b(secp192(r1|k1)|prime192v1|P-192|sect(163|233|283|409|571)(k1|r1)?)\b/i, algo: 'EC curve (legacy)', family: 'pubkey', risk: 'quantum-broken', rec: 'Shor-broken legacy/binary-field EC curve; move to ML-KEM/ML-DSA (hybrid)' }, // 192-bit + binary-field curves (line above covers 224/256/384/521)
+  { re: /\b(NTLMv?[12]?|WEP)\b/, algo: 'NTLM/WEP (legacy)', family: 'protocol', risk: 'broken-classical', rec: 'legacy auth/wireless built on MD4/DES/RC4 — broken; REMOVE' }, // case-sensitive (avoid lowercase noise)
 ];
 const RISK_ORDER = ['broken-classical', 'quantum-broken', 'quantum-weakened', 'classical-hybrid-ok', 'quantum-safe'];
 
@@ -71,6 +85,12 @@ const LIB_RULES = [
   { re: /@noble\/post-quantum/i, algo: 'lib:@noble/post-quantum', risk: 'quantum-safe', rec: 'OK — PQ primitives (FIPS 203/204/205)' },
   { re: /\b(libsodium|sodium-native|tweetnacl)\b/i, algo: 'lib:libsodium/nacl', risk: 'classical-hybrid-ok', rec: 'modern classical crypto (X25519/Ed25519/ChaCha20) — pair with PQ' },
   { re: /\b(rustls|ring)\b/i, algo: 'lib:rustls/ring', risk: 'classical-hybrid-ok', rec: 'Rust TLS/crypto — verify TLS 1.3 + plan a PQ KEM' },
+  // --- v0.3: more crypto libraries (manifest-context keeps false positives low) ---
+  { re: /\b(wolfssl|wolfcrypt|mbedtls|mbed[-_]?crypto|boringssl)\b/i, algo: 'lib:wolfSSL/mbedTLS/BoringSSL', risk: 'classical-hybrid-ok', rec: 'embedded TLS/crypto — verify TLS 1.3 + the provider PQ KEM support/roadmap' },
+  { re: /\bcircl\b/i, algo: 'lib:CIRCL', risk: 'quantum-safe', rec: 'OK — Cloudflare CIRCL (ML-KEM/ML-DSA present); verify the PQ algos are actually used' },
+  { re: /\b(kyber-py|dilithium-py|falcon-py)\b/i, algo: 'lib:kyber-py/dilithium-py', risk: 'quantum-safe', rec: 'OK — pure-Python PQ implementation' },
+  { re: /\bpynacl\b/i, algo: 'lib:PyNaCl', risk: 'classical-hybrid-ok', rec: 'libsodium binding (X25519/Ed25519/ChaCha20) — pair with a PQ KEM/sig' },
+  { re: /\b(jsonwebtoken|pyjwt|jjwt|node-jose|jose)\b/i, algo: 'lib:JWT/JOSE', risk: 'classical-hybrid-ok', rec: 'JWT/JOSE lib — RS*/ES* algs are quantum-broken; verify the alg + plan ML-DSA' },
 ];
 function scanManifest(filename, text) {
   const found = new Map();
@@ -370,6 +390,16 @@ function selfTest() {
   ok(algos('hash = SHA3-384').has('SHA-256/384'), 'SHA3-384 is caught (quantum-weakened)');
   ok(algos('curve secp384r1').has('EC curve') && algos('P-224 curve').has('EC curve'), 'secp384r1 and P-224 EC curves are caught');
   ok(algos('ECDHE-ECDSA').has('ECDH'), 'ECDHE is caught');
+
+  // --- v0.3 expanded coverage ---
+  ok(algos('kem = SIKE').has('SIKE/SIDH (BROKEN PQ)') && scanText('s.txt', 'SIKE').find((f) => f.algo === 'SIKE/SIDH (BROKEN PQ)').risk === 'broken-classical', 'SIKE/SIDH flagged BROKEN (catches a FALSE sense of PQ security)');
+  ok(algos('sig = XMSS').has('XMSS (stateful hash sig)'), 'XMSS flagged (stateful hash sig, quantum-safe)');
+  ok(algos('cipher Blowfish').has('Blowfish/CAST5') && algos('hash MD4').has('MD4/MD2'), 'Blowfish + MD4 -> broken-classical');
+  ok(algos('curve secp192r1').has('EC curve (legacy)'), 'legacy 192-bit EC curve caught');
+  ok(scanManifest('go.mod', 'github.com/cloudflare/circl v1.3.7').some((f) => f.algo === 'lib:CIRCL' && f.risk === 'quantum-safe'), 'CIRCL dependency -> quantum-safe');
+  ok(scanManifest('package.json', '"jsonwebtoken": "^9.0.0"').some((f) => f.algo === 'lib:JWT/JOSE'), 'JWT/JOSE library dependency flagged');
+  // v0.3 FP guards: the collision-prone tokens we deliberately dropped must NOT trip
+  ok(scanText('d.md', 'a great idea, see release rc2, in the LMS learning system').length === 0, 'v0.3 FP guard: "idea"/"rc2"/"LMS" do NOT false-positive');
 
   // --- suppression: inline `pqcbom-ignore` + allowlist (adoption escape hatch) ---
   const inlIgnore = scanFiles([{ name: 'a.js', text: 'const k = RSA.gen(2048); // pqcbom-ignore: accepted legacy' }]);
