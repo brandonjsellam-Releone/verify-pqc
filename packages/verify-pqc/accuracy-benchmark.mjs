@@ -43,6 +43,11 @@ const CORPUS = [
   { id: 'sha512', text: 'kdf = HKDF-SHA-512', find: ['SHA-512/SHA3-512'], notFind: [] },
   { id: 'chacha', text: 'ChaCha20-Poly1305', find: ['ChaCha20-Poly1305'], notFind: [] },
   { id: 'sntrup', text: 'KexAlgorithms sntrup761x25519-sha512@openssh.com', find: ['sntrup761 (SSH PQ KEX)'], notFind: [] },
+  // --- true positives: OID layer (v0.4 — certs/ASN.1/PKI name crypto by numeric OID, not by algorithm name) ---
+  { id: 'rsa-by-oid', text: 'keyAlgorithm = "1.2.840.113549.1.1.1"', find: ['RSA (OID rsaEncryption)'], notFind: [] },
+  { id: 'ecdsa-by-oid', text: 'signatureAlgorithm: 1.2.840.10045.4.3.2', find: ['ECDSA sig (OID)'], notFind: [] },
+  { id: 'p256-by-oid', text: 'namedCurve 1.2.840.10045.3.1.7', find: ['P-256/prime256v1 curve (OID)'], notFind: [] },
+  { id: 'md5-by-oid', text: 'digestAlgorithm 1.2.840.113549.2.5', find: ['MD5 (OID)'], notFind: [] },
   // --- FALSE-POSITIVE TRAPS (the hard part — these must NOT mis-fire) ---
   { id: 'mldsa-not-dsa', text: 'sig = ML-DSA-87', find: ['ML-DSA/Dilithium'], notFind: ['DSA'] },
   { id: 'slhdsa-not-dsa', text: 'use SLH-DSA for diversity', find: ['SLH-DSA/SPHINCS+'], notFind: ['DSA'] },
@@ -55,8 +60,8 @@ const CORPUS = [
 
 // BLIND SPOTS — cases a LEXICAL scanner is EXPECTED to miss (this is WHY findings are "leads to verify"). We verify
 // they are indeed not detected, and publish them as documented limitations rather than pretending 100% coverage.
+// (v0.4: the former 'rsa-by-oid' blind spot is CLOSED — OID detection was added; it is now a true-positive corpus case above.)
 const BLIND_SPOTS = [
-  { id: 'rsa-by-oid', text: 'keyAlgorithm = "1.2.840.113549.1.1.1"', why: 'RSA identified only by OID — no algorithm-name token' },
   { id: 'rsa-substring', text: 'const k = rsaEncryption(2048);', why: 'algorithm embedded in a longer identifier (no word boundary)' },
   { id: 'custom-wrapper', text: 'const sig = companyCryptoSign(payload);', why: 'crypto hidden behind a custom wrapper name' },
   { id: 'runtime-alias', text: 'const C = loadCipher(cfg); C.encrypt(x);', why: 'algorithm resolved at runtime via a variable' },

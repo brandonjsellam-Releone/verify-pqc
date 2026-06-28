@@ -17,7 +17,9 @@
  * flagged but OK as the CLASSICAL leg of a HYBRID. v0.3 ADDS: BROKEN PQ candidates (SIKE/SIDH, GeMSS — a project using
  * these has a FALSE sense of PQ security), stateful hash sigs (XMSS, NIST SP 800-208), more broken/legacy primitives
  * (Blowfish/CAST5, MD4/MD2, RIPEMD, 192-bit/binary-field EC curves, NTLM/WEP), and more libraries (wolfSSL/mbedTLS/
- * BoringSSL, CIRCL, PyNaCl, JWT/JOSE). Self-test: node pqcbom.mjs
+ * BoringSSL, CIRCL, PyNaCl, JWT/JOSE). v0.4 ADDS: cryptographic OID detection (RSA/ECDSA/DSA/EC-curve/Ed25519/X25519/
+ * MD5/SHA-1 by standardized numeric OID — closes the published "OID" blind spot; certs/ASN.1/PKI configs name crypto by
+ * OID, not by algorithm name). Self-test: node pqcbom.mjs
  */
 const RULES = [
   // classically broken (a bug regardless of quantum)
@@ -67,6 +69,20 @@ const RULES = [
   { re: /\bRIPEMD(-?(128|160|256|320))?\b/i, algo: 'RIPEMD', family: 'hash', risk: 'quantum-weakened', rec: 'legacy hash; prefer SHA-512 / SHA3-512' },
   { re: /\b(secp192(r1|k1)|prime192v1|P-192|sect(163|233|283|409|571)(k1|r1)?)\b/i, algo: 'EC curve (legacy)', family: 'pubkey', risk: 'quantum-broken', rec: 'Shor-broken legacy/binary-field EC curve; move to ML-KEM/ML-DSA (hybrid)' }, // 192-bit + binary-field curves (line above covers 224/256/384/521)
   { re: /\b(NTLMv?[12]?|WEP)\b/, algo: 'NTLM/WEP (legacy)', family: 'protocol', risk: 'broken-classical', rec: 'legacy auth/wireless built on MD4/DES/RC4 — broken; REMOVE' }, // case-sensitive (avoid lowercase noise)
+  // --- v0.4: cryptographic OID detection (closes the published "OID" blind spot) — certs/ASN.1/PKI configs name crypto by
+  //     numeric OID, not algorithm name. OIDs are unambiguous dotted-decimal tokens (no false-positive surface). Standardized
+  //     values (RFC 3279/5480/8410, NIST). The lookbehind/lookahead anchor an EXACT OID (not a prefix/suffix of a longer one).
+  { re: /(?<![\d.])1\.2\.840\.113549\.1\.1\.1(?![\d.])/, algo: 'RSA (OID rsaEncryption)', family: 'pubkey', risk: 'quantum-broken', rec: 'RSA key by OID — migrate KEM->ML-KEM-1024, sig->ML-DSA-87 (hybrid)' },
+  { re: /(?<![\d.])1\.2\.840\.113549\.1\.1\.11(?![\d.])/, algo: 'RSA-SHA256 sig (OID)', family: 'signature', risk: 'quantum-broken', rec: 'sha256WithRSA cert/sig by OID — RSA is Shor-broken; plan ML-DSA-87' },
+  { re: /(?<![\d.])1\.2\.840\.10045\.2\.1(?![\d.])/, algo: 'EC public key (OID)', family: 'pubkey', risk: 'quantum-broken', rec: 'EC public key by OID — Shor-broken; migrate to ML-KEM/ML-DSA' },
+  { re: /(?<![\d.])1\.2\.840\.10045\.4\.3\.[234](?![\d.])/, algo: 'ECDSA sig (OID)', family: 'signature', risk: 'quantum-broken', rec: 'ECDSA-with-SHA2 by OID — migrate to ML-DSA-87 (keep ECDSA only as a hybrid leg)' },
+  { re: /(?<![\d.])1\.2\.840\.10040\.4\.1(?![\d.])/, algo: 'DSA (OID)', family: 'signature', risk: 'quantum-broken', rec: 'DSA by OID — migrate to ML-DSA-87 / SLH-DSA' },
+  { re: /(?<![\d.])1\.2\.840\.10045\.3\.1\.7(?![\d.])/, algo: 'P-256/prime256v1 curve (OID)', family: 'pubkey', risk: 'quantum-broken', rec: 'P-256 by OID — Shor-broken EC curve' },
+  { re: /(?<![\d.])1\.3\.132\.0\.3[45](?![\d.])/, algo: 'P-384/P-521 curve (OID)', family: 'pubkey', risk: 'quantum-broken', rec: 'P-384/P-521 by OID — Shor-broken EC curve' },
+  { re: /(?<![\d.])1\.3\.101\.11[23](?![\d.])/, algo: 'Ed25519/Ed448 (OID)', family: 'signature', risk: 'classical-hybrid-ok', rec: 'EdDSA by OID — OK only as the classical leg of a HYBRID with ML-DSA-87' },
+  { re: /(?<![\d.])1\.3\.101\.11[01](?![\d.])/, algo: 'X25519/X448 (OID)', family: 'kem', risk: 'classical-hybrid-ok', rec: 'X25519/X448 by OID — OK only inside a HYBRID with ML-KEM' },
+  { re: /(?<![\d.])1\.2\.840\.113549\.2\.5(?![\d.])/, algo: 'MD5 (OID)', family: 'hash', risk: 'broken-classical', rec: 'MD5 by OID — REMOVE (collision-broken)' },
+  { re: /(?<![\d.])1\.3\.14\.3\.2\.26(?![\d.])/, algo: 'SHA-1 (OID)', family: 'hash', risk: 'broken-classical', rec: 'SHA-1 by OID — REMOVE (collision-broken)' },
 ];
 const RISK_ORDER = ['broken-classical', 'quantum-broken', 'quantum-weakened', 'classical-hybrid-ok', 'quantum-safe'];
 
@@ -400,6 +416,13 @@ function selfTest() {
   ok(scanManifest('package.json', '"jsonwebtoken": "^9.0.0"').some((f) => f.algo === 'lib:JWT/JOSE'), 'JWT/JOSE library dependency flagged');
   // v0.3 FP guards: the collision-prone tokens we deliberately dropped must NOT trip
   ok(scanText('d.md', 'a great idea, see release rc2, in the LMS learning system').length === 0, 'v0.3 FP guard: "idea"/"rc2"/"LMS" do NOT false-positive');
+
+  // --- v0.4: cryptographic OID detection (closes the published "OID" blind spot) ---
+  ok(algos('SubjectPublicKeyInfo 1.2.840.113549.1.1.1').has('RSA (OID rsaEncryption)'), 'RSA key OID -> quantum-broken');
+  ok(algos('sigAlg 1.2.840.10045.4.3.2').has('ECDSA sig (OID)') && algos('curve 1.2.840.10045.3.1.7').has('P-256/prime256v1 curve (OID)'), 'ECDSA + P-256 OIDs detected');
+  ok(algos('1.3.101.112').has('Ed25519/Ed448 (OID)') && algos('digest 1.2.840.113549.2.5').has('MD5 (OID)'), 'Ed25519 OID -> hybrid-ok; MD5 OID -> broken-classical');
+  ok(algos('1.2.840.113549.1.1.11').has('RSA-SHA256 sig (OID)') && !algos('1.2.840.113549.1.1.11').has('RSA (OID rsaEncryption)'), 'OID exactness: ...1.1.11 = RSA-SHA256 only (lookahead anchors the exact OID, no prefix mis-fire)');
+  ok(scanText('v.txt', 'release 1.2.3, version 2.16.0, build 1.2.840 partial').length === 0, 'v0.4 FP guard: version-like dotted numbers do NOT trip OID rules');
 
   // --- suppression: inline `pqcbom-ignore` + allowlist (adoption escape hatch) ---
   const inlIgnore = scanFiles([{ name: 'a.js', text: 'const k = RSA.gen(2048); // pqcbom-ignore: accepted legacy' }]);
