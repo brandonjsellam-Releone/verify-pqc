@@ -79,8 +79,14 @@ export function verifyKeyEventInclusion(arg, logPub) {
 export function resolveIssuerKey(events, issuer_id, opts = {}) {
   if (!Array.isArray(events)) return null; // TOTAL: fail-closed on a non-array event list (fuzz-robustness)
   const atTime = opts.atTime ?? Infinity;
+  // ORDER INDEPENDENCE (4th sweep, state-ordering): reconstruct the true sequence from the SIGNED monotonic seq —
+  // NEVER trust the log's array/append order. Otherwise a malicious log places a signed revoke (seq=2) BEFORE the
+  // rotation (seq=1) it follows, the revoke fails the exact-next-seq check + is dropped -> REVOKE-ROLLBACK (a revoked
+  // issuer key resolves ACTIVE). seq is signed inside the event core, so an attacker cannot forge the sort key.
+  let ev;
+  try { ev = events.filter((e) => e && e.kind === 'pqkt-key-event' && e.issuer_id === issuer_id).sort((a, b) => (a.seq - b.seq)); } catch { return null; }
   let state = 'unseen'; let cur = null; const rejected = [];
-  events.forEach((e, index) => {
+  ev.forEach((e, index) => {
     if (!e || e.kind !== 'pqkt-key-event' || e.issuer_id !== issuer_id) return;
     if (e.ts != null && e.ts > atTime) return;
     const rej = (reason) => rejected.push({ index, seq: e.seq, reason });
@@ -262,6 +268,17 @@ function selfTest() {
   // 7. AUTHORIZED revoke (seq 2) by the current key -> REVOKED (terminal)
   appendKeyEvent(log, makeRevokeEvent({ issuer_id: 'issuer:A', key: Anew, seq: 2, ts: 1300 }));
   ok(resolveIssuerKey(log.entries, 'issuer:A', opt) === null, 'authorized revoke -> issuer has no valid key (REVOKED)');
+
+  // 7b. REVOKE-ROLLBACK regression (4th sweep, state-ordering): a malicious log that REORDERS a signed revoke before
+  // the rotation it follows must NOT resurrect the key — resolveIssuerKey sorts by the SIGNED seq (unforgeable).
+  const Rk = ml_dsa87.keygen(new Uint8Array(32).fill(77)), Rk2 = ml_dsa87.keygen(new Uint8Array(32).fill(78));
+  const rPin = keyHash(Rk.publicKey);
+  const e0 = makeBindEvent({ issuer_id: 'issuer:R', newKey: Rk, seq: 0, ts: 1 });
+  const e1 = makeBindEvent({ issuer_id: 'issuer:R', newKey: Rk2, priorKey: Rk, seq: 1, ts: 2 });
+  const e2 = makeRevokeEvent({ issuer_id: 'issuer:R', key: Rk2, seq: 2, ts: 3 });
+  ok(resolveIssuerKey([e0, e1, e2], 'issuer:R', { expectedBootstrap: rPin }) === null, 'honest order [bind,rot,revoke] -> REVOKED');
+  ok(resolveIssuerKey([e0, e2, e1], 'issuer:R', { expectedBootstrap: rPin }) === null, 'REORDERED [bind,revoke,rot] -> STILL REVOKED (sort-by-signed-seq defeats the rollback)');
+  ok(resolveIssuerKey([e2, e1, e0], 'issuer:R', { expectedBootstrap: rPin }) === null, 'fully shuffled -> STILL REVOKED');
 
   // 8. POST-REVOKE REBIND ATTACK (OpenAI critical fix): attacker appends a fresh self-signed bootstrap -> IGNORED
   appendKeyEvent(log, makeBindEvent({ issuer_id: 'issuer:A', newKey: attacker, seq: 0, ts: 1400 }));

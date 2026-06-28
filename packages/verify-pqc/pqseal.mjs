@@ -55,7 +55,9 @@ export function seal(payloadBytes, signers) {
 /** openSeal(payloadBytes, envelope, opts) — AND-composition: ALL legs must verify.
  *  opts.trusted = {alg: pubBytes,...}  pin per family — each pinned family must be PRESENT + match + valid.
  *  opts.requireSuite = 'trelyan-seal/ML-DSA-87+SLH-DSA-256f'  assert the EXACT composition (rejects any downgrade).
- *  opts.requireKinds = ['lattice','hash-based']  require diverse families among the valid legs.
+ *  opts.requireKinds = ['lattice','hash-based']  require these family labels among the valid legs (MULTISET — ['lattice',
+ *    'lattice'] needs TWO distinct lattice legs). opts.minLegs = N  require >= N valid legs. opts.requireDistinctLegs = true
+ *    reject duplicate (alg, pub_hex) legs for true N-leg independence. Result exposes distinctLegs / minLegsOk / distinctOk.
  *  opts.requirePinned = true  every leg must be trust-anchored.
  *  FOOTGUN (council): with NO pins, NO requireSuite, and NO requireKinds, a pass proves only SELF-CONSISTENCY of whatever
  *  legs are present — NOT authenticity or a particular composition. High-assurance callers MUST pass at least one of
@@ -78,8 +80,16 @@ export function openSeal(payloadBytes, envelope, opts = {}) {
       return { alg: l.alg, kind: fam.kind, valid, anchored, pinRequired: !!pin };
     });
     const allValid = legs.every((r) => r.valid);
-    const validKinds = new Set(legs.filter((r) => r.valid).map((r) => r.kind));
-    const familiesOk = !opts.requireKinds || opts.requireKinds.every((k) => validKinds.has(k));
+    const validLegs = legs.filter((r) => r.valid);
+    const validKinds = new Set(validLegs.map((r) => r.kind));
+    // requireKinds is a MULTISET predicate (4th sweep): requireKinds:['lattice','lattice'] needs TWO distinct lattice
+    // legs, not one — closes the footgun where a single leg satisfied a duplicated requirement.
+    const kindCounts = {}; for (const r of validLegs) kindCounts[r.kind] = (kindCounts[r.kind] || 0) + 1;
+    const reqCounts = {}; for (const k of (opts.requireKinds || [])) reqCounts[k] = (reqCounts[k] || 0) + 1;
+    const familiesOk = !opts.requireKinds || Object.keys(reqCounts).every((k) => (kindCounts[k] || 0) >= reqCounts[k]);
+    const distinctLegs = new Set(envelope.legs.filter((l, i) => legs[i] && legs[i].valid).map((l) => l.alg + '\x1f' + l.pub_hex)).size;
+    const minLegsOk = !opts.minLegs || validLegs.length >= opts.minLegs;               // require >= N VALID legs
+    const distinctOk = !opts.requireDistinctLegs || distinctLegs === validLegs.length; // reject duplicate (alg,pub_hex) legs (true independence)
     const anchoredOk = legs.every((r) => !r.pinRequired || r.anchored);          // a pinned family that MISmatches fails
     // a pinned family must be PRESENT + anchored + valid — a dropped pinned leg is NOT silently ignored (DeepSeek fix #1)
     const pinnedAlgs = opts.trusted ? Object.keys(opts.trusted) : [];
@@ -87,11 +97,11 @@ export function openSeal(payloadBytes, envelope, opts = {}) {
     const fullyAnchored = legs.length > 0 && legs.every((r) => r.anchored);
     const meetsPinned = !opts.requirePinned || fullyAnchored;
     const suiteMatch = !opts.requireSuite || envelope.suite === opts.requireSuite; // caller asserts the EXACT composition
-    const verified = !!(payloadOk && suiteOk && allValid && familiesOk && anchoredOk && pinnedPresent && meetsPinned && suiteMatch);
-    return { verified, payloadOk, suiteOk, allValid, familiesOk, pinnedPresent, suiteMatch, fullyAnchored, kinds: [...validKinds], legs };
+    const verified = !!(payloadOk && suiteOk && allValid && familiesOk && anchoredOk && pinnedPresent && meetsPinned && suiteMatch && minLegsOk && distinctOk);
+    return { verified, payloadOk, suiteOk, allValid, familiesOk, pinnedPresent, suiteMatch, fullyAnchored, minLegsOk, distinctOk, distinctLegs, kinds: [...validKinds], legs };
   } catch { return fail(); }
 }
-function fail() { return { verified: false, payloadOk: false, suiteOk: false, allValid: false, familiesOk: false, pinnedPresent: false, suiteMatch: false, fullyAnchored: false, kinds: [], legs: [] }; }
+function fail() { return { verified: false, payloadOk: false, suiteOk: false, allValid: false, familiesOk: false, pinnedPresent: false, suiteMatch: false, fullyAnchored: false, minLegsOk: false, distinctOk: false, distinctLegs: 0, kinds: [], legs: [] }; }
 
 /* ---------- self-test: node pqseal.mjs ---------- */
 function selfTest() {

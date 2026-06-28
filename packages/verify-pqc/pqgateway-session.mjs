@@ -130,8 +130,10 @@ export function runAttestedSession({ clientId, gatewayId, localSuites, clientSui
   if (!c2.R_auth_ok) return { ok: false, stage: 'client-auth', detail: c2 };
   const g2 = gatewayFinishAndAttest(c2.msg3, g1.rstate, g1.neg, gatewayId, bytesToHex(clientId.publicKey), { ...meta, offer_sha256: g1.offer_sha256 });
   if (!g2.ok) return { ok: false, stage: 'gateway-attest', detail: g2 };
-  // bind the attestation to the EXACT offer the client signed (BUG D anti-splice): the client knows its own offer.
-  const accepted = clientAccept(g2.att, gatewayId.publicKey, c2.th, { ...policy, expectedOfferSha256: g1.offer_sha256 });
+  // bind the attestation to the EXACT offer the client signed (anti-splice): derive the fingerprint CLIENT-SIDE from
+  // c1.offer — NEVER trust the gateway's g1.offer_sha256 (4th sweep: that made the anti-splice check tautological vs an
+  // equivocating gateway). Equal to g1.offer_sha256 in the honest case; catches a gateway attesting a different offer.
+  const accepted = clientAccept(g2.att, gatewayId.publicKey, c2.th, { ...policy, expectedOfferSha256: offerFingerprint(c1.offer) });
   const bundle = clientCountersign(g2.att, clientId); // transferable mutual attestation
   return { ok: true, neg: g1.neg, client_th: c2.th, gateway_th: g2.fin.th, att: g2.att, bundle, accepted, offer_sha256: g1.offer_sha256, sessionKeysAgree: bytesToHex(c2.session.i2r) === bytesToHex(g2.fin.session.i2r) };
 }

@@ -108,6 +108,10 @@ export function respondHandshake(initialMessage, bobIdentity, bobBundle, bobSecr
   const ikA = hexToBytes(initialMessage.ik_dh_pub), ekA = hexToBytes(initialMessage.ek_pub);
   const ss = ml_kem1024.decapsulate(hexToBytes(initialMessage.kem_ct), kemSk);
   const labelled = [L('pqx3dh-dh1'), dh(bobSecrets.spk_priv, ikA), L('pqx3dh-dh2'), dh(bobIdentity.dh.priv, ekA), L('pqx3dh-dh3'), dh(bobSecrets.spk_priv, ekA)];
+  // FAIL-EXPLICIT (4th sweep): if the client named a one-time prekey we cannot honor (already consumed / unknown id),
+  // REJECT rather than silently dropping the dh4 leg and deriving a divergent SK that could never key-confirm anyway.
+  if (initialMessage.used_onetime_id != null && !(bobSecrets.onetime_priv && initialMessage.used_onetime_id === bobSecrets.onetime_id))
+    return { ok: false, reason: 'one-time prekey already consumed or unknown id' };
   let opkPub = null, opkId = null;
   if (initialMessage.used_onetime_id && bobSecrets.onetime_priv && initialMessage.used_onetime_id === bobSecrets.onetime_id) { labelled.push(L('pqx3dh-dh4'), dh(bobSecrets.onetime_priv, ekA)); opkPub = hx(x25519.getPublicKey(bobSecrets.onetime_priv)); opkId = bobSecrets.onetime_id; }
   labelled.push(L('pqx3dh-kem'), ss);
