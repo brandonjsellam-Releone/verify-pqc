@@ -7,12 +7,13 @@
     "properties": [
       { "name": "trelyan:audit_status", "value": "UNAUDITED reference; third-party crypto/side-channel audit pending" },
       { "name": "trelyan:runtime", "value": "Node.js >=18 (tested on v24.16.0); pure-JS, no native addons" },
-      { "name": "trelyan:note", "value": "Resolved versions below; package-lock.json is authoritative. A @noble/hashes 1.x<->2.x version skew exists in the tree (declared ^1.8.0; 2.2.0 resolved under @noble/curves) — pin via lockfile before audit." }
+      { "name": "trelyan:note", "value": "package-lock.json (committed) is authoritative. Top-level @noble/hashes resolves to 1.8.0; @noble/hashes 2.2.0 resolves NESTED under @noble/curves and @noble/post-quantum (each bundles its own copy via npm), so there is no conflict at any single resolution point. Run `npm ci` to reproduce this exact tree." }
     ]
   },
   "components": [
     { "type": "library", "group": "@noble", "name": "post-quantum", "version": "0.6.1", "purl": "pkg:npm/%40noble/post-quantum@0.6.1", "description": "ML-KEM (FIPS 203), ML-DSA (FIPS 204), SLH-DSA (FIPS 205), Falcon — pure JS", "scope": "required" },
-    { "type": "library", "group": "@noble", "name": "hashes", "version": "2.2.0", "purl": "pkg:npm/%40noble/hashes@2.2.0", "description": "SHA-2/SHA-3/SHAKE/HKDF/HMAC — pure JS (declared range ^1.8.0; see version-skew note)", "scope": "required" },
+    { "type": "library", "group": "@noble", "name": "hashes", "version": "1.8.0", "purl": "pkg:npm/%40noble/hashes@1.8.0", "description": "SHA-2/SHA-3/SHAKE/HKDF/HMAC — pure JS (top-level, declared ^1.8.0)", "scope": "required" },
+    { "type": "library", "group": "@noble", "name": "hashes", "version": "2.2.0", "purl": "pkg:npm/%40noble/hashes@2.2.0", "description": "SHA-2/SHA-3/SHAKE/HKDF/HMAC — pure JS (transitive; nested under @noble/curves and @noble/post-quantum)", "scope": "required" },
     { "type": "library", "group": "@noble", "name": "ciphers", "version": "2.2.0", "purl": "pkg:npm/%40noble/ciphers@2.2.0", "description": "AES-256-GCM, ChaCha20-Poly1305 — pure JS", "scope": "required" },
     { "type": "library", "group": "@noble", "name": "curves", "version": "2.2.0", "purl": "pkg:npm/%40noble/curves@2.2.0", "description": "X25519, Ed25519 (classical hybrid legs) — pure JS", "scope": "required" }
   ]

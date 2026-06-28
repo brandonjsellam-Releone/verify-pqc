@@ -1,7 +1,7 @@
 # Signed-Object Inventory (audit input — call-graph map)
 
 The full map of every authenticated structure in the SDK: its signed core, its domain-separation context, its verifier,
-and its test coverage. Requested by the council ("inventory by call-graph; reconcile 23 contexts vs 28 modules"). Each
+and its test coverage. Requested by the council ("inventory by call-graph; reconcile 25 contexts vs 28 modules"). Each
 context is checked globally distinct + bare-free by `domain-separation.mjs`; each verifier is exercised total/fail-closed
 by `fuzz-robustness.mjs`; the ✓tamper rows are demonstrated field-bound by `tamper-binding.mjs` (runnable test evidence
 over the stated cases — not formal proofs; the third-party audit is the gate).
@@ -27,13 +27,15 @@ over the stated cases — not formal proofs; the third-party audit is the gate).
 | pqgateway | client countersignature | `…gateway-client-countersig-v1` | `acceptSession` path | fuzz · *tracked* |
 | pqcompliance | compliance report | `…pqcompliance-report-v1` | `verifyComplianceReport` | **✓ tamper (111)** + fuzz · summary/disclaimer/posture now bound |
 | pqcbom-report | PQC Evidence Pack (PAID) | `…pqcbom-evidence-pack-v1` | `verifyEvidencePack` | **✓ tamper (170, PAID)** |
+| pqcbom-report | Evidence Pack SLH-DSA leg | `…pqcbom-evidence-pack-slh-v1` | `verifyEvidencePack` (hybrid) | **✓ tamper (171, hybrid)** |
+| pqseal | N-leg AND-composition envelope | `…pqseal-v1` | `verifySeal` | **✓ tamper (12)** + fuzz |
 | pqvault / polarseek | KMS custody record | `…kms-custody-v1` | `verifyCustodyRecord` / `pqvault.verifyEntry` | fuzz (vault entry) · *tracked for tamper* |
 | pqinduct | order credential | `…lemniscate-credential-v1` | induction verify | self-test · *tracked* |
 | pqinduct | inner-ring grant | `…lemniscate-inner-ring-v1` | induction verify | self-test · *tracked* |
 | pqinduct | induction manifest | `…lemniscate-manifest-v1` | induction verify | self-test · *tracked* |
 | pqguard | dual-control approval token | `…dual-control-approval-v1` | guard verify | self-test · *tracked* |
 
-**23 distinct contexts** — matches `domain-separation.mjs`. ✓tamper = **15 verifiers** (incl. the spine, the paid
+**25 distinct contexts** — matches `domain-separation.mjs`. ✓tamper = **15 verifiers** (incl. the spine, the paid
 deliverable, revocation, marketplace attestation, and key-transparency events). All surfaces are in the fuzz/total
 sweep + their own module self-tests.
 
@@ -44,7 +46,7 @@ sweep + their own module self-tests.
 | pqverify-api | hosted dispatcher → the above verifiers | `verify` (async; in fuzz sweep) |
 | pqgateway-session | composes offer→negotiate→handshake→session attestation | (uses pqgateway verifiers) |
 
-## Non-signing modules (no cross-protocol signature surface — reconciles 23 contexts vs ~28 modules)
+## Non-signing modules (no cross-protocol signature surface — reconciles 25 contexts vs ~28 modules)
 `pqcbom`, `pqcbom-server` (scan/score only) · `pqverify`, `pqmoa`, `pqclaimgate`, `pqassistant`, `pqcouncil`, `pqanswer`
 (compose/attest via other modules) · `polarseek` KEM envelope (X25519+ML-KEM — encryption, not signing) · the ratchets
 `pqratchet`/`pqratchet-he` (AEAD/symmetric, no public-key signing). Verifiers here are covered by fuzz/total + self-tests.

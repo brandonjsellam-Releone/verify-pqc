@@ -6,13 +6,13 @@ validated, not constant-time. Node ≥18.
 ## Run everything (≈ minutes)
 ```bash
 cd trelyan-interop/packages/verify-pqc
-npm i            # @noble/post-quantum, @noble/hashes, @noble/ciphers, @noble/curves
+npm ci           # deterministic install from package-lock.json (@noble/post-quantum, @noble/hashes, @noble/ciphers, @noble/curves)
 node test-all.mjs            # every module self-test + the four assurance harnesses (run node test-all.mjs → ALL MODULES PASS)
 node kat-conformance.mjs     # deterministic NIST-style KATs (ML-KEM-1024 / ML-DSA-87 / SLH-DSA-SHAKE-256s)
 node spine-vectors.mjs       # PINNED transparency-spine vectors (must reproduce the hex)
 node vectors-crosscheck.mjs  # 42,574-case differential vs an independent RFC-6962 reference
-node fuzz-robustness.mjs     # negative/fuzz sweep (58 adversarial classes) — asserts 0 fail-open + verifier totality
-node tamper-binding.mjs      # signature-coverage — flips every signed field across 15 verifiers, asserts each is bound
+node fuzz-robustness.mjs     # negative/fuzz sweep (45 verifiers × 72 adversarial input classes = 3,240 calls) — asserts 0 fail-open + verifier totality
+node tamper-binding.mjs      # signature-coverage — flips every signed field across the signing surface, asserts each is bound (781 assertions)
 node domain-separation.mjs   # 0 bare sign/verify (104 sites), 25 distinct contexts, cross-context rejection
 node canon-determinism.mjs   # canon() byte-identical across 10 modules + deterministic/injective
 ```

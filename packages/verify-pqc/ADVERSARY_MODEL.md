@@ -30,8 +30,8 @@ Tabular capability → claimed property → evidence/mitigation, per the council
 | Lying gateway claims PQ over a classical session | Defeated (transferable w/ countersig) | Attestation bound to the real transcript hash; client countersignature (pqgateway-session) |
 | Forged "grade A" over insecure findings | Caught | `verifyEvidencePack` recomputes the grade from findings (pqcbom-report) |
 | Secret smuggled into an evidence bundle | Rejected | Typed version-pinned schema allowlist + leaf-value secret scan (pqef) |
-| Tampered ciphertext / proof / signature | Rejected (fail-closed) | AEAD auth tags; signature verify; fuzz sweep = 0 fail-open OBSERVED across 1,856 inputs (verifiers made total) |
-| Malformed/adversarial input to a verifier | No crash (fail-closed) | `fuzz-robustness.mjs`: 1,856 calls (32 verifiers × 58 classes), no throw observed; `tamper-binding.mjs` field-coverage |
+| Tampered ciphertext / proof / signature | Rejected (fail-closed) | AEAD auth tags; signature verify; fuzz sweep = 0 fail-open OBSERVED across 3,240 inputs (verifiers made total) |
+| Malformed/adversarial input to a verifier | No crash (fail-closed) | `fuzz-robustness.mjs`: 3,240 calls (45 verifiers × 72 input classes), no throw observed; `tamper-binding.mjs` field-coverage |
 
 ## Residual risks (require owner action / out of code scope)
 Third-party crypto + **side-channel** audit (timing/EM — primary deliverable); a **multi-witness gossip network**

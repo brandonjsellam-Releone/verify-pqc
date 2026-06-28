@@ -1,6 +1,6 @@
 # LIMITATIONS — what `@trelyan/verify-pqc` does NOT guarantee
 
-*Read this before relying on anything here. Credibility is the product: we'd rather you know the edges. This complements `ASSURANCE.md` (what IS demonstrated) and `THREAT_MODEL.md`. Posture: **experimental, feature-complete reference implementation — UNAUDITED. Not for production cryptographic reliance until a third-party audit closes.***
+*Read this before relying on anything here. Credibility is the product: we'd rather you know the edges. This complements the assurance harnesses (`assurance-properties.mjs` + the per-module claim→test map in `AUDIT_DOSSIER.md §6` — what IS demonstrated) and `THREAT_MODEL.md`. Posture: **experimental, feature-complete reference implementation — UNAUDITED. Not for production cryptographic reliance until a third-party audit closes.***
 
 ## Cryptographic core
 - **Unaudited.** No third-party cryptographic or side-channel (SCA) audit has been performed. A funded audit (OSTIF/NLnet) is being pursued; until it closes, treat this as research-grade.
@@ -22,11 +22,11 @@
 
 ## CBOM scanner — lexical + dependency-manifest, leads-to-verify
 - Two layers: inline patterns over code/config **and** declared crypto libraries from manifests. Findings are **leads to verify**, NOT a guaranteed-complete inventory.
-- **Published blind spots** (a lexical scan cannot see these — see `BENCHMARK.md`): crypto identified only by OID, embedded in a longer identifier, behind a custom wrapper name, resolved at runtime via a variable, or present as an encoded key/material blob. Also: no full AST/data-flow, no live-TLS handshake probing, no runtime, no binary/firmware discovery, limited language coverage.
+- **Published blind spots** (a lexical scan cannot see these — measured by `accuracy-benchmark.mjs`): crypto identified only by OID, embedded in a longer identifier, behind a custom wrapper name, resolved at runtime via a variable, or present as an encoded key/material blob. Also: no full AST/data-flow, no live-TLS handshake probing, no runtime, no binary/firmware discovery, limited language coverage.
 - **Suppression** (`pqcbom-ignore` / `.pqcbomignore`) is auditable (counted, not silent) but can be **abused by a maintainer** to hide real findings.
 
 ## Assurance harnesses — evidence, not proofs
-- tamper-binding (707 assertions), fuzz, property-based, accuracy-benchmark, and the 42k-case RFC-6962 differential are **bounded test evidence over the stated corpora** — they demonstrate engineering discipline and catch regressions; they are **not** formal proofs of bug-absence and not a substitute for the pending audit.
+- tamper-binding (781 assertions), fuzz, property-based, accuracy-benchmark, and the 42k-case RFC-6962 differential are **bounded test evidence over the stated corpora** — they demonstrate engineering discipline and catch regressions; they are **not** formal proofs of bug-absence and not a substitute for the pending audit.
 - The "breaking pqattest ⇒ breaking an underlying primitive" reduction is argued **informally**, not machine-checked.
 
 ## Operational

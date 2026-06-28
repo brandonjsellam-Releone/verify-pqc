@@ -4,6 +4,12 @@ SDK 0.16.0-draft. This is the single entry point for an external crypto / side-c
 docs and adds the formal cross-module crypto details an auditor needs first. **Posture:** reference implementations,
 **unaudited**, **not** FIPS-140-3 validated, **not** constant-time. Hybrid-PQ + fail-closed by design.
 
+> **AUDIT TARGET.** Package: `@trelyan/pq-sdk` (`sdk.mjs`, `SDK_VERSION 0.16.0-draft`). The audited module set is
+> exactly the modules exercised by `node test-all.mjs` (every module self-test + the assurance harnesses) — that
+> run is the authoritative inventory and must print `=== PQ SDK: ALL MODULES PASS ===`. All counts in this dossier
+> are **as of the current commit**: re-run `test-all.mjs`, `tamper-binding.mjs`, `fuzz-robustness.mjs`, and
+> `domain-separation.mjs` to reconcile any number here against the live harness output.
+
 ## 0. Read order
 1. This dossier (scope, primitives, canonicalization, context registry, Merkle scheme).
 2. `THREAT_MODEL.md` — assets / adversaries / boundaries / per-asset threat→mitigation→residual.
@@ -21,7 +27,7 @@ docs and adds the formal cross-module crypto details an auditor needs first. **P
 |---|---|---|
 | KEM | X25519 **+ ML-KEM-1024** (hybrid; PQ leg load-bearing) | FIPS 203 |
 | Signature (load-bearing) | **ML-DSA-87** | FIPS 204 |
-| Signature (hash-based diversity) | **SLH-DSA-SHAKE-256s** | FIPS 205 |
+| Signature (hash-based diversity) | **SLH-DSA-SHA2-256f** (pqseal, pqattest, pqcbom-report, slhdsa leg) · **SLH-DSA-SHAKE-256s** (pqef, pqinduct, kat-conformance, fips-conformance) | FIPS 205 |
 | Signature (classical hybrid leg) | Ed25519 | — |
 | Signature (on-chain/provenance ONLY) | Falcon-1024 | draft FIPS 206 |
 | AEAD | AES-256-GCM / ChaCha20-Poly1305 | — |
@@ -46,12 +52,16 @@ Signature contexts (verified unique — no collisions):
 | pqtsa | `trelyan-pqtsa-token-v1` |
 | pqkt | `trelyan-pqkt-auth-v1`, `trelyan-pqkt-possession-v1`, `trelyan-pqkt-witness-v1` |
 | pqpki | `trelyan-pqpki-cert-v1`, `trelyan-pqpki-crl-v1` |
-| pqcbom-report | `trelyan-pqcbom-evidence-pack-v1` |
+| pqcbom-report | `trelyan-pqcbom-evidence-pack-v1`, `trelyan-pqcbom-evidence-pack-slh-v1` (SLH-DSA leg) |
+| pqcompliance | `trelyan-pqcompliance-report-v1` |
+| pqseal | `trelyan-pqseal-v1` |
+| pqmarket | `trelyan-pqmarket-listing-v1`, `trelyan-pqmarket-attestation-v1` |
+| pqx3dh | `trelyan-pqx3dh-prekey-bundle-v1` |
 | polarseek | `trelyan-kms-custody-v1` |
 | pqguard | `trelyan-dual-control-approval-v1`, `trelyan-audit-log-head-v1` |
 | pqinduct | `trelyan-lemniscate-manifest-v1`, `…-inner-ring-v1`, `…-credential-v1` |
 | pqcouncil / pqclaimgate / pqanswer | `trelyan-council-attestation-v1` / `trelyan-claimgate-attestation-v1` / `trelyan-answer-provenance-v1` |
-| pqindex | `QDS-Omega-index-root-v1` |
+| pqindex | `trelyan-qds-omega-index-root-v1` |
 HKDF info labels (separate namespace): `QuantumMesh-root/msg-v1`, `QuantumMesh-HE-root/msg/hdr-v1`, `QDS-Omega-KEM-v1`, `TRELYAN-KMS-v1-kek`, `TRELYAN-TRANSPORT-v1`.
 **Auditor focus:** confirm uniqueness (done here) and that initiator/responder + auth/possession are never cross-verifiable.
 
@@ -70,7 +80,7 @@ pqtransport (SIGMA, UKS/reflection/downgrade); pqgateway (downgrade/replay/lying
 (transcript-bound attestation + client countersig); pqkt (CONIKS authority chaining, monotonic seq, post-revoke-rebind
 block, equivocation/rollback); pqpki (hybrid strip-resistance, path_len, root-pinning); pqratchet-he (metadata privacy);
 pqtsa (legacy re-stamp + multi-TSA threshold); pqef/pqcbom-report (typed allowlist, grade-recompute anti-forgery).
-Negative coverage: `fuzz-robustness.mjs` — 0 fail-open observed across 1,856 adversarial calls (32 verifiers × 58 input classes); verdict verifiers returned no throw across the corpus. Plus `tamper-binding.mjs` (signature coverage, 15 verifiers), `domain-separation.mjs` (0 bare / 25 distinct contexts), `canon-determinism.mjs` (canonicalization consistency).
+Negative coverage: `fuzz-robustness.mjs` — 0 fail-open observed across 3,240 adversarial calls (45 verifiers × 72 input classes); verdict verifiers returned no throw across the corpus. Plus `tamper-binding.mjs` (signature coverage, 15 verifiers), `domain-separation.mjs` (0 bare / 25 distinct contexts), `canon-determinism.mjs` (canonicalization consistency).
 
 ## 7. Known limits / OUT of audit scope to fix (documented, not defects to "find")
 - NOT constant-time; timing/side-channel hardening is a primary audit deliverable.

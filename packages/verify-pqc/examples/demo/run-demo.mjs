@@ -69,7 +69,7 @@ writeFileSync(join(out, 'attestation.json'), JSON.stringify(att, null, 2));
 const trustedSeal = { 'ML-DSA-87': mldsa.publicKey, 'SLH-DSA-256f': slh.publicKey, 'Ed25519': signers[2].publicKey };
 const vattOpts = { trusted: trustedSeal, tsaPubs: [tsaA.publicKey, tsaB.publicKey], logPub: logKp.publicKey, trustedWitnessPubs: [wit1.publicKey, wit2.publicKey] };
 const av = verifyAttest(packBytes, att, vattOpts);
-// 0-DOWNGRADE attack: swap in a DIFFERENT valid timestamp for the same hash -> must FAIL
+// DOWNGRADE-DETECTION: swap in a DIFFERENT valid timestamp for the same hash -> must FAIL (under the §4 trust model)
 const attDown = JSON.parse(JSON.stringify(att));
 attDown.tst = cosignTimestamp(mkTst({ content_sha256: att.artifact_sha256 }, tsaA.secretKey, tsaA.publicKey, { ts: 9999 }), tsaB.secretKey, tsaB.publicKey);
 const avDown = verifyAttest(packBytes, attDown, vattOpts);
@@ -84,7 +84,7 @@ check(!scan.findings.some((f) => f.algo === 'TLS<1.2 / SSL' && f.context === 'co
 check(algos.has('ML-KEM/Kyber') && algos.has('ML-DSA/Dilithium'), 'already-migrated PQ crypto recognized as quantum-safe');
 check(v.verified === true && v.hybrid === true && v.slhValid === true && v.trustAnchored === true, 'Evidence Pack verifies: hybrid (ML-DSA ∧ SLH-DSA), grade recomputed from findings, trust-anchored');
 check(av.verified === true && av.sealTrustAnchored === true && av.signerCount === 2 && av.anchorOk === true && av.witnessCount === 2, 'Full attestation: 3 families AND 2-of-2 PQ timestamp AND RFC-6962 log inclusion AND 2 witness co-signatures');
-check(avDown.verified === false, '0-DOWNGRADE: swapping in a different same-hash timestamp -> attestation FAILS (seal countersigns the timestamp)');
+check(avDown.verified === false, 'DOWNGRADE-DETECTED: swapping in a different same-hash timestamp -> attestation FAILS under the declared trust model (seal countersigns the timestamp)');
 // structural CycloneDX 1.6 conformance (required fields; NOT a full JSON-schema validation)
 check(cbom.bomFormat === 'CycloneDX' && cbom.specVersion === '1.6' && typeof cbom.version === 'number' &&
   Array.isArray(cbom.components) && cbom.components.every((c) => c.type === 'cryptographic-asset' && typeof c.name === 'string'),

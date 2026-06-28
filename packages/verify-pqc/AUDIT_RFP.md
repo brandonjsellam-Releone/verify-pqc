@@ -27,7 +27,7 @@ move named modules toward production.
   cross-context+bare verification rejected. Auditor to CONFIRM the harness is faithful + assess any residual, e.g. the
   Ed25519 hybrid leg whose context is bound into its pre-image rather than a native ctx param.)*
 - Is every signed field actually BOUND (no signed-vs-checked mismatch)? *(We now demonstrate this in `tamper-binding.mjs`:
-  707 assertions, every leaf flipped across 15 signing verifiers incl. the spine + the paid Evidence Pack. Auditor to
+  781 assertions, every leaf flipped across 15 signing verifiers incl. the spine + the paid Evidence Pack. Auditor to
   CONFIRM coverage is complete vs the signed-object inventory + extend to the tracked follow-ups.)*
 - Is the hybrid KEM/signature composition sound (X-Wing-style combiner; AND-composition certs; PQXDH one-time prekeys
   now signed)?
