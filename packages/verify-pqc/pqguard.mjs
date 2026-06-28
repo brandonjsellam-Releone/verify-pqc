@@ -27,6 +27,8 @@ import { bytesToHex, hexToBytes, utf8ToBytes, randomBytes } from '@noble/hashes/
 
 const sha = (s) => bytesToHex(sha256(typeof s === 'string' ? utf8ToBytes(s) : s));
 function canonicalize(v) {
+  if (v === undefined) throw new Error('canonicalize: undefined (fail-closed)');
+  if (typeof v === 'number' && !Number.isFinite(v)) throw new Error('canonicalize: non-finite number (fail-closed)');
   if (v === null || typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string') return JSON.stringify(v);
   if (Array.isArray(v)) return '[' + v.map(canonicalize).join(',') + ']';
   return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canonicalize(v[k])).join(',') + '}';
@@ -69,6 +71,7 @@ export class ToolPolicy {
   // a dual-control call is authorized ONLY with a valid, UNEXPIRED, SINGLE-USE approval bound to the
   // exact (agent, tool, params). opts: { now (epoch), seenNonces (Set, for single-use enforcement) }.
   authorize(agentId, tool, params, approval, approverPubs, opts = {}) {
+   try { // TOTAL (fail-closed): malformed approval/params must DENY cleanly, never throw (DoS)
     const c = this.check(agentId, tool);
     if (!c.allowed) return { authorized: false, reason: c.reason };
     if (!c.requiresApproval) return { authorized: true, reason: 'no dual-control needed' };
@@ -77,12 +80,14 @@ export class ToolPolicy {
     if (approval.agentId !== agentId || approval.tool !== tool || approval.params_sha256 !== pHash)
       return { authorized: false, reason: 'approval does not bind this exact (agent, tool, params)' };
     const now = opts.now ?? 0;
-    if (typeof approval.expiry === 'number' && now > approval.expiry) return { authorized: false, reason: 'approval EXPIRED' };
+    // fail-closed freshness: a missing / non-finite / NaN / numeric-string expiry is NOT a free pass — it expires. (checked BEFORE the signature)
+    if (typeof approval.expiry !== 'number' || !Number.isFinite(approval.expiry) || now > approval.expiry) return { authorized: false, reason: 'approval expiry missing/invalid or EXPIRED' };
     if (opts.seenNonces && opts.seenNonces.has(approval.nonce)) return { authorized: false, reason: 'approval nonce already used — REPLAY rejected' };
     const msg = utf8ToBytes([agentId, tool, approval.params_sha256, approval.nonce, String(approval.expiry)].join('|'));
     const ok = (approverPubs || []).some((pub) => { try { return ml_dsa87.verify(hexToBytes(approval.sig), msg, hexToBytes(pub), { context: APPROVAL_CTX }); } catch { return false; } });
     if (ok && opts.seenNonces) opts.seenNonces.add(approval.nonce); // single-use: burn the nonce
     return { authorized: ok, reason: ok ? 'authorized by valid, unexpired, single-use approval' : 'approval invalid / not from a trusted approver' };
+   } catch { return { authorized: false, reason: 'malformed approval/params' }; }
   }
 }
 // an approver (human via HSM / independent 2nd party) signs ONE dual-control action, bound to the exact
@@ -90,6 +95,7 @@ export class ToolPolicy {
 export function signApproval(agentId, tool, params, approverSecret, opts = {}) {
   const params_sha256 = sha(canonicalize(params || {}));
   const nonce = opts.nonce || bytesToHex(randomBytes(16));
+  if (typeof opts.expiry !== 'number' || !Number.isFinite(opts.expiry)) throw new Error('signApproval: expiry (finite epoch seconds) is mandatory');
   const expiry = opts.expiry; // epoch seconds; caller MUST set (no silent default → no infinite-lived token)
   const msg = utf8ToBytes([agentId, tool, params_sha256, nonce, String(expiry)].join('|'));
   return { agentId, tool, params_sha256, nonce, expiry, sig: bytesToHex(ml_dsa87.sign(msg, approverSecret, { context: APPROVAL_CTX })) };
@@ -159,6 +165,23 @@ function selfTest() {
   const expd = signApproval('ledger', 'broadcast_tx', params, human.secretKey, { nonce: 'n2', expiry: 100 });
   ok(pol.authorize('ledger', 'broadcast_tx', params, expd, [hpub], { now: 200 }).authorized === false, 'EXPIRED approval -> DENIED');
   ok(pol.authorize('ledger', 'broadcast_tx', { to: 'addr', amount: 9999 }, appr, [hpub], { now: 50 }).authorized === false, 'approval bound to different params -> DENIED');
+
+  // REGRESSION BUG 1: a non-number / NaN / numeric-string / missing expiry must EXPIRE (fail-closed), not live forever.
+  for (const badExp of [undefined, NaN, '100', null]) {
+    const forged = { ...appr, nonce: 'nX', expiry: badExp, params_sha256: appr.params_sha256 };
+    ok(pol.authorize('ledger', 'broadcast_tx', params, forged, [hpub], { now: 50 }).authorized === false, 'BUG1: approval with expiry=' + String(badExp) + ' -> DENIED (no infinite-lived token)');
+  }
+  let mustThrow = false; try { signApproval('ledger', 'broadcast_tx', params, human.secretKey, { nonce: 'n9' }); } catch { mustThrow = true; }
+  ok(mustThrow, 'BUG1: signApproval without a finite expiry -> THROWS (expiry mandatory)');
+
+  // REGRESSION BUG 2: canonicalize must NOT let NaN/Infinity collide with null (an approval for {amount:null} must not authorize {amount:NaN}).
+  const apprNull = signApproval('ledger', 'broadcast_tx', { to: 'addr', amount: null }, human.secretKey, { nonce: 'nNull', expiry: 100 });
+  ok(pol.authorize('ledger', 'broadcast_tx', { to: 'addr', amount: NaN }, apprNull, [hpub], { now: 50 }).authorized === false, 'BUG2: approval for amount:null does NOT authorize amount:NaN (canonicalize fail-closed)');
+
+  // REGRESSION BUG 3: authorize is TOTAL — malformed params (undefined-valued key) DENY cleanly, never throw.
+  let bug3Threw = false, bug3Res;
+  try { bug3Res = pol.authorize('ledger', 'broadcast_tx', { to: undefined }, appr, [hpub], { now: 50 }); } catch { bug3Threw = true; }
+  ok(!bug3Threw && bug3Res && bug3Res.authorized === false, 'BUG3: malformed params (undefined value) -> clean DENY, no throw');
 
   // 3. audit log
   const log = new AuditLog();

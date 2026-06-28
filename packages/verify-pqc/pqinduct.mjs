@@ -135,6 +135,8 @@ export function manifestId(m) { return sha(manifestCore(m)); }
 
 // verify with PINNED trusted order keys (out-of-band) — fail-closed: BOTH signatures + artifact binding must hold.
 export function verifyManifest(m, trustedOrderMldsaPub, trustedOrderSlhPub, opts = {}) {
+ try { // TOTAL (fail-closed): a malformed/non-hex manifest must DENY cleanly, never throw (DoS)
+  if (!m || typeof m !== 'object') return { verified: false, keysPinned: false, artifactsBound: false, mldsaOk: false, slhOk: false, idOk: false, reason: 'malformed manifest' };
   const keysPinned = m.order_mldsa_pub_sha256 === sha(trustedOrderMldsaPub) && m.order_slh_pub_sha256 === sha(trustedOrderSlhPub);
   const artifactsBound = m.cover_sha256 === sha(hexToBytes(m.cover_hex)) && m.cipher_sha256 === sha(hexToBytes(m.cipher_hex));
   const core = manifestCore(m);
@@ -144,6 +146,7 @@ export function verifyManifest(m, trustedOrderMldsaPub, trustedOrderSlhPub, opts
   const idOk = !opts.expectedManifestId || sha(core) === opts.expectedManifestId; // anti-equivocation pin
   const verified = keysPinned && artifactsBound && mldsaOk && slhOk && idOk;
   return { verified, keysPinned, artifactsBound, mldsaOk, slhOk, idOk, reason: verified ? 'manifest verified (dual-signed, artifacts bound, keys pinned)' : !keysPinned ? 'order keys not pinned' : !artifactsBound ? 'puzzle artifacts do not match signed hashes' : !idOk ? 'manifest id != the publicly-committed cycle manifest (possible equivocation)' : !mldsaOk ? 'ML-DSA signature invalid' : 'SLH-DSA diversity signature invalid (fail-closed)' };
+ } catch { return { verified: false, keysPinned: false, artifactsBound: false, mldsaOk: false, slhOk: false, idOk: false, reason: 'malformed manifest' }; }
 }
 
 /* ---------- Layer 1 reference solver (proves the puzzle is solvable) ---------- */
@@ -168,6 +171,7 @@ export function solverProve({ cycleId, recovered, solverId, solverKey, opts = {}
 }
 // the Order verifies a submission against the cycle's TRUE nonce + TRUE cipher key (known only to the Order until solved)
 export function verifySubmission({ submission, cycleId, trueNonce, trueCipherKeyHex }) {
+ try { // TOTAL (fail-closed): a malformed/non-hex submission must DENY cleanly, never throw (DoS)
   const c = submission.challenge;
   const cycleOk = c.cycle === cycleId;
   const nonceOk = c.nonce === trueNonce;            // proves the puzzle was solved (public once shared)
@@ -179,6 +183,7 @@ export function verifySubmission({ submission, cycleId, trueNonce, trueCipherKey
   try { sigOk = ml_dsa87.verify(hexToBytes(submission.sig_hex), utf8ToBytes(canonicalize(c)), hexToBytes(submission.pk_hex), { context: INNER_CTX }); } catch { sigOk = false; }
   const valid = cycleOk && nonceOk && pkBound && solutionOk && sigOk;
   return { valid, cycleOk, nonceOk, pkBound, solutionOk, sigOk, reason: valid ? 'submission valid (solution possessed + bound to solver key + PQ competence)' : !cycleOk ? 'wrong cycle' : !nonceOk ? 'nonce not recovered — puzzle not solved' : !solutionOk ? 'solution secret not possessed / not bound to this key (a shared nonce alone is insufficient)' : !pkBound ? 'challenge does not bind the submitted key' : 'inner-ring signature invalid' };
+ } catch { return { valid: false, cycleOk: false, nonceOk: false, pkBound: false, solutionOk: false, sigOk: false, reason: 'malformed submission' }; }
 }
 
 /* ---------- Layer 3: transparency-log inclusion (uses the pqsign log) ---------- */
@@ -232,6 +237,7 @@ const credCoreOf = (c) => ({ v: c.v, kind: c.kind, soulbound: c.soulbound, trans
 // verify with the PINNED order key; verifies the carried Merkle inclusion against the credential's sth_root;
 // optionally require >=minWitnesses trusted witnesses + bind to a known/witnessed STH root (opts.expectedSthRoot).
 export function verifyCredential(cred, trustedOrderPub, opts = {}) {
+ try { // TOTAL (fuzz): a malformed credential (non-hex / undefined signed-core field) fails CLOSED, never throws
   const core = utf8ToBytes(canonicalize(credCoreOf(cred)));
   const trustedW = (opts.trustedWitnesses || []).map((h) => h.toLowerCase());
   let orderOk = false; const witnessSet = new Set();
@@ -261,6 +267,7 @@ export function verifyCredential(cred, trustedOrderPub, opts = {}) {
   const verified = orderOk && soulboundOk && econOk && rootOk && inclusionOk && witnessSet.size >= minW;
   return { verified, orderOk, soulboundOk, econOk, rootOk, inclusionOk, inclusionPresent, witness_count: witnessSet.size, witnessed, assurance: witnessed ? 'witnessed-record' : 'order-signed',
     reason: verified ? 'credential verified (order-signed, soulbound, economic-firewall, log-inclusion proven)' : !orderOk ? 'no valid signature from the pinned Order key' : !soulboundOk ? 'credential is not soulbound/non-transferable' : !econOk ? 'credential missing the non-security/no-economic-access firewall' : !rootOk ? 'credential not bound to the expected log root' : !inclusionOk ? 'Merkle inclusion proof does not verify against the credential STH root' : 'insufficient witness co-signatures' };
+ } catch { return { verified: false, orderOk: false, soulboundOk: false, econOk: false, rootOk: false, inclusionOk: false, inclusionPresent: false, witness_count: 0, witnessed: false, assurance: 'order-signed', reason: 'malformed credential' }; }
 }
 
 /* ---------- self-test: node pqinduct.mjs ---------- */

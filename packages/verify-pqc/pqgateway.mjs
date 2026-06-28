@@ -25,7 +25,7 @@ import { bytesToHex, hexToBytes, utf8ToBytes, randomBytes } from '@noble/hashes/
 
 const OFFER_CTX = utf8ToBytes('trelyan-gateway-offer-v1');
 const ATT_CTX = utf8ToBytes('trelyan-gateway-session-v1');
-function canon(v) {
+export function canon(v) {
   if (v === null || typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string') return JSON.stringify(v);
   if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
   return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}';
@@ -112,6 +112,9 @@ export function acceptSession(att, trustedGatewayPub, policy = {}) {
  try { // TOTAL (fuzz): throwing getter/Proxy/BigInt field fails CLOSED, never DoS
   const v = verifySession(att, trustedGatewayPub, { expectedTranscript: policy.expectedTranscript, now: policy.now, maxAgeMs: policy.maxAgeMs });
   if (!v.verified) return { accept: false, reason: v.freshOk === false ? 'attestation STALE (outside the freshness window) — replay suspected' : v.transcriptOk === false ? 'attestation not bound to the verifier transcript (possible lying gateway)' : 'attestation invalid / not from the pinned gateway' };
+  // "binding required" must NOT be satisfiable by mere presence of att.transcript_sha256: the verifier must supply
+  // its OWN expectedTranscript to actually bind (otherwise a lying gateway's self-asserted hash passes the gate).
+  if ((policy.requireTranscriptBinding ?? false) && (typeof policy.expectedTranscript !== 'string' || !policy.expectedTranscript)) return { accept: false, reason: 'transcript binding required but no expectedTranscript supplied' };
   if ((policy.requireTranscriptBinding ?? false) && !att.transcript_sha256) return { accept: false, reason: 'no transcript binding (signed-claim only, not proof)' };
   if ((policy.requirePQ ?? true) && !att.pq) return { accept: false, reason: 'session was not post-quantum (classical/fallback)' };
   if (policy.noFallback && att.fallback) return { accept: false, reason: 'session used a downgrade/fallback' };
