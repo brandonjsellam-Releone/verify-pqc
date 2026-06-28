@@ -22,7 +22,15 @@
  * OID, not by algorithm name). v0.5 ADDS: ENCODED-BLOB detection — decodes base64/PEM key+cert blobs and identifies the
  * algorithm by its DER OID (closes the "encoded-blob" blind spot; FP-safe — only a DER-anchored crypto OID counts).
  * v0.6 ADDS: standard fused ASN.1 algorithm identifiers (rsaEncryption/ecPublicKey/sha256WithRSA/ecdsa-with-sha* —
- * closes the "substring" blind spot for known names; bare "rsa"/"ec" in arbitrary words still don't trip). Self-test: node pqcbom.mjs
+ * closes the "substring" blind spot for known names; bare "rsa"/"ec" in arbitrary words still don't trip).
+ * v0.7 ADDS: a COMPOUND / glued-identifier layer driven by a cross-ecosystem corpus (node/java/python/go/config/dotnet/
+ * php-ruby, test-fixtures/structural-corpus.json) — compound cipher-suite constants (RC4_128, TLS_ECDHE_RSA_WITH_3DES),
+ * OpenSSL/JCA transform strings (des-ede3-cbc, DESede, PBEWithMD5AndDES), .NET provider classes (*CryptoServiceProvider/
+ * *Managed), library spellings (ARCFOUR, DES3, nistP256, elliptic.P224), OpenSSL verbs (gendsa/dsaparam), JWT
+ * algorithm:'none', PHP openssl_public/private_*, and DES-by-OID. Each is a SPECIFIC compound token (not a bare algo
+ * word) so the FP guards stand; coverage 57/60 = 95% of statically-detectable corpus cases (the residual 3 need
+ * constant-folding/data-flow — runtime string-concat + cross-line key-size binding — and stay honest blind spots,
+ * alongside the 12 runtime/config-selected cases). Coverage harness: node structural-corpus.mjs. Self-test: node pqcbom.mjs
  */
 const RULES = [
   // classically broken (a bug regardless of quantum)
@@ -88,7 +96,38 @@ const RULES = [
   { re: /(?<![\d.])1\.3\.14\.3\.2\.26(?![\d.])/, algo: 'SHA-1 (OID)', family: 'hash', risk: 'broken-classical', rec: 'SHA-1 by OID — REMOVE (collision-broken)' },
   // --- v0.6: STANDARD fused ASN.1/OID-friendly algorithm identifiers (closes the "substring" blind spot for KNOWN names —
   //     these are specific compound tokens, NOT bare "rsa"/"ec" in arbitrary words, so the word-boundary FP guards stand) ---
-  { re: /\b(rsaEncryption|ecPublicKey|ecdsa[-_]?with[-_]?sha\d+|sha\d{2,3}with(rsa|ecdsa|dsa)\w*)/i, algo: 'RSA/EC ASN.1 identifier (fused)', family: 'pubkey', risk: 'quantum-broken', rec: 'standard ASN.1 algorithm name (fused token) — RSA/EC is Shor-broken; migrate to ML-KEM/ML-DSA' },
+  { re: /\b(rsaEncryption|ecPublicKey|ecdsa[-_]?with[-_]?sha\d+|sha-?\d{1,3}with(rsa|ecdsa|dsa)\w*)/i, algo: 'RSA/EC ASN.1 identifier (fused)', family: 'pubkey', risk: 'quantum-broken', rec: 'standard ASN.1 algorithm name (fused token) — RSA/EC is Shor-broken; migrate to ML-KEM/ML-DSA' }, // v0.7: \d{2,3}->{1,3} so SHA1withRSA's RSA leg is caught
+  { re: /(?<![\d.])1\.3\.14\.3\.2\.7(?![\d.])/, algo: '3DES/DES', family: 'cipher', risk: 'broken-classical', rec: 'DES-CBC by OID (1.3.14.3.2.7) — REMOVE; use AES-256-GCM' }, // v0.7: DES by OID (.NET CryptoConfig.CreateFromName)
+  { re: /(?<![\d.])1\.2\.840\.113549\.1\.1\.5(?![\d.])/, algo: 'RSA-SHA1 sig (OID)', family: 'signature', risk: 'quantum-broken', rec: 'sha1WithRSAEncryption by OID — RSA Shor-broken + SHA-1 collision-broken; plan ML-DSA-87' }, // v0.7
+  // --- v0.7: COMPOUND / glued algorithm identifiers (corpus-driven, test-fixtures/structural-corpus.json). Real code
+  //     names crypto inside compound cipher-suite constants, OpenSSL/JCA transform strings, .NET provider classes, and
+  //     library spellings the word-boundary rules above deliberately skip. Each pattern is a SPECIFIC compound token
+  //     (NOT a bare algo word), so the FP guards stand. Same {algo} labels -> findings MERGE. Coverage: structural-corpus.mjs ---
+  { re: /\bDES3\b/i, algo: '3DES/DES', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM' }, // pycryptodome Crypto.Cipher.DES3
+  { re: /\b(ARCFOUR|ARC4)\b/i, algo: 'RC4', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM / ChaCha20-Poly1305' }, // SunJCE / pycryptodome RC4 alias
+  { re: /\bRC4[-_]\d/i, algo: 'RC4', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM / ChaCha20-Poly1305' }, // TLS suite RC4_128
+  { re: /\bRC2[-_/](CBC|ECB|CFB|OFB)\b|\bRC2CryptoServiceProvider\b|(Create|CreateFromName)\(\s*["']RC2["']/i, algo: 'RC2', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE — 64-bit legacy cipher; use AES-256-GCM' }, // crypto-context only (bare RC2 = release-candidate FP)
+  { re: /\bbf-(cbc|ecb|cfb|ofb)\b/i, algo: 'Blowfish/CAST5', family: 'cipher', risk: 'broken-classical', rec: 'legacy 64-bit-block cipher (Sweet32) — REMOVE; use AES-256-GCM' }, // OpenSSL Blowfish names
+  { re: /\bsha-?1with/i, algo: 'SHA-1', family: 'hash', risk: 'broken-classical', rec: 'REMOVE — collision-broken; use SHA-512 / SHA3-512' }, // SHA1withRSA / SHA1WithRSA / sha1WithRSAEncryption (hash leg)
+  { re: /\b(gendsa|dsaparam)\b/i, algo: 'DSA', family: 'signature', risk: 'quantum-broken', rec: 'migrate to ML-DSA-87 / SLH-DSA' }, // OpenSSL DSA subcommands
+  { re: /\bnistp(192|224|256|384|521)\b|\.P(192|224|256|384|521)\(/i, algo: 'EC curve', family: 'pubkey', risk: 'quantum-broken', rec: 'EC curve is Shor-broken; move to ML-KEM/ML-DSA (hybrid)' }, // nistP256 (.NET), elliptic.P224() (Go)
+  { re: /\bVersionTLS1[01]\b/i, algo: 'TLS<1.2 / SSL', family: 'protocol', risk: 'broken-classical', rec: 'REMOVE deprecated TLS/SSL; require TLS 1.2+ (1.3 preferred)' }, // Go tls.VersionTLS10/11
+  // .NET provider classes (algorithm fused into the class name; bare-token \b guards miss the glued suffix)
+  { re: /\bMD5(CryptoServiceProvider|Managed)\b/i, algo: 'MD5', family: 'hash', risk: 'broken-classical', rec: 'REMOVE — collision-broken; use SHA-512 / SHA3-512' },
+  { re: /\bSHA-?1(CryptoServiceProvider|Managed)\b/i, algo: 'SHA-1', family: 'hash', risk: 'broken-classical', rec: 'REMOVE — collision-broken; use SHA-512 / SHA3-512' },
+  { re: /\bSHA-?(256|384)(CryptoServiceProvider|Managed)\b/i, algo: 'SHA-256/384', family: 'hash', risk: 'quantum-weakened', rec: 'use SHA-512 / SHA3-512 for >=256-bit quantum security' },
+  { re: /\b(RSACryptoServiceProvider|RSACng|GetRSA(Private|Public)Key)\b/i, algo: 'RSA', family: 'pubkey', risk: 'quantum-broken', rec: 'migrate KEM->ML-KEM-1024, sig->ML-DSA-87 (hybrid during transition)' },
+  { re: /\bDSA(CryptoServiceProvider|Cng)\b/i, algo: 'DSA', family: 'signature', risk: 'quantum-broken', rec: 'migrate to ML-DSA-87 / SLH-DSA' },
+  { re: /\bDESCryptoServiceProvider\b/i, algo: '3DES/DES', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM' }, // TripleDESCryptoServiceProvider already caught by the Triple-?DES rule
+  // TLS cipher-suite CONSTANT identifiers (Go/Java) — underscore-joined, so \b-bounded rules miss the inner algo tokens
+  { re: /\bTLS_[A-Z0-9_]*RC4[A-Z0-9_]*\b/, algo: 'RC4', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM / ChaCha20-Poly1305' },
+  { re: /\bTLS_[A-Z0-9_]*(3DES|DES_EDE)[A-Z0-9_]*\b/, algo: '3DES/DES', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM' },
+  { re: /\bTLS_[A-Z0-9_]*_RSA[_A-Z0-9]*\b/, algo: 'RSA', family: 'pubkey', risk: 'quantum-broken', rec: 'RSA in a TLS cipher-suite — Shor-broken; plan ML-KEM/ML-DSA (hybrid)' },
+  { re: /\bTLS_ECDHE?_[A-Z0-9_]*\b/, algo: 'ECDH', family: 'kem', risk: 'quantum-broken', rec: 'ECDHE in a TLS cipher-suite — Shor-broken; migrate to ML-KEM-1024 (+ X25519 hybrid)' },
+  { re: /\balgorithm\s*[:=]\s*["']none["']/i, algo: 'JWT alg=none', family: 'token', risk: 'broken-classical', rec: 'CRITICAL — unsigned JWT; never accept alg:none' }, // \b before 'algorithm' excludes compression_algorithm etc.
+  { re: /\bPBE[-_]?With\w*MD5/i, algo: 'MD5', family: 'hash', risk: 'broken-classical', rec: 'PBEWithMD5* (PBKDF1/MD5) — REMOVE; use PBKDF2/scrypt/Argon2 with SHA-256+' }, // JCA PBE name
+  { re: /\bPBE[-_]?With\w*DES\b/i, algo: '3DES/DES', family: 'cipher', risk: 'broken-classical', rec: 'PBEWith*AndDES — DES-based PBE; REMOVE; use AES-256-GCM' }, // JCA PBE name
+  { re: /\bopenssl_(public|private)_(encrypt|decrypt)\b/i, algo: 'RSA', family: 'pubkey', risk: 'quantum-broken', rec: 'PHP openssl_public/private_* is RSA — Shor-broken; migrate KEM->ML-KEM-1024, sig->ML-DSA-87 (hybrid)' },
 ];
 const RISK_ORDER = ['broken-classical', 'quantum-broken', 'quantum-weakened', 'classical-hybrid-ok', 'quantum-safe'];
 
@@ -470,6 +509,24 @@ function selfTest() {
   ok(algos('const k = rsaEncryption(2048);').has('RSA/EC ASN.1 identifier (fused)'), 'fused "rsaEncryption" identifier detected');
   ok(algos('sigAlg: sha256WithRSAEncryption').has('RSA/EC ASN.1 identifier (fused)') && algos('alg = ecPublicKey').has('RSA/EC ASN.1 identifier (fused)'), 'sha256WithRSAEncryption + ecPublicKey detected');
   ok(scanText('w.md', 'an rsannouncement about ecology and a description').length === 0, 'v0.6 FP guard: bare "rsa"/"ec"/"des" inside ordinary words do NOT trip');
+
+  // --- v0.7: compound / glued algorithm identifiers (corpus-driven; test-fixtures/structural-corpus.json) ---
+  ok(algos("crypto.createCipheriv('des-ede3-cbc', k, iv)").has('3DES/DES'), 'compound des-ede3-cbc -> 3DES');
+  ok(algos('Crypto.Cipher.DES3.new(k)').has('3DES/DES'), 'DES3 -> 3DES');
+  ok(algos('Cipher.getInstance("ARCFOUR")').has('RC4') && algos('cipher RC4_128 suite').has('RC4'), 'ARCFOUR + RC4_128 -> RC4');
+  ok(algos('Signature.getInstance("SHA1withRSA")').has('SHA-1') && algos('Signature.getInstance("SHA1withRSA")').has('RSA/EC ASN.1 identifier (fused)'), 'SHA1withRSA -> SHA-1 (hash leg) + RSA (sig leg)');
+  ok(algos('ECCurve.CreateFromFriendlyName("nistP256")').has('EC curve') && algos('elliptic.P224()').has('EC curve'), 'nistP256 + elliptic.P224() -> EC curve');
+  ok(algos('new RSACryptoServiceProvider(2048)').has('RSA') && algos('using var h = new MD5CryptoServiceProvider()').has('MD5'), '.NET CSP classes -> RSA / MD5');
+  ok(algos('SecretKeyFactory.getInstance("PBEWithMD5AndDES")').has('MD5') && algos('SecretKeyFactory.getInstance("PBEWithMD5AndDES")').has('3DES/DES'), 'PBEWithMD5AndDES -> MD5 + DES');
+  ok(algos('openssl_public_encrypt($msg, $out, $pub)').has('RSA'), 'PHP openssl_public_encrypt -> RSA');
+  ok(algos("opts.algorithm = 'none'").has('JWT alg=none'), "algorithm = 'none' -> JWT alg=none");
+  ok(algos('Ciphers aes128-cbc,3des-cbc').has('3DES/DES') && algos('openssl enc -des-ede3-cbc -salt').has('3DES/DES'), 'config 3des-cbc / -des-ede3-cbc -> 3DES');
+  ok(algos('openssl gendsa -out ca.key dsaparam.pem').has('DSA'), 'gendsa/dsaparam -> DSA');
+  ok(algos('forge.cipher.createCipher("DES-CBC")').has('3DES/DES') && algos('var a = SymmetricAlgorithm.Create("RC2")').has('RC2'), 'DES-CBC + Create("RC2") -> 3DES/DES, RC2');
+  // v0.7 FP guards — compound rules must NOT trip on benign tokens
+  ok(scanText('rel.md', 'shipping build v2.0-RC2 and v1.9-RC2 today').filter((f) => f.algo === 'RC2').length === 0, 'v0.7 FP guard: release-candidate RC2 NOT flagged (crypto-context RC2 only)');
+  ok(scanText('cfg.yml', "compression_algorithm: 'none'").filter((f) => f.algo === 'JWT alg=none').length === 0, 'v0.7 FP guard: compression_algorithm:none is NOT JWT alg=none (\\b excludes _algorithm)');
+  ok(scanText('p.txt', 'sensor model P256 rev DES3000-A AES1000 board').filter((f) => /EC curve|3DES|RC4|RC2/.test(f.algo)).length === 0, 'v0.7 FP guard: bare P256 / DES3000 / AES1000 part numbers do NOT trip');
 
   // --- suppression: inline `pqcbom-ignore` + allowlist (adoption escape hatch) ---
   const inlIgnore = scanFiles([{ name: 'a.js', text: 'const k = RSA.gen(2048); // pqcbom-ignore: accepted legacy' }]);

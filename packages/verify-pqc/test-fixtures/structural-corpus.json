@@ -1,0 +1,1250 @@
+[
+  {
+    "ecosystem": "node-crypto",
+    "id": "createcipheriv-des-ede3-string-arg",
+    "language": "javascript",
+    "snippet": "const crypto = require('crypto');\nfunction encryptLegacyToken(plain, key, iv) {\n  const cipher = crypto.createCipheriv('des-ede3-cbc', key, iv);\n  let out = cipher.update(plain, 'utf8', 'base64');\n  out += cipher.final('base64');\n  return out;\n}",
+    "expected": [
+      {
+        "algo": "3DES",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "string-arg",
+    "detectable_statically": true,
+    "why_lexical_misses": "The algorithm lives only inside the compound OpenSSL cipher string 'des-ede3-cbc'; a \\bDES\\b or DES(?![\\w-]) guard never fires because 'des' is glued to '-ede3-cbc' and '3DES'/'TripleDES' tokens never literally appear."
+  },
+  {
+    "ecosystem": "node-crypto",
+    "id": "createhash-sha1-via-alias",
+    "language": "javascript",
+    "snippet": "import { createHash as digestWith } from 'node:crypto';\nexport function fingerprintBlob(buf) {\n  // legacy content-addressing kept for backwards compat\n  return digestWith('sha1').update(buf).digest('hex');\n}",
+    "expected": [
+      {
+        "algo": "SHA-1",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "alias",
+    "detectable_statically": true,
+    "why_lexical_misses": "createHash is import-renamed to digestWith, so a scanner keyed on the createHash call name finds nothing; the algorithm 'sha1' is only a quoted string arg and word-boundary \\bSHA1\\b can match but the call-context (a hash) is invisible to a bare-token pass, yielding no actionable finding."
+  },
+  {
+    "ecosystem": "node-crypto",
+    "id": "createcipheriv-rc4-alias-require",
+    "language": "javascript",
+    "snippet": "const c = require('crypto');\nconst LEGACY = 'rc' + '4';\nfunction wrap(key, data) {\n  const enc = c.createCipheriv(LEGACY, key, Buffer.alloc(0));\n  return Buffer.concat([enc.update(data), enc.final()]);\n}",
+    "expected": [
+      {
+        "algo": "RC4",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "alias",
+    "detectable_statically": false,
+    "why_lexical_misses": "crypto is bound to local `c`, and the algorithm name is assembled at runtime as 'rc' + '4', so the literal token RC4 never appears in source for \\bRC4\\b to match; only constant-folding the concatenation reveals it."
+  },
+  {
+    "ecosystem": "node-crypto",
+    "id": "user-wrapper-md5-definition-and-call",
+    "language": "javascript",
+    "snippet": "const { createHash } = require('crypto');\nfunction quickDigest(input) {\n  return createHash('md5').update(input).digest('hex');\n}\n// ... elsewhere in the file/module ...\nconst etag = quickDigest(JSON.stringify(payload));",
+    "expected": [
+      {
+        "algo": "MD5",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "wrapper",
+    "detectable_statically": true,
+    "why_lexical_misses": "The call site `quickDigest(...)` contains no crypto token at all; only a two-pass scan that links the call to the user-defined quickDigest body finds the 'md5' string. A lexical pass would flag the definition's 'md5' but cannot attribute the etag call site to a weak hash."
+  },
+  {
+    "ecosystem": "node-crypto",
+    "id": "jwt-sign-hs256-then-none",
+    "language": "javascript",
+    "snippet": "const jwt = require('jsonwebtoken');\nfunction issue(claims, secret) {\n  const opts = { algorithm: 'HS256', expiresIn: '1h' };\n  if (process.env.DEV_BYPASS) opts.algorithm = 'none';\n  return jwt.sign(claims, secret, opts);\n}",
+    "expected": [
+      {
+        "algo": "HMAC-SHA256",
+        "risk": "quantum-safe"
+      },
+      {
+        "algo": "none (unsigned JWT)",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "string-arg",
+    "detectable_statically": true,
+    "why_lexical_misses": "The signing algorithm is a quoted property value ('HS256'/'none') on an options object passed to jwt.sign, not a recognizable crypto-primitive token; \\bRSA\\b/\\bMD5\\b style matchers have no entry for 'HS256' or the catastrophic alg:'none', and a regex sees only opaque strings."
+  },
+  {
+    "ecosystem": "node-crypto",
+    "id": "createsign-rsa-sha1-method-chain",
+    "language": "javascript",
+    "snippet": "const crypto = require('crypto');\nconst signer = crypto.createSign('RSA-SHA1');\nsigner.update(canonicalRequest);\nsigner.end();\nconst sig = signer.sign(privatePem, 'base64');",
+    "expected": [
+      {
+        "algo": "RSA",
+        "risk": "quantum-broken"
+      },
+      {
+        "algo": "SHA-1",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "method-chain",
+    "detectable_statically": true,
+    "why_lexical_misses": "RSA and SHA1 are fused inside one OpenSSL digest-name string 'RSA-SHA1'; \\bRSA\\b can be tripped by the substring but \\bSHA1\\b is glued after a hyphen, and the scanner cannot tell this is an asymmetric signature (quantum-broken) versus an incidental mention without parsing the createSign chain."
+  },
+  {
+    "ecosystem": "node-crypto",
+    "id": "webcrypto-ecdsa-p256-object-arg",
+    "language": "javascript",
+    "snippet": "async function signPayload(privateKey, data) {\n  return crypto.subtle.sign(\n    { name: 'ECDSA', hash: { name: 'SHA-256' } },\n    privateKey,\n    new TextEncoder().encode(data)\n  );\n}",
+    "expected": [
+      {
+        "algo": "ECDSA",
+        "risk": "quantum-broken"
+      },
+      {
+        "algo": "SHA-256",
+        "risk": "quantum-safe"
+      }
+    ],
+    "pattern_class": "string-arg",
+    "detectable_statically": true,
+    "why_lexical_misses": "The WebCrypto algorithm is specified as a nested object literal { name:'ECDSA', hash:{ name:'SHA-256' } }; the curve/primitive is a JSON-like value, and ECDSA is not in a typical \\bRSA\\b|\\bDES\\b|\\bMD5\\b token list, so a bare-token scanner produces no quantum-broken finding for the signature."
+  },
+  {
+    "ecosystem": "node-crypto",
+    "id": "createcipheriv-aes-128-ecb-string-arg",
+    "language": "javascript",
+    "snippet": "const crypto = require('crypto');\nfunction sealField(value, key) {\n  // no IV needed for this 'simple' mode\n  const cipher = crypto.createCipheriv('aes-128-ecb', key, null);\n  return cipher.update(value, 'utf8', 'hex') + cipher.final('hex');\n}",
+    "expected": [
+      {
+        "algo": "AES-128-ECB",
+        "risk": "classical-hybrid-ok"
+      }
+    ],
+    "pattern_class": "string-arg",
+    "detectable_statically": true,
+    "why_lexical_misses": "The weakness is the ECB mode of operation encoded inside 'aes-128-ecb'; a token list of broken ALGORITHMS (RSA/DES/MD5/RC4) has no entry for an insecure MODE, so the ECB usage (deterministic, leaks plaintext patterns) is invisible without parsing the cipher-spec string."
+  },
+  {
+    "ecosystem": "node-crypto",
+    "id": "node-forge-factory-name-des",
+    "language": "javascript",
+    "snippet": "const forge = require('node-forge');\nfunction legacyCipher(keyBytes) {\n  // node-forge selects the algorithm by factory name string\n  const cipher = forge.cipher.createCipher('DES-CBC', keyBytes);\n  cipher.start({ iv: forge.random.getBytesSync(8) });\n  return cipher;\n}",
+    "expected": [
+      {
+        "algo": "DES",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "factory-name",
+    "detectable_statically": true,
+    "why_lexical_misses": "'DES-CBC' is a node-forge factory name string; a DES(?![\\w-]) guard is defeated by the trailing '-CBC', and a scanner unaware of forge.cipher.createCipher cannot tell this string selects single-DES (56-bit, broken) rather than naming an unrelated constant."
+  },
+  {
+    "ecosystem": "node-crypto",
+    "id": "runtime-config-cipher-from-env",
+    "language": "javascript",
+    "snippet": "const crypto = require('crypto');\nconst ALGO = process.env.FIELD_CIPHER || config.get('crypto.cipher');\nfunction encryptField(key, iv, pt) {\n  const cipher = crypto.createCipheriv(ALGO, key, iv);\n  return Buffer.concat([cipher.update(pt), cipher.final()]);\n}",
+    "expected": [
+      {
+        "algo": "unknown (runtime-selected)",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "runtime-config",
+    "detectable_statically": false,
+    "why_lexical_misses": "The cipher name is read from an env var / config object at runtime, so no algorithm literal exists in source for any regex (or even constant-folding) to match; the actual algorithm — possibly 'des-cbc' or 'rc4' in deployment — is only knowable from runtime configuration, the genuine blind spot."
+  },
+  {
+    "ecosystem": "node-crypto",
+    "id": "createhmac-md5-alias-chain",
+    "language": "javascript",
+    "snippet": "const { createHmac } = require('node:crypto');\nconst mac = (k, m) => createHmac('md5', k).update(m).digest('hex');\nmodule.exports.signWebhook = (body) => mac(process.env.WH_KEY, body);",
+    "expected": [
+      {
+        "algo": "HMAC-MD5",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "wrapper",
+    "detectable_statically": true,
+    "why_lexical_misses": "The exported signWebhook call shows no crypto token; resolving it requires linking through the arrow-function `mac` to the createHmac('md5', ...) body. A lexical pass might flag 'md5' but would mislabel it as a plain hash and never reach the webhook-signing call site that actually depends on the weak MAC."
+  },
+  {
+    "ecosystem": "java-jca",
+    "id": "cipher-getinstance-des-cbc-transform",
+    "language": "java",
+    "snippet": "public byte[] legacyEncrypt(byte[] key, byte[] data) throws Exception {\n    SecretKeySpec sk = new SecretKeySpec(key, \"DES\");\n    Cipher cipher = Cipher.getInstance(\"DES/CBC/PKCS5Padding\");\n    cipher.init(Cipher.ENCRYPT_MODE, sk, new IvParameterSpec(new byte[8]));\n    return cipher.doFinal(data);\n}",
+    "expected": [
+      {
+        "algo": "DES",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "string-arg",
+    "detectable_statically": true,
+    "why_lexical_misses": "Algorithm is the leading token of the compound transformation string \"DES/CBC/PKCS5Padding\"; a \\bDES\\b scanner that excludes slash-joined or transformation strings (or a DES(?![\\w/]) guard) skips it, and the SecretKeySpec \"DES\" is also string-only."
+  },
+  {
+    "ecosystem": "java-jca",
+    "id": "messagedigest-getinstance-desede-3des",
+    "language": "java",
+    "snippet": "Cipher c = Cipher.getInstance(\"DESede/ECB/NoPadding\");\nKeyGenerator kg = KeyGenerator.getInstance(\"DESede\");\nkg.init(168);\nSecretKey k = kg.generateKey();\nc.init(Cipher.ENCRYPT_MODE, k);\nbyte[] out = c.doFinal(block);",
+    "expected": [
+      {
+        "algo": "3DES",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "string-arg",
+    "detectable_statically": true,
+    "why_lexical_misses": "3DES is spelled \"DESede\" in JCA, never the tokens \"3DES\"/\"TripleDES\"; a scanner keyed on \\b3DES\\b or \\bDES\\b with word boundaries misses it because \"DESede\" contains no standalone DES token (the 'e' defeats the right boundary)."
+  },
+  {
+    "ecosystem": "java-jca",
+    "id": "signature-getinstance-sha1withrsa",
+    "language": "java",
+    "snippet": "Signature sig = Signature.getInstance(\"SHA1withRSA\");\nsig.initSign(privateKey);\nsig.update(message);\nbyte[] signature = sig.sign();\nstoreSignature(signature);",
+    "expected": [
+      {
+        "algo": "RSA",
+        "risk": "quantum-broken"
+      },
+      {
+        "algo": "SHA-1",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "factory-name",
+    "detectable_statically": true,
+    "why_lexical_misses": "Both primitives are fused inside one camelCase string \"SHA1withRSA\": there is no \\bSHA1\\b (it is glued to 'withRSA' with no boundary) and no \\bRSA\\b (preceded by 'with' with no boundary). A bare-token regex matching whole words finds neither."
+  },
+  {
+    "ecosystem": "java-jca",
+    "id": "keypairgenerator-getinstance-ec-ecdsa",
+    "language": "java",
+    "snippet": "KeyPairGenerator kpg = KeyPairGenerator.getInstance(\"EC\");\nkpg.initialize(new ECGenParameterSpec(\"secp256r1\"));\nKeyPair kp = kpg.generateKeyPair();\nSignature s = Signature.getInstance(\"SHA256withECDSA\");\ns.initSign(kp.getPrivate());",
+    "expected": [
+      {
+        "algo": "ECDSA",
+        "risk": "quantum-broken"
+      }
+    ],
+    "pattern_class": "factory-name",
+    "detectable_statically": true,
+    "why_lexical_misses": "The key type is the two-letter string \"EC\" (which \\bEC\\b would match only with EC-specific rules, and most scanners do not list bare \"EC\"), and the curve is hidden in \"secp256r1\"; the signing algorithm ECDSA is glued inside \"SHA256withECDSA\", so neither curve nor algorithm surfaces as a listed bare token."
+  },
+  {
+    "ecosystem": "java-jca",
+    "id": "alias-messagedigest-md5-var",
+    "language": "java",
+    "snippet": "String digestAlg = \"MD\" + \"5\";\nMessageDigest md = MessageDigest.getInstance(digestAlg);\nmd.update(salt);\nbyte[] hash = md.digest(password.getBytes(StandardCharsets.UTF_8));\nreturn Hex.encode(hash);",
+    "expected": [
+      {
+        "algo": "MD5",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "alias",
+    "detectable_statically": true,
+    "why_lexical_misses": "The literal \"MD5\" never appears as a contiguous token; it is built by string concatenation \"MD\" + \"5\" into a local var, so \\bMD5\\b matches nothing. A structural pass can fold the constant concatenation and resolve digestAlg before the getInstance call."
+  },
+  {
+    "ecosystem": "java-jca",
+    "id": "wrapper-rsa-keygen-factory",
+    "language": "java",
+    "snippet": "static KeyPair makeTransportKeys(int bits) throws Exception {\n    KeyPairGenerator g = KeyPairGenerator.getInstance(asymAlgo());\n    g.initialize(bits);\n    return g.generateKeyPair();\n}\nstatic String asymAlgo() { return \"RSA\"; }\n// call site:\nKeyPair kp = makeTransportKeys(2048);",
+    "expected": [
+      {
+        "algo": "RSA",
+        "risk": "quantum-broken"
+      }
+    ],
+    "pattern_class": "wrapper",
+    "detectable_statically": true,
+    "why_lexical_misses": "The call site makeTransportKeys(2048) contains no crypto token at all; \"RSA\" lives only as a string return value of a separate helper asymAlgo(). A single-line regex sees neither RSA at the call nor a getInstance(\"RSA\") literal; a 2-pass scan must link the wrapper body and the helper's return constant."
+  },
+  {
+    "ecosystem": "java-jca",
+    "id": "wrapper-cipher-rc4-arcfour-helper",
+    "language": "java",
+    "snippet": "private Cipher streamCipher(SecretKey key) throws Exception {\n    Cipher c = Cipher.getInstance(\"ARCFOUR\");\n    c.init(Cipher.ENCRYPT_MODE, key);\n    return c;\n}\n// elsewhere:\nbyte[] ks = streamCipher(sessionKey).doFinal(payload);",
+    "expected": [
+      {
+        "algo": "RC4",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "wrapper",
+    "detectable_statically": true,
+    "why_lexical_misses": "RC4 is registered under the SunJCE alias \"ARCFOUR\" (also \"RC4\"), so a \\bRC4\\b scanner never sees the token; additionally the cipher is hidden behind streamCipher(), so the call site has no algorithm string. Resolving requires both an alias table and wrapper-body linkage."
+  },
+  {
+    "ecosystem": "java-jca",
+    "id": "method-chain-secretkeyfactory-pbe-md5",
+    "language": "java",
+    "snippet": "SecretKeyFactory f = SecretKeyFactory.getInstance(\"PBEWithMD5AndDES\");\nPBEKeySpec spec = new PBEKeySpec(pass, salt, 1000, 64);\nSecretKey key = f.generateSecret(spec);\nCipher cipher = Cipher.getInstance(f.getAlgorithm());\ncipher.init(Cipher.ENCRYPT_MODE, key, new PBEParameterSpec(salt, 1000));",
+    "expected": [
+      {
+        "algo": "MD5",
+        "risk": "broken-classical"
+      },
+      {
+        "algo": "DES",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "method-chain",
+    "detectable_statically": true,
+    "why_lexical_misses": "Two weak primitives are embedded inside the compound PBE name \"PBEWithMD5AndDES\": MD5 is glued between 'With' and 'And' and DES is a suffix, so neither \\bMD5\\b nor \\bDES\\b word-boundary match fires. The second Cipher.getInstance receives f.getAlgorithm() (a method-chain value), so its algorithm is invisible without dataflow back to the factory string."
+  },
+  {
+    "ecosystem": "java-jca",
+    "id": "runtime-config-cipher-from-properties",
+    "language": "java",
+    "snippet": "Properties cfg = loadCryptoConfig();\nString transform = cfg.getProperty(\"cipher.transform\"); // e.g. \"DES/CBC/PKCS5Padding\" in prod.properties\nCipher cipher = Cipher.getInstance(transform);\ncipher.init(Cipher.ENCRYPT_MODE, deriveKey(cfg.getProperty(\"key.alg\")));\nreturn cipher.doFinal(plaintext);",
+    "expected": [
+      {
+        "algo": "DES",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "runtime-config",
+    "detectable_statically": false,
+    "why_lexical_misses": "The algorithm string is read from an external properties file at runtime (cfg.getProperty(\"cipher.transform\")), so no algorithm token exists in the source at all; only by parsing the deployed prod.properties value can the DES transform be known, which a source-only scanner cannot resolve."
+  },
+  {
+    "ecosystem": "java-jca",
+    "id": "factory-name-keygenerator-aes-128",
+    "language": "java",
+    "snippet": "KeyGenerator kg = KeyGenerator.getInstance(\"AES\");\nkg.init(128);\nSecretKey k = kg.generateKey();\nCipher c = Cipher.getInstance(\"AES/GCM/NoPadding\");\nc.init(Cipher.ENCRYPT_MODE, k, new GCMParameterSpec(128, iv));",
+    "expected": [
+      {
+        "algo": "AES-128",
+        "risk": "quantum-weakened"
+      }
+    ],
+    "pattern_class": "string-arg",
+    "detectable_statically": true,
+    "why_lexical_misses": "The key size 128 that distinguishes AES-128 (quantum-weakened) from AES-256 (quantum-safe) is set by a separate kg.init(128) call, not by the \"AES\" string; a lexical scanner sees only \"AES\" and cannot bind the keysize, so it cannot assign the correct quantum-weakened risk without dataflow linking init(128) to the AES generator."
+  },
+  {
+    "ecosystem": "python-crypto",
+    "id": "hashlib-new-string-arg-md5",
+    "language": "python",
+    "snippet": "import hashlib\n\ndef file_fingerprint(data: bytes) -> str:\n    # legacy cache key, kept for backwards compat\n    algo = 'md5'\n    h = hashlib.new(algo)\n    h.update(data)\n    return h.hexdigest()",
+    "expected": [
+      {
+        "algo": "MD5",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "string-arg",
+    "detectable_statically": true,
+    "why_lexical_misses": "The token 'md5' is a lowercase quoted string bound to a variable, so a \\bMD5\\b case-sensitive word-boundary regex never fires."
+  },
+  {
+    "ecosystem": "python-crypto",
+    "id": "openssl-des-ede3-cbc-compound-string",
+    "language": "python",
+    "snippet": "from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes\n\ndef legacy_decrypt(key, iv, ct):\n    # OpenSSL name 'des-ede3-cbc' == 3DES; spelled out below\n    cipher = Cipher(algorithms.TripleDES(key), modes.CBC(iv))\n    dec = cipher.decryptor()\n    return dec.update(ct) + dec.finalize()",
+    "expected": [
+      {
+        "algo": "3DES",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "string-arg",
+    "detectable_statically": true,
+    "why_lexical_misses": "A \\bDES\\b / DES(?![\\w-]) guard is defeated: the real reference is 'TripleDES' (the substring 'DES' is glued to 'Triple' and to a trailing word char), and the OpenSSL alias 'des-ede3-cbc' has 'des' followed by '-', so both word-boundary forms miss."
+  },
+  {
+    "ecosystem": "python-crypto",
+    "id": "alias-rebound-module-sha1",
+    "language": "python",
+    "snippet": "import hashlib as hl\n\nfactory = hl.sha1\n\ndef etag_for(payload: bytes) -> str:\n    digest = factory()\n    digest.update(payload)\n    return digest.hexdigest()",
+    "expected": [
+      {
+        "algo": "SHA-1",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "alias",
+    "detectable_statically": true,
+    "why_lexical_misses": "hashlib is aliased to 'hl' and the constructor hl.sha1 is rebound to a local 'factory' before being called, so neither the import line nor the call site contains a recognizable bare SHA1 token next to a crypto module name."
+  },
+  {
+    "ecosystem": "python-crypto",
+    "id": "wrapper-rc4-pycryptodome",
+    "language": "python",
+    "snippet": "from Crypto.Cipher import ARC4\n\ndef _make_stream(key):\n    return ARC4.new(key)            # definition: real cipher lives here\n\ndef obfuscate(key, data):\n    return _make_stream(key).encrypt(data)   # call site has no algo token",
+    "expected": [
+      {
+        "algo": "RC4",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "wrapper",
+    "detectable_statically": true,
+    "why_lexical_misses": "The call site obfuscate()->_make_stream() contains no algorithm token; the real crypto is 'ARC4' (the pycryptodome name for RC4), which a \\bRC4\\b regex never matches because the spelling is ARC4. A 2-pass scan must link the user-defined wrapper body to its caller."
+  },
+  {
+    "ecosystem": "python-crypto",
+    "id": "factory-name-from-name-des",
+    "language": "python",
+    "snippet": "from cryptography.hazmat.primitives import hashes\nfrom cryptography.hazmat.primitives.asymmetric import padding\n\n_HASHES = {'legacy': hashes.SHA1, 'modern': hashes.SHA256}\n\ndef sign_digest(private_key, msg, profile='legacy'):\n    chosen = _HASHES[profile]()\n    return private_key.sign(msg, padding.PKCS1v15(), chosen)",
+    "expected": [
+      {
+        "algo": "SHA-1",
+        "risk": "broken-classical"
+      },
+      {
+        "algo": "SHA-256",
+        "risk": "quantum-weakened"
+      },
+      {
+        "algo": "RSA",
+        "risk": "quantum-broken"
+      }
+    ],
+    "pattern_class": "factory-name",
+    "detectable_statically": true,
+    "why_lexical_misses": "The signing call has no algorithm literal at the call site (the hash class is looked up via a dict keyed by a profile string and instantiated indirectly), and the RSA key is only an opaque 'private_key' parameter, so neither SHA1 nor RSA appears as a matchable token where the signing happens."
+  },
+  {
+    "ecosystem": "python-crypto",
+    "id": "method-chain-mode-name-des",
+    "language": "python",
+    "snippet": "from Crypto.Cipher import DES3\nfrom Crypto.Util.Padding import pad\n\ndef wrap_key(kek, k):\n    return DES3.new(kek, DES3.MODE_ECB).encrypt(pad(k, 8))",
+    "expected": [
+      {
+        "algo": "3DES",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "method-chain",
+    "detectable_statically": true,
+    "why_lexical_misses": "The module/class is 'DES3' (DES glued to a digit) and the chained constructor uses DES3.new(...).encrypt(...); a DES(?![\\w-]) or \\bDES\\b guard rejects 'DES3' because 'DES' is immediately followed by the digit '3' (a word char)."
+  },
+  {
+    "ecosystem": "python-crypto",
+    "id": "wrapper-getinstance-style-sha1withrsa",
+    "language": "python",
+    "snippet": "import hashlib, hmac\n\ndef _signer(name):\n    return lambda key, msg: hmac.new(key, msg, name).hexdigest()\n\nsign = _signer('sha1')         # bound once, reused everywhere\n\ndef auth_tag(key, body):\n    return sign(key, body)",
+    "expected": [
+      {
+        "algo": "HMAC-SHA1",
+        "risk": "broken-classical"
+      },
+      {
+        "algo": "SHA-1",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "wrapper",
+    "detectable_statically": true,
+    "why_lexical_misses": "The digest name 'sha1' is passed as a string into a factory that returns a closure, then bound to 'sign'; the actual auth_tag() call site shows neither HMAC nor SHA1, and the lowercase quoted 'sha1' defeats a \\bSHA1\\b token match. Linking requires tracking the string through the closure."
+  },
+  {
+    "ecosystem": "python-crypto",
+    "id": "runtime-config-cipher-from-settings",
+    "language": "python",
+    "snippet": "from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes\n\ndef build_cipher(cfg, key, iv):\n    # cfg.cipher_name comes from a YAML file at startup, e.g. 'TripleDES' or 'AES'\n    alg_cls = getattr(algorithms, cfg.cipher_name)\n    return Cipher(alg_cls(key), modes.CBC(iv))",
+    "expected": [
+      {
+        "algo": "configurable",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "runtime-config",
+    "detectable_statically": false,
+    "why_lexical_misses": "The algorithm class is resolved via getattr(algorithms, cfg.cipher_name) from a runtime config value, so no algorithm token exists in the source at all; only runtime data binding determines whether it is AES, TripleDES, etc."
+  },
+  {
+    "ecosystem": "python-crypto",
+    "id": "runtime-config-hash-registry-dispatch",
+    "language": "python",
+    "snippet": "import hashlib\n\nDEFAULT_ALG = __import__('os').environ.get('PWHASH', 'sha1')\n\ndef hash_password(pw, salt):\n    return hashlib.pbkdf2_hmac(DEFAULT_ALG, pw, salt, 100_000)",
+    "expected": [
+      {
+        "algo": "PBKDF2",
+        "risk": "classical-hybrid-ok"
+      },
+      {
+        "algo": "SHA-1",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "runtime-config",
+    "detectable_statically": false,
+    "why_lexical_misses": "The PBKDF2 PRF hash is read from an environment variable (PWHASH) with a default supplied via os.environ.get, so the effective algorithm is a runtime value; a static scanner cannot know whether it is 'sha1', 'sha256', etc., and the literal default is a lowercase string."
+  },
+  {
+    "ecosystem": "python-crypto",
+    "id": "alias-import-from-rename-rsa",
+    "language": "python",
+    "snippet": "from Crypto.PublicKey import RSA as KeyPair\n\ndef load_identity(pem: bytes):\n    return KeyPair.import_key(pem)   # 1024-bit legacy keys in the field\n\ndef new_identity():\n    return KeyPair.generate(1024)",
+    "expected": [
+      {
+        "algo": "RSA",
+        "risk": "quantum-broken"
+      }
+    ],
+    "pattern_class": "alias",
+    "detectable_statically": true,
+    "why_lexical_misses": "RSA is imported under the alias 'KeyPair' (from ... import RSA as KeyPair), so every subsequent use is KeyPair.generate/import_key with no 'RSA' token at the call sites; only the import line carries it, and a call-site-only scanner sees nothing."
+  },
+  {
+    "ecosystem": "go-crypto",
+    "id": "tls-3des-suite-numeric-id",
+    "language": "go",
+    "snippet": "cfg := &tls.Config{\n    MinVersion: tls.VersionTLS10,\n    // legacy interop: 3DES + RSA kx, referenced by raw IANA id\n    CipherSuites: []uint16{0x000a, 0xc012},\n}\nlis, _ := tls.Listen(\"tcp\", \":8443\", cfg)\n_ = lis",
+    "expected": [
+      {
+        "algo": "3DES (TLS_RSA_WITH_3DES_EDE_CBC_SHA)",
+        "risk": "broken-classical"
+      },
+      {
+        "algo": "RSA key exchange",
+        "risk": "quantum-broken"
+      },
+      {
+        "algo": "SHA-1 (suite MAC)",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "factory-name",
+    "detectable_statically": true,
+    "why_lexical_misses": "The cipher suites appear only as bare hex uint16 IANA codepoints (0x000a/0xc012) with no DES/RSA/SHA token anywhere in the source."
+  },
+  {
+    "ecosystem": "go-crypto",
+    "id": "tls-named-suite-const-no-rsa-word",
+    "language": "go",
+    "snippet": "cfg := &tls.Config{\n    CipherSuites: []uint16{\n        tls.TLS_ECDHE_ECDSA_WITH_RC4_128_SHA,\n        tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,\n    },\n}\n_ = cfg",
+    "expected": [
+      {
+        "algo": "RC4",
+        "risk": "broken-classical"
+      },
+      {
+        "algo": "ECDHE key exchange",
+        "risk": "quantum-broken"
+      },
+      {
+        "algo": "ECDSA auth",
+        "risk": "quantum-broken"
+      },
+      {
+        "algo": "RSA auth",
+        "risk": "quantum-broken"
+      },
+      {
+        "algo": "SHA-1 (suite MAC)",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "factory-name",
+    "detectable_statically": true,
+    "why_lexical_misses": "Algorithm names are fused inside compound constant identifiers (RC4_128, ECDHE_RSA); a \\bRC4\\b / \\bRSA\\b word-boundary regex won't fire because the tokens are joined by underscores into one identifier."
+  },
+  {
+    "ecosystem": "go-crypto",
+    "id": "crypto-hash-enum-ordinal",
+    "language": "go",
+    "snippet": "// signer.Hash configured from a numeric profile field; 2 == crypto.MD5\nh := crypto.Hash(2).New()\nh.Write(payload)\nsig, _ := rsa.SignPKCS1v15(rand.Reader, priv, crypto.Hash(2), h.Sum(nil))\n_ = sig",
+    "expected": [
+      {
+        "algo": "MD5",
+        "risk": "broken-classical"
+      },
+      {
+        "algo": "RSA (PKCS1v15 signature)",
+        "risk": "quantum-broken"
+      }
+    ],
+    "pattern_class": "factory-name",
+    "detectable_statically": true,
+    "why_lexical_misses": "MD5 is selected via the crypto.Hash enum ordinal crypto.Hash(2); the literal token 'MD5' never appears, so a name-token scan sees no hash algorithm at all."
+  },
+  {
+    "ecosystem": "go-crypto",
+    "id": "x509-sigalg-sha1withrsa-const",
+    "language": "go",
+    "snippet": "tmpl := x509.Certificate{\n    SerialNumber:       big.NewInt(1),\n    SignatureAlgorithm: x509.SHA1WithRSA,\n}\nder, _ := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &priv.PublicKey, priv)\n_ = der",
+    "expected": [
+      {
+        "algo": "SHA-1",
+        "risk": "broken-classical"
+      },
+      {
+        "algo": "RSA (certificate signature)",
+        "risk": "quantum-broken"
+      }
+    ],
+    "pattern_class": "factory-name",
+    "detectable_statically": true,
+    "why_lexical_misses": "Both algorithms are welded into one enum identifier x509.SHA1WithRSA; '\\bSHA1\\b' and '\\bRSA\\b' guards fail on the camel-cased compound token SHA1WithRSA."
+  },
+  {
+    "ecosystem": "go-crypto",
+    "id": "weak-curve-p224-elliptic",
+    "language": "go",
+    "snippet": "// curve chosen for a constrained device; P-224 is sub-128-bit security\ncurve := elliptic.P224()\npriv, x, y, _ := elliptic.GenerateKey(curve, rand.Reader)\n_ = priv; _ = x; _ = y",
+    "expected": [
+      {
+        "algo": "ECC P-224 (ECDH/ECDSA over secp224r1)",
+        "risk": "quantum-broken"
+      }
+    ],
+    "pattern_class": "factory-name",
+    "detectable_statically": true,
+    "why_lexical_misses": "The weak curve is named only via the constructor elliptic.P224(); there is no 'ECDSA'/'ECC'/'EC' token, so an algorithm-name regex never associates this with elliptic-curve crypto."
+  },
+  {
+    "ecosystem": "go-crypto",
+    "id": "alias-bound-crypto-pkg-md5",
+    "language": "go",
+    "snippet": "import stdmd5 \"crypto/md5\"\n\nfunc fingerprint(b []byte) string {\n    sum := stdmd5.Sum(b)\n    return hex.EncodeToString(sum[:])\n}",
+    "expected": [
+      {
+        "algo": "MD5",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "alias",
+    "detectable_statically": true,
+    "why_lexical_misses": "The crypto/md5 package is imported under the alias 'stdmd5' and used as stdmd5.Sum; a scanner keyed on the 'md5.' call-site prefix (or the bare token at the use site) misses the renamed binding."
+  },
+  {
+    "ecosystem": "go-crypto",
+    "id": "wrapper-userfunc-des-cipher",
+    "language": "go",
+    "snippet": "func newLegacyCipher(key []byte) (cipher.Block, error) {\n    return des.NewCipher(key) // single-DES inside helper\n}\n\nfunc encryptRecord(key, pt []byte) []byte {\n    blk, _ := newLegacyCipher(key)\n    out := make([]byte, len(pt))\n    cipher.NewCBCEncrypter(blk, make([]byte, blk.BlockSize())).CryptBlocks(out, pt)\n    return out\n}",
+    "expected": [
+      {
+        "algo": "DES",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "wrapper",
+    "detectable_statically": true,
+    "why_lexical_misses": "The des.NewCipher call lives in newLegacyCipher; the call site encryptRecord uses only 'newLegacyCipher', so a single-pass token scan of the encryption path sees no DES — a 2-pass def/use link is required."
+  },
+  {
+    "ecosystem": "go-crypto",
+    "id": "wrapper-rsa-keygen-undersized",
+    "language": "go",
+    "snippet": "func genKey(strength string) (*rsa.PrivateKey, error) {\n    bits := keySizes[strength] // \"legacy\" -> 1024\n    return rsa.GenerateKey(rand.Reader, bits)\n}\n\nvar k, _ = genKey(\"legacy\")",
+    "expected": [
+      {
+        "algo": "RSA-1024",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "wrapper",
+    "detectable_statically": false,
+    "why_lexical_misses": "The 1024-bit key size flows from a map lookup keyed by a string label resolved at runtime; the literal '1024' never sits beside rsa.GenerateKey, so neither a token nor a constant-arg check classifies the weak key size."
+  },
+  {
+    "ecosystem": "go-crypto",
+    "id": "method-chain-hash-new-from-tls-suite",
+    "language": "go",
+    "snippet": "import _ \"golang.org/x/crypto/md4\"\n\n// md4 registered via crypto.RegisterHash; selected through crypto.Hash value\nvar legacyHash = crypto.MD4\nh := legacyHash.New()\nh.Write(data)\ndigest := h.Sum(nil)\n_ = digest",
+    "expected": [
+      {
+        "algo": "MD4",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "method-chain",
+    "detectable_statically": true,
+    "why_lexical_misses": "The hash is bound to a variable (legacyHash := crypto.MD4) then invoked via .New(); a scanner matching the 'md4.New()' package-call shape never sees the package because the algorithm enters through the crypto.MD4 enum and a blank import."
+  },
+  {
+    "ecosystem": "go-crypto",
+    "id": "runtime-config-cipher-from-yaml",
+    "language": "go",
+    "snippet": "// algo name comes from operator-supplied config at startup\nswitch cfg.Cipher { // e.g. \"rc4\" loaded from config.yaml\ncase \"rc4\":\n    c, _ = rc4.NewCipher(key)\ncase \"aes\":\n    blk, _ := aes.NewCipher(key)\n    c = cipher.StreamReader{S: cipher.NewCTR(blk, iv)}.S\n}\n_ = c",
+    "expected": [
+      {
+        "algo": "RC4",
+        "risk": "broken-classical"
+      },
+      {
+        "algo": "AES (CTR)",
+        "risk": "classical-hybrid-ok"
+      }
+    ],
+    "pattern_class": "runtime-config",
+    "detectable_statically": false,
+    "why_lexical_misses": "Which branch executes depends on cfg.Cipher loaded from config.yaml at runtime; static analysis sees both rc4 and aes constructors but cannot decide which algorithm is actually selected in a given deployment."
+  },
+  {
+    "ecosystem": "config-tls",
+    "id": "openssl-enc-des3-flag",
+    "language": "bash",
+    "snippet": "#!/bin/sh\n# Re-wrap the legacy keystore for the nightly backup job\nopenssl enc -des-ede3-cbc -salt \\\n  -in /etc/pki/keystore.p12 \\\n  -out /var/backups/keystore.enc \\\n  -pass file:/etc/pki/.backup_pass\nchmod 0400 /var/backups/keystore.enc",
+    "expected": [
+      {
+        "algo": "3DES (Triple-DES, des-ede3-cbc)",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "string-arg",
+    "detectable_statically": true,
+    "why_lexical_misses": "The algorithm is the compound CLI flag '-des-ede3-cbc'; a \\bDES\\b or DES(?![\\w-]) token regex never fires because 'des' is glued to 'ede3-cbc' with hyphens."
+  },
+  {
+    "ecosystem": "config-tls",
+    "id": "openssl-enc-rc4-flag",
+    "language": "bash",
+    "snippet": "# legacy interop: vendor appliance only accepts ARCFOUR streams\nopenssl enc -rc4 -K $(cat /opt/vendor/streamkey.hex) \\\n  -in payload.bin -out payload.rc4\n# decrypt side mirrors this on the appliance",
+    "expected": [
+      {
+        "algo": "RC4 (ARCFOUR stream cipher)",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "string-arg",
+    "detectable_statically": true,
+    "why_lexical_misses": "'-rc4' is a leading-hyphen flag token, not a bare \\bRC4\\b word; a scanner keyed on word-boundary RC4 may also be tuned to skip option flags, and the '$()' command substitution noise distracts naive line matchers."
+  },
+  {
+    "ecosystem": "config-tls",
+    "id": "nginx-ssl-ciphers-string",
+    "language": "nginx",
+    "snippet": "server {\n    listen 443 ssl;\n    ssl_protocols TLSv1 TLSv1.1 TLSv1.2;\n    ssl_ciphers 'ECDHE-RSA-DES-CBC3-SHA:DHE-RSA-AES128-SHA:!aNULL';\n    ssl_prefer_server_ciphers on;\n    ssl_certificate     /etc/nginx/tls/site.crt;\n    ssl_certificate_key /etc/nginx/tls/site.key;\n}",
+    "expected": [
+      {
+        "algo": "3DES (DES-CBC3 in ECDHE-RSA-DES-CBC3-SHA)",
+        "risk": "broken-classical"
+      },
+      {
+        "algo": "SHA-1 (SHA suffix MAC/PRF in cipher suites)",
+        "risk": "quantum-broken"
+      },
+      {
+        "algo": "TLS 1.0 / TLS 1.1 protocol",
+        "risk": "broken-classical"
+      },
+      {
+        "algo": "RSA (key exchange/auth in ECDHE-RSA / DHE-RSA)",
+        "risk": "quantum-broken"
+      }
+    ],
+    "pattern_class": "string-arg",
+    "detectable_statically": true,
+    "why_lexical_misses": "The weak 3DES appears as the embedded token 'DES-CBC3' inside a colon-delimited OpenSSL cipher string; a \\bDES\\b boundary regex misfires because 'DES' is surrounded by '-' (a word char boundary is between 'RSA-' and 'DES', but most scanners exclude '!aNULL'-style cipher strings or only flag standalone DES). SHA-1 is named only as the bare suffix 'SHA' (not 'SHA1'), which a \\bSHA1\\b pattern never matches."
+  },
+  {
+    "ecosystem": "config-tls",
+    "id": "apache-sslciphersuite-rc4-md5",
+    "language": "apache",
+    "snippet": "<VirtualHost *:443>\n    SSLEngine on\n    SSLProtocol all -SSLv2\n    SSLCipherSuite RC4-MD5:RC4-SHA:HIGH:!aNULL:!eNULL\n    SSLCertificateFile    /etc/httpd/tls/legacy.pem\n    SSLCertificateKeyFile /etc/httpd/tls/legacy.key\n</VirtualHost>",
+    "expected": [
+      {
+        "algo": "RC4 (RC4-MD5 / RC4-SHA suites)",
+        "risk": "broken-classical"
+      },
+      {
+        "algo": "MD5 (RC4-MD5 suite MAC)",
+        "risk": "broken-classical"
+      },
+      {
+        "algo": "SHA-1 (RC4-SHA suite MAC)",
+        "risk": "quantum-broken"
+      },
+      {
+        "algo": "SSLv3 (enabled via 'all' minus only SSLv2)",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "string-arg",
+    "detectable_statically": true,
+    "why_lexical_misses": "MD5 appears only as a hyphen-glued cipher-suite component 'RC4-MD5'; a \\bMD5\\b pattern with hyphen-as-boundary might catch it, but the riskier miss is SSLv3 — it is never named, it is implied by 'all -SSLv2' which only excludes SSLv2, leaving SSLv3 enabled. No literal weak-protocol token exists for a lexical scanner to match."
+  },
+  {
+    "ecosystem": "config-tls",
+    "id": "sshd-kexalgorithms-sha1",
+    "language": "sshd-config",
+    "snippet": "# /etc/ssh/sshd_config — kept for old jump hosts\nKexAlgorithms diffie-hellman-group14-sha1,diffie-hellman-group1-sha1\nHostKeyAlgorithms ssh-rsa,ssh-dss\nCiphers aes128-cbc,3des-cbc\nMACs hmac-sha1,hmac-md5",
+    "expected": [
+      {
+        "algo": "SHA-1 (DH group kex *-sha1, hmac-sha1)",
+        "risk": "quantum-broken"
+      },
+      {
+        "algo": "DSA (ssh-dss host key)",
+        "risk": "quantum-broken"
+      },
+      {
+        "algo": "RSA (ssh-rsa host key, SHA-1 signed)",
+        "risk": "quantum-broken"
+      },
+      {
+        "algo": "3DES (3des-cbc)",
+        "risk": "broken-classical"
+      },
+      {
+        "algo": "MD5 (hmac-md5)",
+        "risk": "broken-classical"
+      },
+      {
+        "algo": "Finite-field DH group1/group14 (1024/2048-bit MODP)",
+        "risk": "quantum-broken"
+      }
+    ],
+    "pattern_class": "string-arg",
+    "detectable_statically": true,
+    "why_lexical_misses": "DSA hides behind the SSH spelling 'ssh-dss' (never the token 'DSA'); 3DES is '3des-cbc' (starts with a digit, so \\bDES\\b fails and even \\b3DES\\b fails since it is '3des'); SHA-1 is the suffix '-sha1' on DH/MAC names, not a standalone \\bSHA1\\b. A token scanner keyed on canonical names misses all three."
+  },
+  {
+    "ecosystem": "config-tls",
+    "id": "openssl-cnf-signature-algorithms",
+    "language": "openssl-cnf",
+    "snippet": "[ system_default_sect ]\nMinProtocol = TLSv1.2\nCipherString = DEFAULT@SECLEVEL=1\nSignatureAlgorithms = RSA+SHA256:ECDSA+SHA1:RSA+SHA1\nMaxProtocol = TLSv1.3",
+    "expected": [
+      {
+        "algo": "SHA-1 (ECDSA+SHA1, RSA+SHA1 signature algs)",
+        "risk": "quantum-broken"
+      },
+      {
+        "algo": "RSA (PKCS#1 signatures)",
+        "risk": "quantum-broken"
+      },
+      {
+        "algo": "ECDSA (signature)",
+        "risk": "quantum-broken"
+      },
+      {
+        "algo": "SECLEVEL=1 (permits 80-bit / SHA-1 / 1024-bit RSA)",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "method-chain",
+    "detectable_statically": true,
+    "why_lexical_misses": "SHA-1 appears as the structured suffix 'SHA1' joined by '+' inside a SignatureAlgorithms list ('ECDSA+SHA1'); a \\bSHA1\\b regex could fire, but the dominant miss is 'SECLEVEL=1' — a config directive that silently re-enables 80-bit/SHA-1/1024-bit RSA. No algorithm token names that downgrade; only structural understanding of the OpenSSL SECLEVEL semantics flags it."
+  },
+  {
+    "ecosystem": "config-tls",
+    "id": "cert-pem-sha1-rsa-signature",
+    "language": "x509-pem",
+    "snippet": "# pinned intermediate shipped with the appliance firmware\n# Signature Algorithm: sha1WithRSAEncryption  (OID 1.2.840.113549.1.1.5)\n# Public Key Algorithm: rsaEncryption, 1024 bit\n-----BEGIN CERTIFICATE-----\nMIIBxDCCAW6gAwIBAgIJAKZ7... (truncated body) ...Qn5lD1cLAEm9Cw==\n-----END CERTIFICATE-----",
+    "expected": [
+      {
+        "algo": "SHA-1 (sha1WithRSAEncryption cert signature)",
+        "risk": "quantum-broken"
+      },
+      {
+        "algo": "RSA-1024 (rsaEncryption public key)",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "factory-name",
+    "detectable_statically": true,
+    "why_lexical_misses": "Inside an encoded PEM body the algorithm is only knowable from the ASN.1 OID '1.2.840.113549.1.1.5' (sha1WithRSAEncryption) or the camelCase identifier 'sha1WithRSAEncryption' — neither matches \\bSHA1\\b/\\bSHA-1\\b cleanly; the base64 cert body itself contains the real DER but is opaque to any token regex without an ASN.1 decode pass."
+  },
+  {
+    "ecosystem": "config-tls",
+    "id": "haproxy-ssl-default-bind-ciphers-var",
+    "language": "haproxy",
+    "snippet": "global\n    ssl-default-bind-ciphers ${TLS_CIPHER_PROFILE}\n    ssl-default-bind-options no-sslv3\n\n# TLS_CIPHER_PROFILE is injected at boot from Consul KV;\n# the 'legacy-pci' profile resolves to 'AES128-SHA:DES-CBC3-SHA'\nfrontend fe_https\n    bind :443 ssl crt /etc/haproxy/site.pem",
+    "expected": [
+      {
+        "algo": "3DES (DES-CBC3-SHA, resolved at runtime)",
+        "risk": "broken-classical"
+      },
+      {
+        "algo": "SHA-1 (SHA suite MAC, resolved at runtime)",
+        "risk": "quantum-broken"
+      }
+    ],
+    "pattern_class": "runtime-config",
+    "detectable_statically": false,
+    "why_lexical_misses": "The cipher list is the variable '${TLS_CIPHER_PROFILE}' resolved from Consul KV at boot; the actual weak suites ('DES-CBC3-SHA') never appear as literals in the config file, so no token regex — and no static AST pass — can see them without resolving external runtime state."
+  },
+  {
+    "ecosystem": "config-tls",
+    "id": "openssl-genpkey-dsa-paramfile",
+    "language": "bash",
+    "snippet": "# generate the signing key for the internal CA (kept from 2014 runbook)\nopenssl dsaparam -out dsaparam.pem 1024\nopenssl gendsa -out ca-signing.key dsaparam.pem\nopenssl req -new -x509 -key ca-signing.key \\\n  -sha1 -days 3650 -out ca.crt",
+    "expected": [
+      {
+        "algo": "DSA-1024 (gendsa / dsaparam signing key)",
+        "risk": "quantum-broken"
+      },
+      {
+        "algo": "SHA-1 (-sha1 cert digest)",
+        "risk": "quantum-broken"
+      }
+    ],
+    "pattern_class": "wrapper",
+    "detectable_statically": true,
+    "why_lexical_misses": "DSA is invoked through the subcommand names 'dsaparam' and 'gendsa' (a wrapper-style CLI verb), not the bare token 'DSA'; '\\bDSA\\b' never matches 'gendsa'/'dsaparam'. SHA-1 is the '-sha1' option flag, missed by \\bSHA1\\b word-boundary matching."
+  },
+  {
+    "ecosystem": "config-tls",
+    "id": "envoy-tls-params-cipher-helper",
+    "language": "yaml",
+    "snippet": "# helper macro expanded by our config templater (jsonnet -> yaml)\n# weak_tls_params() emits the block below for legacy partner endpoints\ntls_params:\n  tls_minimum_protocol_version: TLSv1_0\n  cipher_suites:\n    - \"ECDHE-RSA-AES128-GCM-SHA256\"\n    - \"AES128-SHA\"\n    - \"DES-CBC3-SHA\"",
+    "expected": [
+      {
+        "algo": "TLS 1.0 (tls_minimum_protocol_version)",
+        "risk": "broken-classical"
+      },
+      {
+        "algo": "3DES (DES-CBC3-SHA)",
+        "risk": "broken-classical"
+      },
+      {
+        "algo": "SHA-1 (AES128-SHA / DES-CBC3-SHA MAC)",
+        "risk": "quantum-broken"
+      },
+      {
+        "algo": "RSA (ECDHE-RSA auth)",
+        "risk": "quantum-broken"
+      }
+    ],
+    "pattern_class": "wrapper",
+    "detectable_statically": true,
+    "why_lexical_misses": "The weak settings live in a templater-generated block where 3DES is the embedded suite token 'DES-CBC3-SHA' and TLS 1.0 is the Envoy enum 'TLSv1_0' (underscore form, not 'TLS1.0'/'TLSv1.0'); neither matches \\bDES\\b nor a dotted TLS-version regex. Linking the emitted YAML back to the 'weak_tls_params()' macro needs a 2-pass def->use scan."
+  },
+  {
+    "ecosystem": "dotnet",
+    "id": "tripledes-string-arg-createfromname",
+    "language": "csharp",
+    "snippet": "using System.Security.Cryptography;\n\nstatic SymmetricAlgorithm BuildLegacyCipher(string profile)\n{\n    // \"Triple\" name component avoids the bare DES token a regex hunts for\n    var alg = (SymmetricAlgorithm)CryptoConfig.CreateFromName(\"TripleDES\");\n    alg.Mode = CipherMode.CBC;\n    return alg;\n}",
+    "expected": [
+      {
+        "algo": "3DES",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "factory-name",
+    "detectable_statically": true,
+    "why_lexical_misses": "Algorithm lives inside the string \"TripleDES\" passed to CryptoConfig.CreateFromName; a \\bDES\\b matcher never fires and \\bRSA\\b/\\bMD5\\b don't apply."
+  },
+  {
+    "ecosystem": "dotnet",
+    "id": "des-oid-createfromname",
+    "language": "csharp",
+    "snippet": "using System.Security.Cryptography;\n\n// DES referenced purely by its X.509 OID string, never by name\nvar transform = (SymmetricAlgorithm)CryptoConfig.CreateFromName(\"1.3.14.3.2.7\");\ntransform.GenerateKey();\nusing var enc = transform.CreateEncryptor();",
+    "expected": [
+      {
+        "algo": "DES",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "factory-name",
+    "detectable_statically": true,
+    "why_lexical_misses": "The algorithm is identified only by the OID \"1.3.14.3.2.7\" (DES-CBC); no DES/MD5/RSA token appears anywhere in the source."
+  },
+  {
+    "ecosystem": "dotnet",
+    "id": "sha1withrsa-signature-getinstance-style",
+    "language": "csharp",
+    "snippet": "using System.Security.Cryptography;\nusing System.Security.Cryptography.X509Certificates;\n\nstatic byte[] SignManifest(X509Certificate2 cert, byte[] data)\n{\n    using var rsa = cert.GetRSAPrivateKey();\n    // hash + padding chosen via HashAlgorithmName, no \"RSA\"/\"SHA1\" identifier token\n    var hashName = new HashAlgorithmName(\"SHA1\");\n    return rsa.SignData(data, hashName, RSASignaturePadding.Pkcs1);\n}",
+    "expected": [
+      {
+        "algo": "RSA",
+        "risk": "quantum-broken"
+      },
+      {
+        "algo": "SHA-1",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "method-chain",
+    "detectable_statically": true,
+    "why_lexical_misses": "RSA is reached through cert.GetRSAPrivateKey() (a method-name substring, not the bare \\bRSA\\b token) and SHA-1 only appears inside the HashAlgorithmName(\"SHA1\") string constructor."
+  },
+  {
+    "ecosystem": "dotnet",
+    "id": "md5-alias-hashalgorithm-create",
+    "language": "csharp",
+    "snippet": "using System.Security.Cryptography;\n\n// Algorithm name flows in as a quoted string to the base-class factory\nconst string Algo = \"MD5\";\nusing HashAlgorithm h = HashAlgorithm.Create(Algo);\nbyte[] digest = h.ComputeHash(payload);",
+    "expected": [
+      {
+        "algo": "MD5",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "string-arg",
+    "detectable_statically": true,
+    "why_lexical_misses": "A scanner keyed on MD5.Create() / new MD5CryptoServiceProvider() misses HashAlgorithm.Create(Algo) where MD5 is a const string bound to a local, not a type reference."
+  },
+  {
+    "ecosystem": "dotnet",
+    "id": "rc2-wrapper-userdefined",
+    "language": "csharp",
+    "snippet": "using System.Security.Cryptography;\n\nstatic ICryptoTransform MakeTransform()                 // wrapper definition\n{\n    var a = SymmetricAlgorithm.Create(\"RC2\");\n    return a.CreateDecryptor();\n}\n\nvoid Decrypt(Stream s) {\n    var t = MakeTransform();                            // call site, no algo token\n    using var cs = new CryptoStream(s, t, CryptoStreamMode.Read);\n}",
+    "expected": [
+      {
+        "algo": "RC2",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "wrapper",
+    "detectable_statically": true,
+    "why_lexical_misses": "The call site MakeTransform() carries no crypto token; only a 2-pass link to the wrapper body (SymmetricAlgorithm.Create(\"RC2\")) reveals RC2, and even there it is a string arg."
+  },
+  {
+    "ecosystem": "dotnet",
+    "id": "aes-cbc-aliased-namespace",
+    "language": "csharp",
+    "snippet": "using SC = System.Security.Cryptography;\n\n// crypto namespace bound to alias SC; type reached as SC.Aes\nusing var cipher = SC.Aes.Create();\ncipher.KeySize = 128;\ncipher.Mode = SC.CipherMode.CBC;\nusing var enc = cipher.CreateEncryptor();",
+    "expected": [
+      {
+        "algo": "AES-128-CBC",
+        "risk": "quantum-weakened"
+      }
+    ],
+    "pattern_class": "alias",
+    "detectable_statically": true,
+    "why_lexical_misses": "The type is referenced as SC.Aes via a namespace alias; AES isn't in the naive token list, and resolving the algorithm + 128-bit/CBC parameters needs structural binding of the SC alias and the KeySize/Mode assignments."
+  },
+  {
+    "ecosystem": "dotnet",
+    "id": "ecdsa-p256-method-chain",
+    "language": "csharp",
+    "snippet": "using System.Security.Cryptography;\n\n// curve picked via named-curve factory, key created off ECDsa.Create()\nvar key = ECDsa.Create(ECCurve.CreateFromFriendlyName(\"nistP256\"));\nbyte[] sig = key.SignData(message, HashAlgorithmName.SHA256);",
+    "expected": [
+      {
+        "algo": "ECDSA-P256",
+        "risk": "quantum-broken"
+      },
+      {
+        "algo": "SHA-256",
+        "risk": "quantum-weakened"
+      }
+    ],
+    "pattern_class": "method-chain",
+    "detectable_statically": true,
+    "why_lexical_misses": "ECDSA reaches the source only through the ECDsa.Create(...) chain and the curve via ECCurve.CreateFromFriendlyName(\"nistP256\"); no \\bECDSA\\b/\\bRSA\\b token, and the curve is a quoted friendly-name string."
+  },
+  {
+    "ecosystem": "dotnet",
+    "id": "rsa-keysize-2048-create-arg",
+    "language": "csharp",
+    "snippet": "using System.Security.Cryptography;\n\nstatic AsymmetricAlgorithm NewSigningKey(int bits)\n{\n    // factory string + runtime size; classic-hybrid only if wrapped, here it is bare RSA\n    var k = AsymmetricAlgorithm.Create(\"RSA\");\n    ((RSA)k).KeySize = bits;          // bits = 2048 from caller config\n    return k;\n}",
+    "expected": [
+      {
+        "algo": "RSA-2048",
+        "risk": "quantum-broken"
+      }
+    ],
+    "pattern_class": "string-arg",
+    "detectable_statically": true,
+    "why_lexical_misses": "RSA is created via AsymmetricAlgorithm.Create(\"RSA\") string factory; the cast (RSA) is the only bare token and many token scanners skip cast expressions, while the 2048 key size is a runtime parameter not adjacent to any algorithm literal."
+  },
+  {
+    "ecosystem": "dotnet",
+    "id": "des-ede3-bouncycastle-string",
+    "language": "csharp",
+    "snippet": "using Org.BouncyCastle.Security;\n\n// BouncyCastle takes the OpenSSL-style compound algorithm spec as a string\nvar cipher = CipherUtilities.GetCipher(\"DESede/CBC/PKCS7Padding\");\ncipher.Init(true, keyParam);\nbyte[] ct = cipher.DoFinal(plaintext);",
+    "expected": [
+      {
+        "algo": "3DES",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "string-arg",
+    "detectable_statically": true,
+    "why_lexical_misses": "The compound transform string \"DESede/CBC/PKCS7Padding\" defeats a \\bDES\\b/DES(?![\\w-]) guard (DESede is a different token), and the API CipherUtilities.GetCipher isn't in a System.Security.Cryptography-shaped token list."
+  },
+  {
+    "ecosystem": "dotnet",
+    "id": "runtime-config-algorithm-name",
+    "language": "csharp",
+    "snippet": "using System.Security.Cryptography;\nusing Microsoft.Extensions.Configuration;\n\n// algorithm name read from appsettings.json at runtime: Crypto:Hash = \"MD5\"\nstring name = config[\"Crypto:Hash\"];\nusing HashAlgorithm h = HashAlgorithm.Create(name);\nbyte[] mac = h.ComputeHash(secret);",
+    "expected": [
+      {
+        "algo": "configurable-hash",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "runtime-config",
+    "detectable_statically": false,
+    "why_lexical_misses": "The algorithm string is loaded from external config (config[\"Crypto:Hash\"]) at runtime, so neither the algorithm token nor any literal appears in source; only dynamic analysis or config inspection resolves it."
+  },
+  {
+    "ecosystem": "php-ruby",
+    "id": "php-openssl-3des-string-arg",
+    "language": "php",
+    "snippet": "function encryptLegacyToken(string $plain, string $key): string {\n    $iv = random_bytes(8);\n    $ct = openssl_encrypt($plain, 'des-ede3-cbc', $key, OPENSSL_RAW_DATA, $iv);\n    return base64_encode($iv . $ct);\n}",
+    "expected": [
+      {
+        "algo": "3DES",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "string-arg",
+    "detectable_statically": true,
+    "why_lexical_misses": "The cipher lives only in the quoted compound string 'des-ede3-cbc'; a \\bDES\\b / DES(?![\\w-]) guard never fires because the substring 'des' is glued to '-ede3-cbc'."
+  },
+  {
+    "ecosystem": "php-ruby",
+    "id": "php-openssl-rc4-string-arg",
+    "language": "php",
+    "snippet": "$encrypted = openssl_encrypt(\n    $sessionData,\n    'rc4',\n    $derivedKey,\n    OPENSSL_RAW_DATA\n);\n$store->put($sid, base64_encode($encrypted));",
+    "expected": [
+      {
+        "algo": "RC4",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "string-arg",
+    "detectable_statically": true,
+    "why_lexical_misses": "RC4 appears only as a lowercase quoted argument 'rc4'; a token scanner keyed on uppercase \\bRC4\\b or a struct keyword misses the lowercased cipher-spec string."
+  },
+  {
+    "ecosystem": "php-ruby",
+    "id": "php-hash-md5-string-arg",
+    "language": "php",
+    "snippet": "function fingerprintFile(string $path): string {\n    $algo = 'md5';\n    return hash($algo, file_get_contents($path));\n}",
+    "expected": [
+      {
+        "algo": "MD5",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "string-arg",
+    "detectable_statically": true,
+    "why_lexical_misses": "MD5 is a lowercased quoted literal first bound to $algo then passed to hash(); a \\bMD5\\b boundary scanner skips lowercase 'md5' and cannot follow the one-hop variable binding."
+  },
+  {
+    "ecosystem": "php-ruby",
+    "id": "php-hash-init-sha1-alias",
+    "language": "php",
+    "snippet": "$h = hash_init('sha1');\nforeach ($chunks as $c) {\n    hash_update($h, $c);\n}\n$digest = hash_final($h);",
+    "expected": [
+      {
+        "algo": "SHA-1",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "alias",
+    "detectable_statically": true,
+    "why_lexical_misses": "The hash context is bound to $h via hash_init('sha1') and consumed by hash_update/hash_final; the algorithm is a lowercase string and the digest call site never repeats a \\bSHA-?1\\b token."
+  },
+  {
+    "ecosystem": "php-ruby",
+    "id": "php-rsa-pkcs1-wrapper",
+    "language": "php",
+    "snippet": "function sealForRecipient(string $msg, $pub): string {\n    openssl_public_encrypt($msg, $out, $pub, OPENSSL_PKCS1_PADDING);\n    return $out;\n}\n// call site elsewhere\n$blob = sealForRecipient($payload, $recipientPub);",
+    "expected": [
+      {
+        "algo": "RSA",
+        "risk": "quantum-broken"
+      },
+      {
+        "algo": "RSA-PKCS1v1.5",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "wrapper",
+    "detectable_statically": true,
+    "why_lexical_misses": "No \\bRSA\\b token appears anywhere — the RSA operation is implied by openssl_public_encrypt + OPENSSL_PKCS1_PADDING and hidden behind the user function sealForRecipient(); only a 2-pass def-to-call link surfaces it."
+  },
+  {
+    "ecosystem": "php-ruby",
+    "id": "ruby-cipher-des-cbc-string-arg",
+    "language": "ruby",
+    "snippet": "require 'openssl'\ndef legacy_cipher(key, iv)\n  c = OpenSSL::Cipher.new('des-cbc')\n  c.encrypt\n  c.key = key\n  c.iv = iv\n  c\nend",
+    "expected": [
+      {
+        "algo": "DES",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "string-arg",
+    "detectable_statically": true,
+    "why_lexical_misses": "The cipher name is the quoted argument 'des-cbc'; DES(?![\\w-]) is defeated because '-cbc' follows 'des', and the Cipher object is then returned and used elsewhere with no algorithm token."
+  },
+  {
+    "ecosystem": "php-ruby",
+    "id": "ruby-digest-md5-alias-const",
+    "language": "ruby",
+    "snippet": "require 'digest'\nHASHER = Digest::MD5\ndef etag_for(body)\n  HASHER.hexdigest(body)\nend",
+    "expected": [
+      {
+        "algo": "MD5",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "alias",
+    "detectable_statically": true,
+    "why_lexical_misses": "Digest::MD5 is aliased to the constant HASHER and the call site uses HASHER.hexdigest; a line-oriented \\bMD5\\b scan that flags only call sites (.hexdigest) never sees the algorithm on the same line."
+  },
+  {
+    "ecosystem": "php-ruby",
+    "id": "ruby-rsa-keygen-numeric-only",
+    "language": "ruby",
+    "snippet": "require 'openssl'\ndef issue_keypair\n  bits = 2048\n  key = OpenSSL::PKey::RSA.new(bits)\n  [key, key.public_key]\nend",
+    "expected": [
+      {
+        "algo": "RSA-2048",
+        "risk": "quantum-broken"
+      }
+    ],
+    "pattern_class": "factory-name",
+    "detectable_statically": true,
+    "why_lexical_misses": "RSA appears as a class path segment (PKey::RSA) and the key size is the variable $bits=2048 not an inline literal; a scanner keyed on the bare \\bRSA\\b token may catch RSA but cannot resolve the 2048-bit strength through the local binding, mis-grading or under-reporting it."
+  },
+  {
+    "ecosystem": "php-ruby",
+    "id": "ruby-digest-runtime-config",
+    "language": "ruby",
+    "snippet": "require 'digest'\nALGO = ENV.fetch('HASH_ALGO', 'SHA1')\ndef checksum(data)\n  Digest.const_get(ALGO).hexdigest(data)\nend",
+    "expected": [
+      {
+        "algo": "SHA-1",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "runtime-config",
+    "detectable_statically": false,
+    "why_lexical_misses": "The digest class is chosen at runtime via Digest.const_get(ENV['HASH_ALGO']); the only algorithm token is the default-fallback string in ENV.fetch, and the actual class is never named statically — a genuine reflection blind spot."
+  },
+  {
+    "ecosystem": "php-ruby",
+    "id": "php-cipher-runtime-config-map",
+    "language": "php",
+    "snippet": "$ciphers = ['fast' => 'aes-128-cbc', 'compat' => 'bf-cbc'];\n$mode = $config->get('crypto.profile');\n$out = openssl_encrypt($data, $ciphers[$mode], $key, 0, $iv);",
+    "expected": [
+      {
+        "algo": "Blowfish",
+        "risk": "broken-classical"
+      },
+      {
+        "algo": "AES-128-CBC",
+        "risk": "classical-hybrid-ok"
+      }
+    ],
+    "pattern_class": "runtime-config",
+    "detectable_statically": false,
+    "why_lexical_misses": "The active cipher is $ciphers[$mode] selected from a config value at runtime; neither 'Blowfish' nor a \\bBF\\b token exists ('bf-cbc' is an OpenSSL alias for Blowfish) and the chosen entry is undecidable statically."
+  },
+  {
+    "ecosystem": "php-ruby",
+    "id": "ruby-openssl-getcipher-method-chain",
+    "language": "ruby",
+    "snippet": "require 'openssl'\nspec = %w[des ede3 cbc].join('-')\ncipher = OpenSSL::Cipher.new(spec).tap(&:decrypt)\ncipher.key = derive(pass)",
+    "expected": [
+      {
+        "algo": "3DES",
+        "risk": "broken-classical"
+      }
+    ],
+    "pattern_class": "method-chain",
+    "detectable_statically": false,
+    "why_lexical_misses": "The cipher spec 'des-ede3-cbc' is assembled at runtime by joining a token array, so no contiguous cipher string or \\bDES\\b token exists in source; resolving it requires constant-folding the Array#join, beyond a lexical pass."
+  }
+]
