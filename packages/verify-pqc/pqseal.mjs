@@ -84,7 +84,10 @@ export function openSeal(payloadBytes, envelope, opts = {}) {
     const validKinds = new Set(validLegs.map((r) => r.kind));
     // requireKinds is a MULTISET predicate (4th sweep): requireKinds:['lattice','lattice'] needs TWO distinct lattice
     // legs, not one — closes the footgun where a single leg satisfied a duplicated requirement.
-    const kindCounts = {}; for (const r of validLegs) kindCounts[r.kind] = (kindCounts[r.kind] || 0) + 1;
+    // distinctness-aware (5th sweep): count UNIQUE (alg, pub_hex) valid legs per kind, so requireKinds:['lattice','lattice']
+    // genuinely needs two INDEPENDENT lattice keys — one signer signing the same message twice no longer satisfies it (matches the docstring).
+    const seenLeg = new Set(); const kindCounts = {};
+    envelope.legs.forEach((l, i) => { if (legs[i] && legs[i].valid) { const key = l.alg + '\x1f' + l.pub_hex; if (!seenLeg.has(key)) { seenLeg.add(key); kindCounts[legs[i].kind] = (kindCounts[legs[i].kind] || 0) + 1; } } });
     const reqCounts = {}; for (const k of (opts.requireKinds || [])) reqCounts[k] = (reqCounts[k] || 0) + 1;
     const familiesOk = !opts.requireKinds || Object.keys(reqCounts).every((k) => (kindCounts[k] || 0) >= reqCounts[k]);
     const distinctLegs = new Set(envelope.legs.filter((l, i) => legs[i] && legs[i].valid).map((l) => l.alg + '\x1f' + l.pub_hex)).size;
@@ -127,6 +130,10 @@ function selfTest() {
 
   // diversity policy: a single lattice leg cannot satisfy "need a hash-based leg too"
   ok(openSeal(payload, seal(payload, [A]), { requireKinds: ['lattice', 'hash-based'] }).verified === false, 'requireKinds rejects a seal missing a required family');
+  // 5th-sweep: requireKinds counts DISTINCT (alg,pub) legs — two lattice legs sharing ONE key fail ['lattice','lattice'].
+  ok(openSeal(payload, seal(payload, [A, A]), { requireKinds: ['lattice', 'lattice'] }).verified === false, '5th sweep: requireKinds:[lattice,lattice] needs TWO INDEPENDENT lattice keys (one signer twice -> rejected)');
+  const A2 = mk('ML-DSA-87', 41);
+  ok(openSeal(payload, seal(payload, [A, A2]), { requireKinds: ['lattice', 'lattice'] }).verified === true, '5th sweep: two DISTINCT lattice legs satisfy requireKinds:[lattice,lattice]');
 
   // anti-downgrade: STRIP a leg
   const stripped = JSON.parse(JSON.stringify(env2)); stripped.legs.pop();

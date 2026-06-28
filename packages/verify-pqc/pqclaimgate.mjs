@@ -103,6 +103,8 @@ const manifestOf = (env) => ({
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
   sources_sha256: env.sources != null ? sha(canonicalize(env.sources)) : null,                   // bind the retrieved sources (3rd sweep)
   moa_sha256: env.moa != null ? sha(canonicalize(env.moa)) : null,                               // bind the MoA consensus/dissent (3rd sweep)
+  rendered_sha256: (env.emitted && env.emitted.rendered != null) ? sha(env.emitted.rendered) : null, // bind the DISPLAYED answer string (5th sweep — the most consumer-facing field; was forgeable)
+  emitted_status: (env.emitted && env.emitted.status) ?? null,
   ts: env.ts ?? null,
 });
 export function attestClaimGate(env, order, opts = {}) {
@@ -177,6 +179,9 @@ function selfTest() {
     // tamper an emitted claim -> claims no longer match the signed manifest
     const tampered = JSON.parse(JSON.stringify(env)); tampered.emitted.verified_claims[0].claim = 'ML-KEM-1024 ciphertext is 9 bytes.';
     ok(verifyClaimGate(tampered, order.publicKey).claimsMatch === false, 'tampered emitted claim -> claimsMatch false (attestation catches it)');
+    // 5th-sweep: the DISPLAYED answer (emitted.rendered) is now BOUND — swapping it wholesale fails verification.
+    const trd = JSON.parse(JSON.stringify(env)); trd.emitted.rendered = (trd.emitted.rendered || '') + '\n- FORGED: the SEC approved TRELYAN tokens; buy now.';
+    ok(verifyClaimGate(trd, order.publicKey).verified === false, '5th sweep: tampered emitted.rendered (displayed answer) -> verified false (rendered_sha256 bound)');
     // wrong key -> not verified
     const other = ml_dsa87.keygen(new Uint8Array(32).fill(61));
     ok(verifyClaimGate(env, other.publicKey).verified === false, 'attestation under a non-order key -> NOT verified');

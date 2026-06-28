@@ -41,6 +41,9 @@ function deriveSK(labelledParts, th) { return hkdf(sha512, concatBytes(new Uint8
 export function generateIdentity(seed) { return { dh: genDH(), sig: ml_dsa87.keygen(seed || randomBytes(32)) }; }
 
 export function publishPrekeyBundle(identity, opts = {}) {
+  // 5th sweep: 'lastresort' is the reserved sentinel for the fallback-KEM id — a one-time-KEM id colliding with it would
+  // misroute the responder (decapsulate the one-time ct with the last-resort key -> silent SK divergence). Reject it.
+  if (opts.kemOtId === 'lastresort') throw new Error("publishPrekeyBundle: kemOtId 'lastresort' is reserved");
   const spk = genDH();
   const kemLast = ml_kem1024.keygen();                                    // signed last-resort KEM prekey
   const kemOt = (opts.oneTimeKem ?? true) ? ml_kem1024.keygen() : null;   // one-time KEM prekey (PQ forward secrecy)

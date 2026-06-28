@@ -85,8 +85,10 @@ export function resolveIssuerKey(events, issuer_id, opts = {}) {
   // issuer key resolves ACTIVE). seq is signed inside the event core, so an attacker cannot forge the sort key.
   let ev;
   try { ev = events.filter((e) => e && e.kind === 'pqkt-key-event' && e.issuer_id === issuer_id).sort((a, b) => (a.seq - b.seq)); } catch { return null; }
-  let state = 'unseen'; let cur = null; const rejected = []; const timeline = [];
-  const mark = (e) => timeline.push({ ts: e.ts ?? -Infinity, snap: cur ? { ...cur } : null, state }); // record each accepted transition
+  let state = 'unseen'; let cur = null; const rejected = []; const timeline = []; let effTs = -Infinity;
+  // effTs is NON-DECREASING (5th sweep): a transition's effective time = max(prev, e.ts), so even with non-monotonic
+  // SIGNED ts a rotation/revoke can never predate its bootstrap, and the timeline stays sorted for atTime selection.
+  const mark = (e) => { effTs = Math.max(effTs, e.ts ?? -Infinity); timeline.push({ ts: effTs, snap: cur ? { ...cur } : null, state }); };
   ev.forEach((e, index) => {
     if (!e || e.kind !== 'pqkt-key-event' || e.issuer_id !== issuer_id) return;
     const rej = (reason) => rejected.push({ index, seq: e.seq, reason });
@@ -288,15 +290,23 @@ function selfTest() {
   ok(resolveIssuerKey([e0, e1, e2], 'issuer:R', { expectedBootstrap: rPin }) === null, 'honest order [bind,rot,revoke] -> REVOKED');
   ok(resolveIssuerKey([e0, e2, e1], 'issuer:R', { expectedBootstrap: rPin }) === null, 'REORDERED [bind,revoke,rot] -> STILL REVOKED (sort-by-signed-seq defeats the rollback)');
   ok(resolveIssuerKey([e2, e1, e0], 'issuer:R', { expectedBootstrap: rPin }) === null, 'fully shuffled -> STILL REVOKED');
-  // 7c. atTime + NON-MONOTONIC ts (4th sweep, resume): a future-dated rotation must NOT strand a later revoke for a
-  // point-in-time query (the atTime filter previously broke the seq chain -> revoke dropped -> key resurrected).
+  // 7c. atTime point-in-time (4th + 5th sweep): the timeline uses a NON-DECREASING effective ts, so (a) a revoke is
+  // never stranded/dropped by atTime (4th-sweep bug) and (b) a rotation can't predate its bootstrap (5th-sweep sibling).
   const Sk = ml_dsa87.keygen(new Uint8Array(32).fill(79)), Sk2 = ml_dsa87.keygen(new Uint8Array(32).fill(80));
-  const sPin = keyHash(Sk.publicKey);
-  const s0 = makeBindEvent({ issuer_id: 'issuer:S', newKey: Sk, seq: 0, ts: 1000 });
-  const s1 = makeBindEvent({ issuer_id: 'issuer:S', newKey: Sk2, priorKey: Sk, seq: 1, ts: 2000 }); // FUTURE-dated rotation
-  const s2 = makeRevokeEvent({ issuer_id: 'issuer:S', key: Sk2, seq: 2, ts: 1500 });                 // revoke ts < rotation ts
-  ok(resolveIssuerKey([s0, s1, s2], 'issuer:S', { expectedBootstrap: sPin, atTime: 1700 }) === null, 'atTime=1700 w/ non-monotonic ts -> REVOKED (no atTime-strand rollback)');
-  ok(resolveIssuerKey([s0, s1, s2], 'issuer:S', { expectedBootstrap: sPin, atTime: 1200 }).pubkey_hash === sPin, 'atTime=1200 (before rotation/revoke) -> historical bootstrap key K0');
+  const sPin = keyHash(Sk.publicKey), s2Pin = keyHash(Sk2.publicKey);
+  const m0 = makeBindEvent({ issuer_id: 'issuer:S', newKey: Sk, seq: 0, ts: 1000 });
+  const m1 = makeBindEvent({ issuer_id: 'issuer:S', newKey: Sk2, priorKey: Sk, seq: 1, ts: 2000 });
+  const m2 = makeRevokeEvent({ issuer_id: 'issuer:S', key: Sk2, seq: 2, ts: 3000 });
+  ok(resolveIssuerKey([m0, m1, m2], 'issuer:S', { expectedBootstrap: sPin, atTime: 1500 }).pubkey_hash === sPin, 'atTime=1500 -> bootstrap K0 (before rotation)');
+  ok(resolveIssuerKey([m0, m1, m2], 'issuer:S', { expectedBootstrap: sPin, atTime: 2500 }).pubkey_hash === s2Pin, 'atTime=2500 -> rotated K1 (after rotation, before revoke)');
+  ok(resolveIssuerKey([m2, m0, m1], 'issuer:S', { expectedBootstrap: sPin, atTime: 3500 }) === null, 'atTime=3500 (+ REORDERED log) -> REVOKED (revoke never stranded by atTime)');
+  // 5th-sweep sibling: a rotation carrying ts < its bootstrap's ts must NOT resolve to a key BEFORE the bootstrap.
+  const Ub = ml_dsa87.keygen(new Uint8Array(32).fill(81)), Ur = ml_dsa87.keygen(new Uint8Array(32).fill(82));
+  const uPin = keyHash(Ub.publicKey);
+  const u0 = makeBindEvent({ issuer_id: 'issuer:U', newKey: Ub, seq: 0, ts: 1000 });
+  const u1 = makeBindEvent({ issuer_id: 'issuer:U', newKey: Ur, priorKey: Ub, seq: 1, ts: 500 }); // rotation ts < bootstrap ts
+  ok(resolveIssuerKey([u0, u1], 'issuer:U', { expectedBootstrap: uPin, atTime: 750 }) === null, 'rotation ts<bootstrap: atTime=750 (before bootstrap effective ts) -> NO key (no pre-bootstrap resurrection)');
+  ok(resolveIssuerKey([u0, u1], 'issuer:U', { expectedBootstrap: uPin, atTime: 5000 }).pubkey_hash === keyHash(Ur.publicKey), 'atTime=5000 -> rotated key (rotation effective at max(bootstrap_ts, rotation_ts))');
 
   // 8. POST-REVOKE REBIND ATTACK (OpenAI critical fix): attacker appends a fresh self-signed bootstrap -> IGNORED
   appendKeyEvent(log, makeBindEvent({ issuer_id: 'issuer:A', newKey: attacker, seq: 0, ts: 1400 }));
