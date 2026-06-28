@@ -109,7 +109,7 @@ export function verifyMutualAttestation(bundle, gatewayPub, clientPub, opts = {}
  const failObj = { verified: false, gateway: { verified: false }, clientSigOk: false, clientPinned: false };
  try {
   if (!bundle || typeof bundle !== 'object' || !bundle.att || typeof bundle.client_pub !== 'string' || typeof bundle.client_sig !== 'string') return failObj;
-  const g = gw.verifySession(bundle.att, gatewayPub, { expectedTranscript: opts.expectedTranscript });
+  const g = gw.verifySession(bundle.att, gatewayPub, { expectedTranscript: opts.expectedTranscript, now: opts.now, maxAgeMs: opts.maxAgeMs }); // freshness threading (4th sweep): an auditor can bound attestation age when desired
   // Hardening E: only report pinned:true when the key was actually supplied AND matched (never report a phantom pin).
   const clientPinned = !!clientPub && bundle.client_pub.toLowerCase() === bytesToHex(clientPub).toLowerCase();
   // BUG B: recompute the IDENTICAL countersigned bytes from bundle.att (whole core), not just transcript_sha256.
