@@ -21,7 +21,8 @@
  * MD5/SHA-1 by standardized numeric OID — closes the published "OID" blind spot; certs/ASN.1/PKI configs name crypto by
  * OID, not by algorithm name). v0.5 ADDS: ENCODED-BLOB detection — decodes base64/PEM key+cert blobs and identifies the
  * algorithm by its DER OID (closes the "encoded-blob" blind spot; FP-safe — only a DER-anchored crypto OID counts).
- * Self-test: node pqcbom.mjs
+ * v0.6 ADDS: standard fused ASN.1 algorithm identifiers (rsaEncryption/ecPublicKey/sha256WithRSA/ecdsa-with-sha* —
+ * closes the "substring" blind spot for known names; bare "rsa"/"ec" in arbitrary words still don't trip). Self-test: node pqcbom.mjs
  */
 const RULES = [
   // classically broken (a bug regardless of quantum)
@@ -85,6 +86,9 @@ const RULES = [
   { re: /(?<![\d.])1\.3\.101\.11[01](?![\d.])/, algo: 'X25519/X448 (OID)', family: 'kem', risk: 'classical-hybrid-ok', rec: 'X25519/X448 by OID — OK only inside a HYBRID with ML-KEM' },
   { re: /(?<![\d.])1\.2\.840\.113549\.2\.5(?![\d.])/, algo: 'MD5 (OID)', family: 'hash', risk: 'broken-classical', rec: 'MD5 by OID — REMOVE (collision-broken)' },
   { re: /(?<![\d.])1\.3\.14\.3\.2\.26(?![\d.])/, algo: 'SHA-1 (OID)', family: 'hash', risk: 'broken-classical', rec: 'SHA-1 by OID — REMOVE (collision-broken)' },
+  // --- v0.6: STANDARD fused ASN.1/OID-friendly algorithm identifiers (closes the "substring" blind spot for KNOWN names —
+  //     these are specific compound tokens, NOT bare "rsa"/"ec" in arbitrary words, so the word-boundary FP guards stand) ---
+  { re: /\b(rsaEncryption|ecPublicKey|ecdsa[-_]?with[-_]?sha\d+|sha\d{2,3}with(rsa|ecdsa|dsa)\w*)/i, algo: 'RSA/EC ASN.1 identifier (fused)', family: 'pubkey', risk: 'quantum-broken', rec: 'standard ASN.1 algorithm name (fused token) — RSA/EC is Shor-broken; migrate to ML-KEM/ML-DSA' },
 ];
 const RISK_ORDER = ['broken-classical', 'quantum-broken', 'quantum-weakened', 'classical-hybrid-ok', 'quantum-safe'];
 
@@ -461,6 +465,11 @@ function selfTest() {
   ok(scanText('k.txt', 'pub = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A"').some((f) => f.algo === 'RSA (encoded/PEM)' && f.risk === 'quantum-broken'), 'base64 RSA SubjectPublicKeyInfo blob -> RSA (decoded DER OID)');
   ok(scanText('cert.pem', '-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A\n-----END PUBLIC KEY-----').some((f) => f.algo === 'RSA (encoded/PEM)'), 'PEM-wrapped RSA key detected (lines joined + decoded)');
   ok(scanText('img.txt', 'data = "' + 'QUJD'.repeat(30) + '"').filter((f) => f.context === 'encoded').length === 0, 'v0.5 FP guard: non-crypto base64 (no DER crypto OID) -> NO encoded finding');
+
+  // --- v0.6: fused ASN.1 algorithm identifiers (closes the "substring" blind spot for known names) ---
+  ok(algos('const k = rsaEncryption(2048);').has('RSA/EC ASN.1 identifier (fused)'), 'fused "rsaEncryption" identifier detected');
+  ok(algos('sigAlg: sha256WithRSAEncryption').has('RSA/EC ASN.1 identifier (fused)') && algos('alg = ecPublicKey').has('RSA/EC ASN.1 identifier (fused)'), 'sha256WithRSAEncryption + ecPublicKey detected');
+  ok(scanText('w.md', 'an rsannouncement about ecology and a description').length === 0, 'v0.6 FP guard: bare "rsa"/"ec"/"des" inside ordinary words do NOT trip');
 
   // --- suppression: inline `pqcbom-ignore` + allowlist (adoption escape hatch) ---
   const inlIgnore = scanFiles([{ name: 'a.js', text: 'const k = RSA.gen(2048); // pqcbom-ignore: accepted legacy' }]);

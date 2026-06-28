@@ -50,6 +50,7 @@ const CORPUS = [
   { id: 'md5-by-oid', text: 'digestAlgorithm 1.2.840.113549.2.5', find: ['MD5 (OID)'], notFind: [] },
   // --- true positives: encoded-blob layer (v0.5 — base64/PEM key+cert blobs, algorithm by decoded DER OID) ---
   { id: 'encoded-rsa', text: 'pub = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A";', find: ['RSA (encoded/PEM)'], notFind: [] },
+  { id: 'rsa-substring', text: 'const k = rsaEncryption(2048);', find: ['RSA/EC ASN.1 identifier (fused)'], notFind: [] },
   // --- FALSE-POSITIVE TRAPS (the hard part — these must NOT mis-fire) ---
   { id: 'mldsa-not-dsa', text: 'sig = ML-DSA-87', find: ['ML-DSA/Dilithium'], notFind: ['DSA'] },
   { id: 'slhdsa-not-dsa', text: 'use SLH-DSA for diversity', find: ['SLH-DSA/SPHINCS+'], notFind: ['DSA'] },
@@ -63,8 +64,9 @@ const CORPUS = [
 // BLIND SPOTS — cases a LEXICAL scanner is EXPECTED to miss (this is WHY findings are "leads to verify"). We verify
 // they are indeed not detected, and publish them as documented limitations rather than pretending 100% coverage.
 // (v0.4: the former 'rsa-by-oid' blind spot is CLOSED — OID detection was added; it is now a true-positive corpus case above.)
+// (v0.6: the former 'rsa-substring' blind spot is CLOSED for STANDARD fused names — moved to a true-positive case above.
+//  Only crypto fused into a NON-standard/custom identifier remains lexically invisible, captured by 'custom-wrapper'.)
 const BLIND_SPOTS = [
-  { id: 'rsa-substring', text: 'const k = rsaEncryption(2048);', why: 'algorithm embedded in a longer identifier (no word boundary)' },
   { id: 'custom-wrapper', text: 'const sig = companyCryptoSign(payload);', why: 'crypto hidden behind a custom wrapper name' },
   { id: 'runtime-alias', text: 'const C = loadCipher(cfg); C.encrypt(x);', why: 'algorithm resolved at runtime via a variable' },
   // (v0.5: 'encoded-key' CLOSED — base64/PEM blobs are now decoded + identified by DER OID; moved to a true-positive case above.)
