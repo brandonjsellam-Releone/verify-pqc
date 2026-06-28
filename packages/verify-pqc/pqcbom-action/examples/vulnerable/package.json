@@ -1,0 +1,4 @@
+{
+  "name": "vulnerable-sample",
+  "dependencies": { "node-forge": "^1.3.1", "crypto-js": "^4.2.0" }
+}

@@ -1,0 +1,55 @@
+name: pqcbom-action self-test
+
+# Dogfoods the "Quantum-Safe Scorecard" action IN real GitHub Actions: proves it runs dependency-free
+# (node20, NO npm install), grades correctly, and that the policy gate actually fails the build on banned
+# crypto. Locks the action so it can't silently regress (it was once broken by a transitive @noble import).
+
+on:
+  push:
+    paths: ['packages/verify-pqc/pqcbom-action/**', '.github/workflows/pqcbom-action-selftest.yml']
+  pull_request:
+    paths: ['packages/verify-pqc/pqcbom-action/**', '.github/workflows/pqcbom-action-selftest.yml']
+  workflow_dispatch:
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan the vulnerable fixture (grade only, no gate)
+        id: vuln
+        uses: ./packages/verify-pqc/pqcbom-action
+        with:
+          path: packages/verify-pqc/pqcbom-action/examples/vulnerable
+          fail-on: ''
+
+      - name: Assert vulnerable fixture grades F
+        run: |
+          echo "grade=${{ steps.vuln.outputs.grade }} score=${{ steps.vuln.outputs.score }}"
+          test "${{ steps.vuln.outputs.grade }}" = "F" || { echo "::error::expected grade F for the vulnerable fixture"; exit 1; }
+
+      - name: Scan the clean (PQ-safe) fixture
+        id: clean
+        uses: ./packages/verify-pqc/pqcbom-action
+        with:
+          path: packages/verify-pqc/pqcbom-action/examples/clean
+          fail-on: ''
+
+      - name: Assert clean fixture grades A
+        run: |
+          echo "grade=${{ steps.clean.outputs.grade }} score=${{ steps.clean.outputs.score }}"
+          test "${{ steps.clean.outputs.grade }}" = "A" || { echo "::error::expected grade A for the clean fixture"; exit 1; }
+
+      - name: Run the gate on the vulnerable fixture (expected to FAIL the build)
+        id: gate
+        continue-on-error: true
+        uses: ./packages/verify-pqc/pqcbom-action
+        with:
+          path: packages/verify-pqc/pqcbom-action/examples/vulnerable
+          fail-on: broken-classical,quantum-broken
+
+      - name: Assert the gate failed the build on banned crypto
+        run: |
+          test "${{ steps.gate.outcome }}" = "failure" || { echo "::error::the policy gate should have failed the build"; exit 1; }
+          echo "OK — the gate correctly failed the build on banned crypto"
