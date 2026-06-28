@@ -30,16 +30,22 @@
  * algorithm:'none', PHP openssl_public/private_*, and DES-by-OID. Each is a SPECIFIC compound token (not a bare algo
  * word) so the FP guards stand; coverage 57/60 = 95% of statically-detectable corpus cases (the residual 3 need
  * constant-folding/data-flow — runtime string-concat + cross-line key-size binding — and stay honest blind spots,
- * alongside the 12 runtime/config-selected cases). Coverage harness: node structural-corpus.mjs. Self-test: node pqcbom.mjs
+ * alongside the 12 runtime/config-selected cases). Coverage harness: node structural-corpus.mjs.
+ * v0.8 ADDS (adversarial red-team round): FP fixes (the surname "Gendsa", a "DESeded" build flavour, "none-cache", and
+ * TLS_*_RSA_* filenames no longer mis-fire — suite rules now require WITH) + FN coverage — underscore/abbrev spellings
+ * (des_ede3_cbc, MCRYPT_3DES, TDES, aes_128_ctr, arcfour128, MD-5, HmacSHA1, RSA512, md5WithRSAEncryption), weak
+ * sizes/KDFs (RSA-512/768, openssl genrsa/dhparam, PBKDF1, SHA-224, secp160r1), and regional/legacy families (GOST /
+ * Magma / Kuznyechik / Streebog, SM2 / SM4, SEED, Skipjack, IDEA, RC2 — all CONTEXT-ANCHORED so common words stay safe).
+ * Self-test: node pqcbom.mjs
  */
 const RULES = [
   // classically broken (a bug regardless of quantum)
   { re: /\bMD5\b/i, algo: 'MD5', family: 'hash', risk: 'broken-classical', rec: 'REMOVE — collision-broken; use SHA-512 / SHA3-512' },
   { re: /\bSHA-?1\b/i, algo: 'SHA-1', family: 'hash', risk: 'broken-classical', rec: 'REMOVE — collision-broken; use SHA-512 / SHA3-512' },
   { re: /\bRC4\b/i, algo: 'RC4', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM / ChaCha20-Poly1305' },
-  { re: /\b(3DES|Triple-?DES|DESede|DES-(EDE3?|CBC|ECB|OFB|CFB)|DES(?![\w-]))/i, algo: '3DES/DES', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM' }, // bare DES + DESede + DES modes; DES(?![\w-]) so "DES-less"/"description" are NOT matched (council + self-test guard)
+  { re: /\b(3DES|Triple-?DES|DESede(?!d)|DES-(EDE3?|CBC|ECB|OFB|CFB)|DES(?![\w-]))/i, algo: '3DES/DES', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM' }, // bare DES + DESede + DES modes; DES(?![\w-]) so "DES-less"/"description" are NOT matched; DESede(?!d) so the "DESeded" build flavour is NOT matched (adversary FP) while DESedeKeySpec still is
   // quantum-broken (Shor): public-key
-  { re: /\bRSA(SSA|ES)?\b|RSA-?(1024|2048|3072|4096)|PKCS#?1\b/i, algo: 'RSA', family: 'pubkey', risk: 'quantum-broken', rec: 'migrate KEM->ML-KEM-1024, sig->ML-DSA-87 (hybrid during transition)' }, // PKCS#?1\b so PKCS#11 (HSM) is NOT matched; +RSASSA/RSAES (council)
+  { re: /\bRSA(SSA|ES)?\b|RSA-?(512|768|1024|2048|3072|4096)|RSA_(public|private)_(en|de)crypt|RSA_PKCS1|PKCS#?1\b/i, algo: 'RSA', family: 'pubkey', risk: 'quantum-broken', rec: 'migrate KEM->ML-KEM-1024, sig->ML-DSA-87 (hybrid during transition)' }, // PKCS#?1\b so PKCS#11 (HSM) is NOT matched; +512/768 weak sizes + RSA_public/private_encrypt + RSA_PKCS1 underscore forms (adversary FN)
   { re: /(?<![\w-])DSA(?![\w-])/i, algo: 'DSA', family: 'signature', risk: 'quantum-broken', rec: 'migrate to ML-DSA-87 / SLH-DSA' }, // not preceded/followed by word-char or '-' so ML-DSA/SLH-DSA/ECDSA are NOT matched
   { re: /\bECDSA\b/i, algo: 'ECDSA', family: 'signature', risk: 'quantum-broken', rec: 'migrate to ML-DSA-87 (keep ECDSA only as a HYBRID leg)' },
   { re: /\bECDHE?\b|\bECIES\b/i, algo: 'ECDH', family: 'kem', risk: 'quantum-broken', rec: 'migrate to ML-KEM-1024 (+ X25519 in HYBRID)' }, // +ECDHE (council)
@@ -61,7 +67,7 @@ const RULES = [
   { re: /\bChaCha20(-?Poly1305)?\b/i, algo: 'ChaCha20-Poly1305', family: 'cipher', risk: 'quantum-safe', rec: 'OK — 256-bit stream AEAD' },
   // --- v0.2 expanded coverage: protocols, JWT/JOSE, SSH, managed crypto, more PQ KEMs ---
   { re: /\b(SSLv?[23]|TLSv?-?1\.[01]|TLSv?1(?![.\d]))/i, algo: 'TLS<1.2 / SSL', family: 'protocol', risk: 'broken-classical', rec: 'REMOVE deprecated TLS/SSL; require TLS 1.2+ (1.3 preferred)' }, // TLSv?1(?![.\d]) so TLS 1.2/1.3 do NOT false-positive (council: both seats)
-  { re: /\balg["'\s:=]{1,4}none\b/i, algo: 'JWT alg=none', family: 'token', risk: 'broken-classical', rec: 'CRITICAL — unsigned JWT; never accept alg:none' },
+  { re: /\balg["'\s:=]{1,4}none(?![\w-])/i, algo: 'JWT alg=none', family: 'token', risk: 'broken-classical', rec: 'CRITICAL — unsigned JWT; never accept alg:none' }, // none(?![\w-]) so "none-cache" / "none-suffix" prose does NOT fire (adversary FP)
   { re: /\b(RS256|RS384|RS512|PS256|PS384|PS512)\b/, algo: 'JWT RSA (RS/PS)', family: 'signature', risk: 'quantum-broken', rec: 'RSA-signed JWT — plan ML-DSA-87 (hybrid)' },
   { re: /\b(ES256K?|ES384|ES512)\b/, algo: 'JWT ECDSA (ES)', family: 'signature', risk: 'quantum-broken', rec: 'ECDSA-signed JWT — plan ML-DSA-87 (hybrid)' },
   { re: /\bssh-rsa\b|\bssh-dss\b|\becdsa-sha2-/i, algo: 'SSH RSA/DSA/ECDSA key', family: 'signature', risk: 'quantum-broken', rec: 'SSH key Shor-broken; add sntrup761x25519 KEX + plan PQ' }, // +ssh-dss (council)
@@ -96,7 +102,7 @@ const RULES = [
   { re: /(?<![\d.])1\.3\.14\.3\.2\.26(?![\d.])/, algo: 'SHA-1 (OID)', family: 'hash', risk: 'broken-classical', rec: 'SHA-1 by OID — REMOVE (collision-broken)' },
   // --- v0.6: STANDARD fused ASN.1/OID-friendly algorithm identifiers (closes the "substring" blind spot for KNOWN names —
   //     these are specific compound tokens, NOT bare "rsa"/"ec" in arbitrary words, so the word-boundary FP guards stand) ---
-  { re: /\b(rsaEncryption|ecPublicKey|ecdsa[-_]?with[-_]?sha\d+|sha-?\d{1,3}with(rsa|ecdsa|dsa)\w*)/i, algo: 'RSA/EC ASN.1 identifier (fused)', family: 'pubkey', risk: 'quantum-broken', rec: 'standard ASN.1 algorithm name (fused token) — RSA/EC is Shor-broken; migrate to ML-KEM/ML-DSA' }, // v0.7: \d{2,3}->{1,3} so SHA1withRSA's RSA leg is caught
+  { re: /\b(rsaEncryption|ecPublicKey|ecdsa[-_]?with[-_]?sha\d+|(sha-?\d{1,3}|md[245])with(rsa|ecdsa|dsa)\w*)/i, algo: 'RSA/EC ASN.1 identifier (fused)', family: 'pubkey', risk: 'quantum-broken', rec: 'standard ASN.1 algorithm name (fused token) — RSA/EC is Shor-broken; migrate to ML-KEM/ML-DSA' }, // v0.7: \d{2,3}->{1,3} so SHA1withRSA's RSA leg is caught; v0.8: +md[245]with for md5WithRSAEncryption
   { re: /(?<![\d.])1\.3\.14\.3\.2\.7(?![\d.])/, algo: '3DES/DES', family: 'cipher', risk: 'broken-classical', rec: 'DES-CBC by OID (1.3.14.3.2.7) — REMOVE; use AES-256-GCM' }, // v0.7: DES by OID (.NET CryptoConfig.CreateFromName)
   { re: /(?<![\d.])1\.2\.840\.113549\.1\.1\.5(?![\d.])/, algo: 'RSA-SHA1 sig (OID)', family: 'signature', risk: 'quantum-broken', rec: 'sha1WithRSAEncryption by OID — RSA Shor-broken + SHA-1 collision-broken; plan ML-DSA-87' }, // v0.7
   // --- v0.7: COMPOUND / glued algorithm identifiers (corpus-driven, test-fixtures/structural-corpus.json). Real code
@@ -106,10 +112,10 @@ const RULES = [
   { re: /\bDES3\b/i, algo: '3DES/DES', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM' }, // pycryptodome Crypto.Cipher.DES3
   { re: /\b(ARCFOUR|ARC4)\b/i, algo: 'RC4', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM / ChaCha20-Poly1305' }, // SunJCE / pycryptodome RC4 alias
   { re: /\bRC4[-_]\d/i, algo: 'RC4', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM / ChaCha20-Poly1305' }, // TLS suite RC4_128
-  { re: /\bRC2[-_/](CBC|ECB|CFB|OFB)\b|\bRC2CryptoServiceProvider\b|(Create|CreateFromName)\(\s*["']RC2["']/i, algo: 'RC2', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE — 64-bit legacy cipher; use AES-256-GCM' }, // crypto-context only (bare RC2 = release-candidate FP)
+  { re: /\bRC2[-_/](CBC|ECB|CFB|OFB)\b|\bRC2CryptoServiceProvider\b|RC2\.(new|MODE)|\bMCRYPT_RC2\b|(Create|CreateFromName)\(\s*["']RC2["']/i, algo: 'RC2', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE — 64-bit legacy cipher; use AES-256-GCM' }, // crypto-context only (bare RC2 = release-candidate FP); +RC2.new/RC2.MODE (pycryptodome) + MCRYPT_RC2 (php)
   { re: /\bbf-(cbc|ecb|cfb|ofb)\b/i, algo: 'Blowfish/CAST5', family: 'cipher', risk: 'broken-classical', rec: 'legacy 64-bit-block cipher (Sweet32) — REMOVE; use AES-256-GCM' }, // OpenSSL Blowfish names
   { re: /\bsha-?1with/i, algo: 'SHA-1', family: 'hash', risk: 'broken-classical', rec: 'REMOVE — collision-broken; use SHA-512 / SHA3-512' }, // SHA1withRSA / SHA1WithRSA / sha1WithRSAEncryption (hash leg)
-  { re: /\b(gendsa|dsaparam)\b/i, algo: 'DSA', family: 'signature', risk: 'quantum-broken', rec: 'migrate to ML-DSA-87 / SLH-DSA' }, // OpenSSL DSA subcommands
+  { re: /\bopenssl\s+gendsa\b|\bgendsa\s+-|\bdsaparam\b/i, algo: 'DSA', family: 'signature', risk: 'quantum-broken', rec: 'migrate to ML-DSA-87 / SLH-DSA' }, // OpenSSL DSA subcommands; gendsa requires command context so the surname "Gendsa" is NOT matched (adversary FP)
   { re: /\bnistp(192|224|256|384|521)\b|\.P(192|224|256|384|521)\(/i, algo: 'EC curve', family: 'pubkey', risk: 'quantum-broken', rec: 'EC curve is Shor-broken; move to ML-KEM/ML-DSA (hybrid)' }, // nistP256 (.NET), elliptic.P224() (Go)
   { re: /\bVersionTLS1[01]\b/i, algo: 'TLS<1.2 / SSL', family: 'protocol', risk: 'broken-classical', rec: 'REMOVE deprecated TLS/SSL; require TLS 1.2+ (1.3 preferred)' }, // Go tls.VersionTLS10/11
   // .NET provider classes (algorithm fused into the class name; bare-token \b guards miss the glued suffix)
@@ -120,14 +126,41 @@ const RULES = [
   { re: /\bDSA(CryptoServiceProvider|Cng)\b/i, algo: 'DSA', family: 'signature', risk: 'quantum-broken', rec: 'migrate to ML-DSA-87 / SLH-DSA' },
   { re: /\bDESCryptoServiceProvider\b/i, algo: '3DES/DES', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM' }, // TripleDESCryptoServiceProvider already caught by the Triple-?DES rule
   // TLS cipher-suite CONSTANT identifiers (Go/Java) — underscore-joined, so \b-bounded rules miss the inner algo tokens
-  { re: /\bTLS_[A-Z0-9_]*RC4[A-Z0-9_]*\b/, algo: 'RC4', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM / ChaCha20-Poly1305' },
-  { re: /\bTLS_[A-Z0-9_]*(3DES|DES_EDE)[A-Z0-9_]*\b/, algo: '3DES/DES', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM' },
-  { re: /\bTLS_[A-Z0-9_]*_RSA[_A-Z0-9]*\b/, algo: 'RSA', family: 'pubkey', risk: 'quantum-broken', rec: 'RSA in a TLS cipher-suite — Shor-broken; plan ML-KEM/ML-DSA (hybrid)' },
-  { re: /\bTLS_ECDHE?_[A-Z0-9_]*\b/, algo: 'ECDH', family: 'kem', risk: 'quantum-broken', rec: 'ECDHE in a TLS cipher-suite — Shor-broken; migrate to ML-KEM-1024 (+ X25519 hybrid)' },
+  // require WITH (the TLS-1.2 cipher-suite shape) so benign filenames/identifiers like TLS_DRAFT_RSA_NOTES do NOT fire (adversary FP)
+  { re: /\bTLS_[A-Z0-9_]*WITH[A-Z0-9_]*RC4[A-Z0-9_]*\b/, algo: 'RC4', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM / ChaCha20-Poly1305' },
+  { re: /\bTLS_[A-Z0-9_]*WITH[A-Z0-9_]*(3DES|DES_EDE|DES40|DES_CBC)[A-Z0-9_]*\b/, algo: '3DES/DES', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM' },
+  { re: /\bTLS_[A-Z0-9_]*RSA[A-Z0-9_]*WITH[A-Z0-9_]*\b/, algo: 'RSA', family: 'pubkey', risk: 'quantum-broken', rec: 'RSA in a TLS cipher-suite — Shor-broken; plan ML-KEM/ML-DSA (hybrid)' },
+  { re: /\bTLS_ECDHE?_[A-Z0-9_]*WITH[A-Z0-9_]*\b/, algo: 'ECDH', family: 'kem', risk: 'quantum-broken', rec: 'ECDHE in a TLS cipher-suite — Shor-broken; migrate to ML-KEM-1024 (+ X25519 hybrid)' },
   { re: /\balgorithm\s*[:=]\s*["']none["']/i, algo: 'JWT alg=none', family: 'token', risk: 'broken-classical', rec: 'CRITICAL — unsigned JWT; never accept alg:none' }, // \b before 'algorithm' excludes compression_algorithm etc.
   { re: /\bPBE[-_]?With\w*MD5/i, algo: 'MD5', family: 'hash', risk: 'broken-classical', rec: 'PBEWithMD5* (PBKDF1/MD5) — REMOVE; use PBKDF2/scrypt/Argon2 with SHA-256+' }, // JCA PBE name
   { re: /\bPBE[-_]?With\w*DES\b/i, algo: '3DES/DES', family: 'cipher', risk: 'broken-classical', rec: 'PBEWith*AndDES — DES-based PBE; REMOVE; use AES-256-GCM' }, // JCA PBE name
   { re: /\bopenssl_(public|private)_(encrypt|decrypt)\b/i, algo: 'RSA', family: 'pubkey', risk: 'quantum-broken', rec: 'PHP openssl_public/private_* is RSA — Shor-broken; migrate KEM->ML-KEM-1024, sig->ML-DSA-87 (hybrid)' },
+  // --- v0.8: adversary-driven (red-team workflow) — underscore/abbrev spellings, weak sizes/KDFs, more legacy/regional
+  //     families. Each is anchored (mode/context/specific token), verified against the FP corpus so guards stand. ---
+  { re: /\b(TDES|MCRYPT_3DES|des[_]ede\d?)/i, algo: '3DES/DES', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM' }, // TDES abbrev, MCRYPT_3DES, des_ede underscore
+  { re: /\bdes[_](cbc|ecb|cfb|ofb)\b|\bdes40\b/i, algo: '3DES/DES', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM' }, // des_cbc underscore + export DES40
+  { re: /\baes[_](128|192)(?!\d)/i, algo: 'AES-128/192', family: 'cipher', risk: 'quantum-weakened', rec: 'use AES-256 (Grover halves the key strength)' }, // aes_128_ctr underscore (no trailing \b: '_ctr' would break it)
+  { re: /\bARCFOUR\d*\b/i, algo: 'RC4', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM / ChaCha20-Poly1305' }, // arcfour128/arcfour256 (SSH)
+  { re: /\bMD-5\b/i, algo: 'MD5', family: 'hash', risk: 'broken-classical', rec: 'REMOVE — collision-broken; use SHA-512 / SHA3-512' }, // hyphenated MD-5
+  { re: /hmac[-_]?sha-?1\b/i, algo: 'SHA-1', family: 'hash', risk: 'broken-classical', rec: 'REMOVE — collision-broken; use SHA-512 / SHA3-512' }, // HmacSHA1 / PBKDF2WithHmacSHA1 (no leading \b: 'WithHmac' glues it)
+  { re: /\bmd[245]with/i, algo: 'MD5', family: 'hash', risk: 'broken-classical', rec: 'REMOVE — collision-broken; use SHA-512 / SHA3-512' }, // md5WithRSAEncryption hash leg (RSA leg caught by the fused rule)
+  { re: /\bRSA512\b|\bRSA-?(512|768)\b/i, algo: 'RSA', family: 'pubkey', risk: 'quantum-broken', rec: 'RSA — Shor-broken (and 512/768-bit is classically weak); migrate to ML-KEM-1024 / ML-DSA-87' }, // glued RSA512
+  { re: /\bopenssl\s+genrsa\b|\bgenrsa\s+-/i, algo: 'RSA', family: 'pubkey', risk: 'quantum-broken', rec: 'openssl genrsa — RSA, Shor-broken; migrate to ML-KEM/ML-DSA (hybrid)' }, // keygen verb (command context)
+  { re: /\bopenssl\s+dhparam\b|\bdhparam\s+-/i, algo: 'finite-field DH', family: 'kem', risk: 'quantum-broken', rec: 'openssl dhparam — finite-field DH (Logjam/Shor); migrate to ML-KEM-1024' },
+  { re: /\bPBKDF1\b/i, algo: 'PBKDF1 (weak KDF)', family: 'keymgmt', risk: 'broken-classical', rec: 'PBKDF1 — deprecated/weak KDF; use PBKDF2/scrypt/Argon2 with SHA-256+' },
+  { re: /\bSHA-?224\b|\bsha224\b/i, algo: 'SHA-224', family: 'hash', risk: 'quantum-weakened', rec: 'SHA-224 ~112-bit collision strength (sub-128); use SHA-512 / SHA3-512' },
+  { re: /\bsecp(128|160)r1\b/i, algo: 'EC curve (legacy)', family: 'pubkey', risk: 'quantum-broken', rec: 'short/legacy EC curve — Shor-broken + classically weak; move to ML-KEM/ML-DSA' },
+  { re: /\b(EC-?KCDSA|KCDSA)\b/i, algo: 'DSA', family: 'signature', risk: 'quantum-broken', rec: 'KCDSA — DSA-family, Shor-broken; migrate to ML-DSA-87' },
+  { re: /\bECMQV\b/i, algo: 'ECDH', family: 'kem', risk: 'quantum-broken', rec: 'EC-MQV key agreement — Shor-broken; migrate to ML-KEM-1024 (+ X25519 hybrid)' },
+  { re: /(?<![\d.])1\.3\.36\.3\.3\.2\.8\.1\.1\.\d+(?![\d.])/, algo: 'EC curve (brainpool OID)', family: 'pubkey', risk: 'quantum-broken', rec: 'brainpool curve by OID — Shor-broken EC' },
+  // regional / national legacy families (anchored to crypto context to avoid common-word FP)
+  { re: /\bGOST[-_ ]?(R[-_ ]?)?34[._]?1[01]\b|\bGOST[-_ ]?(3410|2012)(?!\d)/i, algo: 'GOST R 34.10/34.11 (legacy)', family: 'signature', risk: 'quantum-broken', rec: 'GOST R 34.10 (EC/DLP sig, Shor-broken) / 34.11 (Streebog) — non-NIST; migrate to ML-DSA-87 / SHA-512' }, // (?!\d) so gost2012_256 matches ('_' not a digit)
+  { re: /\bGOST[-_ ]?(28147|89|3412)\b|\b(Kuznyechik|Streebog|Magma)\b/i, algo: 'GOST cipher/hash (legacy)', family: 'cipher', risk: 'broken-classical', rec: 'GOST 28147/Magma (64-bit) / Kuznyechik / Streebog — non-NIST legacy; migrate to AES-256 / SHA-512 + PQC' },
+  { re: /\bSM3?with[-_]?SM2\b|\bSM2[-_](sign|sig|with|enc|cipher)/i, algo: 'SM2 (GM EC)', family: 'signature', risk: 'quantum-broken', rec: 'SM2 — GM/T elliptic-curve, Shor-broken; migrate to ML-DSA-87' },
+  { re: /\bSM4[-_/](CBC|ECB|GCM|CTR|OFB|CFB)\b/i, algo: 'SM4 (GM cipher)', family: 'cipher', risk: 'quantum-weakened', rec: 'SM4 — 128-bit GM block cipher; Grover-weakened; prefer AES-256-GCM' },
+  { re: /\bSEED[-/](CBC|ECB|CFB|OFB|GCM)\b/i, algo: 'SEED (legacy cipher)', family: 'cipher', risk: 'quantum-weakened', rec: 'SEED — 128-bit Korean legacy block cipher; prefer AES-256-GCM' },
+  { re: /skipjack[-_/(]/i, algo: 'Skipjack (broken cipher)', family: 'cipher', risk: 'broken-classical', rec: 'Skipjack — 80-bit NSA-era cipher, below modern security; REMOVE; use AES-256-GCM' }, // anchored by [-_/(] (so "skipjack tuna" prose does NOT fire); no leading \b ('encrypt_skipjack')
+  { re: /\bIDEA[-_/.](new|MODE|CBC|ECB|CFB|OFB)\b|cipher-algo\s+IDEA\b|Cipher\.IDEA\b/i, algo: 'IDEA (legacy cipher)', family: 'cipher', risk: 'broken-classical', rec: 'IDEA — 64-bit-block legacy cipher (Sweet32 class); REMOVE; use AES-256-GCM' },
 ];
 const RISK_ORDER = ['broken-classical', 'quantum-broken', 'quantum-weakened', 'classical-hybrid-ok', 'quantum-safe'];
 
@@ -527,6 +560,24 @@ function selfTest() {
   ok(scanText('rel.md', 'shipping build v2.0-RC2 and v1.9-RC2 today').filter((f) => f.algo === 'RC2').length === 0, 'v0.7 FP guard: release-candidate RC2 NOT flagged (crypto-context RC2 only)');
   ok(scanText('cfg.yml', "compression_algorithm: 'none'").filter((f) => f.algo === 'JWT alg=none').length === 0, 'v0.7 FP guard: compression_algorithm:none is NOT JWT alg=none (\\b excludes _algorithm)');
   ok(scanText('p.txt', 'sensor model P256 rev DES3000-A AES1000 board').filter((f) => /EC curve|3DES|RC4|RC2/.test(f.algo)).length === 0, 'v0.7 FP guard: bare P256 / DES3000 / AES1000 part numbers do NOT trip');
+
+  // --- v0.8: adversary-driven FP fixes + FN additions (red-team workflow) ---
+  ok(scanText('id.py', 'OWNER_SURNAME = "Gendsa"').filter((f) => f.algo === 'DSA').length === 0, 'v0.8 FP: surname "Gendsa" is not DSA (gendsa needs command context)');
+  ok(scanText('e.cs', 'enum { Debug, Release, DESeded }').filter((f) => /3DES|DES/.test(f.algo)).length === 0, 'v0.8 FP: "DESeded" build flavour is not 3DES');
+  ok(scanText('p.txt', 'set header alg: none-cache to bypass').filter((f) => /JWT/.test(f.algo)).length === 0, 'v0.8 FP: "none-cache" is not JWT alg=none');
+  ok(scanText('c.md', 'added TLS_DRAFT_RSA_NOTES.md').filter((f) => f.algo === 'RSA').length === 0, 'v0.8 FP: TLS_DRAFT_RSA_NOTES filename is not RSA (suite rule requires WITH)');
+  ok(scanText('t.md', 'a great idea for the rewrite').filter((f) => /IDEA/.test(f.algo)).length === 0 && scanText('t.md', 'skipjack tuna season report').filter((f) => /Skipjack/.test(f.algo)).length === 0, 'v0.8 FP: prose "idea" / "skipjack tuna" do not fire IDEA / Skipjack');
+  ok(algos('openssl gendsa -out ca.key dsaparam.pem').has('DSA') && algos('DESedeKeySpec ks').has('3DES/DES') && algos('header = { alg: "none" }').has('JWT alg=none'), 'v0.8: real gendsa / DESedeKeySpec / alg:none still caught');
+  ok(algos('tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA').has('RSA') && algos('tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA').has('RC4'), 'v0.8: real TLS suite const still RSA + RC4');
+  ok(algos('transform = des_ede3_cbc').has('3DES/DES') && algos('algorithm: TDES').has('3DES/DES') && algos('mcrypt_encrypt(MCRYPT_3DES, k)').has('3DES/DES'), 'v0.8 FN: des_ede3_cbc / TDES / MCRYPT_3DES -> 3DES');
+  ok(algos("ENC = 'aes_128_ctr'").has('AES-128/192') && algos('Ciphers arcfour128,arcfour256').has('RC4'), 'v0.8 FN: aes_128_ctr / arcfour128 underscore forms');
+  ok(algos('getInstance("MD-5")').has('MD5') && algos('getInstance("PBKDF2WithHmacSHA1")').has('SHA-1') && algos('sig = "md5WithRSAEncryption"').has('MD5'), 'v0.8 FN: MD-5 / HmacSHA1 / md5WithRSAEncryption');
+  ok(algos('openssl genrsa -out s.key 1024').has('RSA') && algos('openssl dhparam -out dh.pem 1024').has('finite-field DH') && algos('var k = RSA512.Create()').has('RSA'), 'v0.8 FN: genrsa / dhparam / RSA512');
+  ok(algos('getInstance("SM3withSM2")').has('SM2 (GM EC)') && algos('getInstance("SEED/CBC/PKCS5Padding")').has('SEED (legacy cipher)'), 'v0.8 FN: SM2 / SEED');
+  ok(algos('encrypt_skipjack(buf, key)').has('Skipjack (broken cipher)') && algos('gpg --cipher-algo IDEA file').has('IDEA (legacy cipher)') && algos('Crypto.Cipher.IDEA.new(k)').has('IDEA (legacy cipher)'), 'v0.8 FN: Skipjack / IDEA (anchored)');
+  ok(algos('gost28147.NewCipher(key)').has('GOST cipher/hash (legacy)') && algos('newkey gost2012_256').has('GOST R 34.10/34.11 (legacy)'), 'v0.8 FN: GOST 28147 cipher + GOST 2012 sig');
+  ok(algos('hashlib.sha224(x)').has('SHA-224') && algos('kdf = PBKDF1(pw, salt)').has('PBKDF1 (weak KDF)') && algos('getParameterSpec("secp160r1")').has('EC curve (legacy)'), 'v0.8 FN: SHA-224 / PBKDF1 / secp160r1');
+  ok(algos('RC2.new(key, RC2.MODE_ECB)').has('RC2') && algos('mcrypt_encrypt(MCRYPT_RC2, k)').has('RC2'), 'v0.8 FN: RC2.new / MCRYPT_RC2');
 
   // --- suppression: inline `pqcbom-ignore` + allowlist (adoption escape hatch) ---
   const inlIgnore = scanFiles([{ name: 'a.js', text: 'const k = RSA.gen(2048); // pqcbom-ignore: accepted legacy' }]);
