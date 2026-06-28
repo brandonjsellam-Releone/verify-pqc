@@ -13,11 +13,14 @@
  * hybrid-PQ TLS leg to the client and speaks classical (or separately-upgraded) TLS to the backend. The app needs
  * NO source change, but you add the proxy hop + manage its certs. This module is that gateway's policy +
  * negotiation + attestation core; the handshake itself = pqtransport.
- * SECURITY (council/DeepSeek, fixed): offers are bound to a per-session CHALLENGE (anti-replay), and attestations
- * to the handshake TRANSCRIPT hash (which includes the negotiated suite) — NOT an opaque exporter. The attestation
- * is a signed claim bound to that transcript; to be third-party PROOF that PQ was truly used, the verifier must
- * confirm the transcript negotiated the claimed suite (pass opts.expectedTranscript — defeats a lying gateway).
- * Downgrade protection requires PINNED peer keys. Self-test: node pqgateway.mjs
+ * SECURITY (council/DeepSeek + red-team, fixed): offers are bound to a per-session CHALLENGE (anti-replay), and
+ * attestations to the handshake TRANSCRIPT hash — NOT an opaque exporter. HONEST on what the attestation proves: the
+ * suite/level/pq fields (and the minLevel/expectedSuite gates) read the gateway-asserted `suite` LABEL. That label is
+ * PROVEN only when the verifier passes its OWN participant-derived expectedTranscript — pqtransport length-frames the
+ * suite_id INTO that transcript (injective), so a transcript the verifier itself derived cryptographically pins the real
+ * suite; a verifier that wants belt-and-suspenders also passes expectedSuite. Passing a gateway-SUPPLIED hash as
+ * expectedTranscript proves nothing (it is a string compare). Downgrade protection requires PINNED peer keys —
+ * negotiate surfaces trust_anchored so a TOFU result is never mistaken for a pinned one. Self-test: node pqgateway.mjs
  */
 import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
 import { sha256 } from '@noble/hashes/sha2.js';

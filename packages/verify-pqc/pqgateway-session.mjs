@@ -88,7 +88,9 @@ export function clientAccept(att, gatewayPub, clientTh, policy = {}) {
   // BUG D: the attested offer_sha256 (anti-splice binding) is signed but never checked. When the caller supplies the
   // expected offer fingerprint, enforce it here so a different signed offer cannot be spliced under this attestation.
   if (typeof policy.expectedOfferSha256 === 'string' && policy.expectedOfferSha256 && att?.offer_sha256 !== policy.expectedOfferSha256) return { accept: false, reason: 'offer fingerprint mismatch' };
-  return gw.acceptSession(att, gatewayPub, { requirePQ: policy.requirePQ ?? true, noFallback: policy.noFallback ?? true, requireTranscriptBinding: true, expectedTranscript: clientTh });
+  // BUG E (red-team): forward the suite-LEVEL floor / exact-suite policy — a caller's minLevel/expectedSuite was being
+  // SILENTLY DROPPED here, so its stated level-5 floor was a no-op (acceptSession never saw it). Pass them through.
+  return gw.acceptSession(att, gatewayPub, { requirePQ: policy.requirePQ ?? true, noFallback: policy.noFallback ?? true, requireTranscriptBinding: true, expectedTranscript: clientTh, minLevel: policy.minLevel, expectedSuite: policy.expectedSuite });
 }
 
 // CLIENT countersignature -> TRANSFERABLE evidence: the client signs a canonical hash of the WHOLE attestation core
@@ -227,6 +229,13 @@ function selfTest() {
   // R-E [Hardening E]: pinned flags are NEVER reported true when the key was not supplied.
   const noPins = verifyMutualAttestation(r.bundle, undefined, undefined, { expectedTranscript: r.client_th });
   ok(noPins.clientPinned === false && noPins.gatewayPinned === false && noPins.trustAnchored === false, 'REG Hardening E: no keys supplied -> pinned:false + trustAnchored:false (validity != trust)');
+
+  // R-F [BUG E, red-team]: clientAccept must FORWARD the suite-LEVEL floor / expectedSuite. Forge a level-3 attestation
+  // bound to the REAL transcript; a caller demanding minLevel 5 must REJECT it (pre-fix, minLevel was silently dropped).
+  const lvl3Att = gw.attestSession({ session_id: 's-E', chosen: 'hybrid-mlkem768-x25519-mldsa65', pq: true, fallback: false, peer_id: 'x', transcript_sha256: r.client_th, offer_sha256: r.offer_sha256 }, gateway.secretKey, gateway.publicKey, { ts: 2 });
+  ok(clientAccept(lvl3Att, gateway.publicKey, r.client_th, { requirePQ: true }).accept === true, 'REG BUG E: level-3 PQ attestation accepted when no minLevel set');
+  ok(clientAccept(lvl3Att, gateway.publicKey, r.client_th, { requirePQ: true, minLevel: 5 }).accept === false, 'REG BUG E: minLevel 5 is FORWARDED -> level-3 attestation rejected (floor no longer a no-op)');
+  ok(clientAccept(lvl3Att, gateway.publicKey, r.client_th, { requirePQ: true, expectedSuite: 'hybrid-mlkem1024-x25519-mldsa87' }).accept === false, 'REG BUG E: expectedSuite is FORWARDED -> wrong-suite attestation rejected');
 
   console.log('pqgateway-session self-test: ' + pass + ' pass, ' + fail + ' fail');
   if (typeof process !== 'undefined' && process.exit) process.exit(fail ? 1 : 0);
