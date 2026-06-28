@@ -50,8 +50,8 @@ const v = await verifyThrondarStrong(j.signed_tree_head);
 
 The SLH-DSA leg is **non-authoritative**: `verified` is *exactly* the ML-DSA-87 result — a missing or invalid
 SLH co-signature can never flip the verdict either way. Rotation-ready: `THRONDAR_STH_PINS` accepts a
-`{current, previous}` overlap set. Peer deps: `@noble/post-quantum` + `@noble/hashes` (audited, pure-JS
-FIPS-204/205). Conformance KAT (deterministic vectors, exact FIPS sizes): `npm run test:kat`.
+`{current, previous}` overlap set. Peer deps: `@noble/post-quantum` + `@noble/hashes` (the @noble libraries are
+independently audited — that audit covers @noble's primitives, NOT this toolkit, which remains unaudited; pure-JS FIPS-204/205). Conformance KAT (deterministic vectors, exact FIPS sizes): `npm run test:kat`.
 
 ## Inspect / compare raw signatures
 
