@@ -6,6 +6,7 @@
  */
 import { scanDirectory, toCycloneDX, toSARIF } from './pqcbom.mjs';
 import { scorecardBadge, policyGate } from './pqcbom-server.mjs';
+import { buildMigrationPlan, renderMigrationPlan } from './pqcbom-plan.mjs';
 import { writeFileSync } from 'fs';
 
 const args = process.argv.slice(2);
@@ -19,10 +20,11 @@ Usage: node pqcbom-cli.mjs [path] [options]
                       (broken-classical,quantum-broken,quantum-weakened,classical-hybrid-ok,quantum-safe)
   --min-grade=A..F    exit non-zero below this grade
   --sarif[=PATH]      also write a SARIF 2.1.0 report (default: pqcbom.sarif) for GitHub code-scanning
+  --plan[=PATH]       also write a sequenced PQC migration plan (default: migration-plan.md)
   --json              print the CycloneDX CBOM to stdout (suppress the human summary)
   --help, -h          show this help
 
-Always writes: cbom.cdx.json, quantum-readiness-report.md, quantum-safe-badge.json (+ the SARIF with --sarif).
+Always writes: cbom.cdx.json, quantum-readiness-report.md, quantum-safe-badge.json (+ SARIF with --sarif, + the plan with --plan).
 Lexical scan — findings are leads to verify, not a complete inventory. Unaudited reference tool.`);
   process.exit(0);
 }
@@ -32,6 +34,7 @@ const failOn = (opt('fail-on') || '').split(',').filter(Boolean);
 const minGrade = opt('min-grade');
 const jsonOnly = args.includes('--json');
 const sarifOut = args.includes('--sarif') ? 'pqcbom.sarif' : opt('sarif');   // --sarif -> default path; --sarif=PATH -> PATH
+const planOut = args.includes('--plan') ? 'migration-plan.md' : opt('plan');  // --plan -> default path; --plan=PATH -> PATH
 
 const RISK_EMOJI = { 'broken-classical': '⛔', 'quantum-broken': '🔴', 'quantum-weakened': '🟡', 'classical-hybrid-ok': '🔵', 'quantum-safe': '🟢' };
 function mdReport(r) {
@@ -55,7 +58,8 @@ writeFileSync('cbom.cdx.json', JSON.stringify(toCycloneDX(report), null, 2));
 writeFileSync('quantum-readiness-report.md', mdReport(report));
 writeFileSync('quantum-safe-badge.json', JSON.stringify(scorecardBadge(report.grade)));
 if (sarifOut) writeFileSync(sarifOut, JSON.stringify(toSARIF(report, { baseDir: dir }), null, 2));
-if (!jsonOnly) console.log('  Wrote cbom.cdx.json, quantum-readiness-report.md, quantum-safe-badge.json' + (sarifOut ? ', ' + sarifOut : ''));
+if (planOut) writeFileSync(planOut, '# PQC Migration Plan\n\n' + renderMigrationPlan(buildMigrationPlan(report)) + '\n');
+if (!jsonOnly) console.log('  Wrote cbom.cdx.json, quantum-readiness-report.md, quantum-safe-badge.json' + (sarifOut ? ', ' + sarifOut : '') + (planOut ? ', ' + planOut : ''));
 
 if (failOn.length || minGrade) {
   const gate = policyGate(report, { failOn, minGrade });
