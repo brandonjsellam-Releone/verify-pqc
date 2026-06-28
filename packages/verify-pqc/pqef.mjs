@@ -168,6 +168,14 @@ function provenanceContinuous(prov) {
   }
   const genesis = prov.steps.filter((s) => s.prev === null || s.prev === undefined);
   if (genesis.length !== 1) return { ok: false, reason: 'expected exactly one genesis step, found ' + genesis.length };
+  // REACHABILITY (3rd code-security sweep): require every step reachable from the single genesis — rejects an
+  // orphan/cyclic subgraph (steps whose prev links resolve to each other but never reach genesis), which the
+  // per-link + single-genesis checks alone accept and would otherwise pass through to COMPLIANCE-VERIFIED.
+  const children = new Map();
+  for (const s of prov.steps) { if (s.prev != null) (children.get(s.prev) || children.set(s.prev, []).get(s.prev)).push(s.step_id); }
+  const reached = new Set(); const stack = [genesis[0].step_id];
+  while (stack.length) { const id = stack.pop(); if (reached.has(id)) continue; reached.add(id); for (const c of (children.get(id) || [])) stack.push(c); }
+  if (reached.size !== prov.steps.length) return { ok: false, reason: 'provenance has orphan/cyclic steps unreachable from genesis' };
   return { ok: true, reason: 'continuous' };
 }
 

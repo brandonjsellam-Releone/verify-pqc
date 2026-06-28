@@ -98,8 +98,11 @@ export function assembleAnswer(query, claims, policy = DEFAULT_POLICY) {
 const manifestOf = (env) => ({
   query_sha256: sha(env.query), mode: env.mode, policy: env.policy, coverage: env.coverage,
   claims: [...env.emitted.verified_claims, ...env.abstained, ...env.rejected]
-    .map((c) => ({ id: c.id, claim_sha256: sha(c.claim), status: c.status, reason: c.reason_code || null, confidence: c.confidence ?? null }))
+    .map((c) => ({ id: c.id, claim_sha256: sha(c.claim), status: c.status, reason: c.reason_code || null, confidence: c.confidence ?? null,
+      evidence_sha256: c.evidence_refs != null ? sha(canonicalize(c.evidence_refs)) : null }))   // bind per-claim citations (3rd sweep — forge-proof provenance)
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+  sources_sha256: env.sources != null ? sha(canonicalize(env.sources)) : null,                   // bind the retrieved sources (3rd sweep)
+  moa_sha256: env.moa != null ? sha(canonicalize(env.moa)) : null,                               // bind the MoA consensus/dissent (3rd sweep)
   ts: env.ts ?? null,
 });
 export function attestClaimGate(env, order, opts = {}) {
@@ -117,9 +120,12 @@ export function verifyClaimGate(env, trustedOrderPub) {
   if (!a) return { verified: false, reason: 'no attestation' };
   let sigOk = false;
   try { sigOk = a.signer_pub_hex.toLowerCase() === bytesToHex(trustedOrderPub).toLowerCase() && ml_dsa87.verify(hexToBytes(a.sig_hex), utf8ToBytes(canonicalize(a.manifest)), trustedOrderPub, { context: CTX }); } catch { sigOk = false; }
+  // BUG (3rd code-security sweep): rebind the WHOLE manifest, not just .claims — otherwise query/mode/policy/coverage/ts
+  // that the envelope DISPLAYS are unsigned, and an attacker mutates them while keeping the claim set intact (verify stayed true).
+  const manifestMatch = canonicalize(manifestOf(env)) === canonicalize(a.manifest);
   const claimsMatch = canonicalize(manifestOf(env).claims) === canonicalize(a.manifest.claims);
-  const verified = sigOk && claimsMatch;
-  return { verified, sigOk, claimsMatch, reason: verified ? 'attestation valid; claims bind the signed manifest' : !sigOk ? 'signature invalid / not the pinned order key' : 'claims do not match the signed manifest (tampered)' };
+  const verified = sigOk && manifestMatch;
+  return { verified, sigOk, manifestMatch, claimsMatch, reason: verified ? 'attestation valid; the FULL manifest (query/mode/policy/coverage/claims/ts) binds the envelope' : !sigOk ? 'signature invalid / not the pinned order key' : 'envelope does not match the signed manifest (tampered query/coverage/policy/mode/claims/ts)' };
 }
 
 /* ---------- reference (stub) verifiers — pluggable; real ones wrap RAG/NLI/code-exec/pqef ---------- */

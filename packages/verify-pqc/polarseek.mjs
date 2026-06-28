@@ -103,7 +103,9 @@ export function unseal(envelope, custodySec) {
   return gcm(dek, hexToBytes(envelope.data_nonce)).decrypt(hexToBytes(envelope.ciphertext));       // throws on tamper
 }
 // ML-KEM secret key embeds the public key; @noble exposes it via getPublicKey(secretKey).
-function deriveMlkemPub(sk) { return ml_kem1024.getPublicKey ? ml_kem1024.getPublicKey(sk) : sk.slice(sk.length - 1568); }
+// FIPS-203 sk = (dk_PKE || ek_PKE || H(ek) || z): the 1568-byte public key ek_PKE is followed by 64 bytes (H(ek)+z),
+// so the fallback slice is [len-1568-64, len-64), NOT the last 1568 bytes (3rd code-security sweep). Primary path uses getPublicKey.
+function deriveMlkemPub(sk) { return ml_kem1024.getPublicKey ? ml_kem1024.getPublicKey(sk) : sk.slice(sk.length - 1568 - 64, sk.length - 64); }
 
 /* ---------- verify custody record ---------- */
 export function verifyCustodyRecord(record, authorityPub) {

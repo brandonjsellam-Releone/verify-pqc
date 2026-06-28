@@ -63,6 +63,8 @@ export function cosignTimestamp(tst, tsaSk, tsaPub) {
   return tst;
 }
 export function verifyTimestampThreshold(tst, trustedTsaPubs, minSigners = 1) {
+ try { // TOTAL (3rd sweep): null tst / malformed pin list fails CLOSED, never throws
+  if (!tst || typeof tst !== 'object' || Array.isArray(tst)) return { verified: false, signer_count: 0, threshold: minSigners };
   const trusted = (trustedTsaPubs || []).map((p) => bytesToHex(p).toLowerCase());
   const { sig, tsa_pub, cosigs, ...core } = tst;
   const body = utf8ToBytes(canon(core));
@@ -72,6 +74,7 @@ export function verifyTimestampThreshold(tst, trustedTsaPubs, minSigners = 1) {
     if (ok && trusted.includes(a.tsa_pub.toLowerCase())) signers.add(a.tsa_pub.toLowerCase());
   }
   return { verified: signers.size >= Math.max(1, minSigners), signer_count: signers.size, threshold: minSigners };
+ } catch { return { verified: false, signer_count: 0, threshold: minSigners }; }
 }
 
 /* ---------- legacy-signature re-stamping ---------- */
@@ -102,6 +105,8 @@ export function verifyRestamp(rt, trustedTsaPub, opts = {}) {
 /* ---------- anchor a TST in the pqsign transparency log (third-party verifiable) ---------- */
 export function anchor(log, tst) { const entry = { kind: 'pqtsa-tst', tsa_pub: tst.tsa_pub, sig_sha256: sha(tst.sig) }; return { index: log.append(entry), entry }; }
 export function verifyAnchor({ entry, inclusion, sth }, logPub) {
+ try { // TOTAL (3rd sweep): a malformed anchor proof fails CLOSED, never throws (fuzz-robustness)
+  if (!entry || typeof entry !== 'object' || !inclusion || typeof inclusion !== 'object' || !sth || typeof sth !== 'object') return { verified: false, sthOk: false, incOk: false, leafBound: false, treeSizeOk: false };
   const sthOk = verifySTH(sth, logPub);
   const expectedLeaf = entryLeafHash(entry);
   const leafBound = bytesToHex(expectedLeaf) === bytesToHex(inclusion.leaf);
@@ -109,6 +114,7 @@ export function verifyAnchor({ entry, inclusion, sth }, logPub) {
   const treeSizeOk = inclusion.tree_size === sth.tree_size;
   const incOk = leafBound && treeSizeOk && verifyInclusionRFC(expectedLeaf, inclusion.index, sth.tree_size, (inclusion.proof || []).map((p) => p.sibling), hexToBytes(sth.root_hex));
   return { verified: sthOk && incOk, sthOk, incOk, leafBound, treeSizeOk };
+ } catch { return { verified: false, sthOk: false, incOk: false, leafBound: false, treeSizeOk: false }; }
 }
 
 /* ---------- self-test: node pqtsa.mjs ---------- */

@@ -24,6 +24,8 @@ import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 const CTX = utf8ToBytes('trelyan-council-attestation-v1');
 const sha = (s) => bytesToHex(sha256(typeof s === 'string' ? utf8ToBytes(s) : s));
 function canonicalize(v) {
+  if (v === undefined) throw new Error('canonicalize: undefined (fail-closed)');
+  if (typeof v === 'number' && !Number.isFinite(v)) throw new Error('canonicalize: non-finite number (fail-closed)');
   if (v === null || typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string') return JSON.stringify(v);
   if (Array.isArray(v)) return '[' + v.map(canonicalize).join(',') + ']';
   return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canonicalize(v[k])).join(',') + '}';
@@ -68,6 +70,8 @@ export function addWitness(att, witnessSecret, witnessPub, role = 'witness') {
 
 /* ---------- verify ---------- */
 export function verifyCouncilRun(att, evidence, opts = {}) {
+ try { // TOTAL (3rd sweep): a malformed attestation (undefined core field via canonicalize) fails CLOSED, never throws
+  if (!att || typeof att !== 'object' || Array.isArray(att)) return { verified: false, binding_verified: false, content_verified: false, primary_trusted: false, witness_count: 0, note: 'malformed attestation' };
   const trustedP = (opts.trustedSigners || []).map((h) => h.toLowerCase());
   const trustedW = (opts.trustedWitnesses || []).map((h) => h.toLowerCase());
   const cb = core(att);
@@ -121,6 +125,7 @@ export function verifyCouncilRun(att, evidence, opts = {}) {
                     : 'COUNCIL RUN VERIFIED as a SIGNED CLAIM by the runner (non-repudiable, tamper-evident) — NOT independent proof; add witness co-signers or anchor to the transparency log for third-party assurance.')
                   : 'BINDING VERIFIED; full transcript not supplied (selective disclosure).',
   };
+ } catch { return { verified: false, binding_verified: false, content_verified: false, primary_trusted: false, witness_count: 0, note: 'malformed attestation' }; }
 }
 
 /* ---------- self-test: node pqcouncil.mjs ---------- */

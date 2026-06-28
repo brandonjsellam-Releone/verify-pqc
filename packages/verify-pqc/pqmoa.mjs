@@ -2,8 +2,9 @@
  * pqmoa — Post-Quantum-Attested Mixture-of-Agents (reference, DRAFT, standalone).
  *
  * The flagship of "the AI you can put on the record": an orchestrated council of N models whose final
- * answer ships a VERIFIABLE receipt of which models contributed, what each said, the synthesis, and the
- * DISSENT — cryptographically attested (ML-DSA-87) and transparency-loggable, reusing pqcouncil.
+ * answer ships a VERIFIABLE receipt of which models contributed, what each said, and the synthesis —
+ * cryptographically attested (ML-DSA-87) and transparency-loggable, reusing pqcouncil. (consensus_strength +
+ * dissent are advisory views over the bound per-seat responses — NOT separately signed; see HONEST LIMITS.)
  *
  * This is NOT a weight-merge of models (we never claim to have trained/distilled one). It is a verifiable
  * Mixture-of-Agents: proposers -> aggregate (consensus + dissent) -> attest. The value is ATTRIBUTABLE,
@@ -13,6 +14,9 @@
  *  - `consensus_strength` = the fraction of proposers that AGREE on the answer — it is NOT a calibrated
  *    accuracy/confidence and must never be reported as "% correct". Real accuracy must be MEASURED on real
  *    benchmarks (MMLU-Pro / GPQA / SWE-bench / Arena-Hard) vs the best single model WITH the same tools.
+ *  - `consensus_strength` + `dissent` are ADVISORY aggregation views — NOT separately bound into the signed core
+ *    (which binds question + each seat's response_sha256 + the synthesis). Recompute them from the bound per-seat
+ *    responses if you need a signed-equivalent dissent (code-security review: a prior docstring overclaimed this).
  *  - Published evidence (Together-AI MoA) shows ~+3-5% on reasoning/coding + ~30% fewer severe hallucinations,
  *    domain-dependent and at higher cost/latency — not universal superiority.
  *  - The attestation proves WHAT ran (which models said what + the synthesis), NOT that the answer is correct.

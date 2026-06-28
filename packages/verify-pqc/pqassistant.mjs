@@ -51,10 +51,11 @@ export async function answer({ query, retrieve, seats, callSeat, callRefuter, or
   const evaluated = await gate.evaluateAll(claims);
   const env = gate.assemble(query, evaluated);
 
-  // 5. attest the verifiable answer (ML-DSA-87 over the emitted claim set + policy), then augment + return the envelope
-  attestClaimGate(env, order, opts);
+  // 5. AUGMENT first, THEN attest (3rd code-security sweep): env.sources + env.moa must be INSIDE the signed manifest,
+  // else a MITM/runner swaps citations or rewrites dissent under a "PQ-verified" stamp — forge-proof provenance is the point.
   env.sources = sources;
   env.moa = { consensus_strength: moa.consensus_strength, dissent: moa.dissent };
+  attestClaimGate(env, order, opts);
   return env; // env.emitted.rendered = the answer; env.emitted.verified_claims / abstained / rejected; env.attestation (verifyClaimGate)
 }
 
