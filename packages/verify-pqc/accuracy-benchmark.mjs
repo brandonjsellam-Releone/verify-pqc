@@ -48,6 +48,8 @@ const CORPUS = [
   { id: 'ecdsa-by-oid', text: 'signatureAlgorithm: 1.2.840.10045.4.3.2', find: ['ECDSA sig (OID)'], notFind: [] },
   { id: 'p256-by-oid', text: 'namedCurve 1.2.840.10045.3.1.7', find: ['P-256/prime256v1 curve (OID)'], notFind: [] },
   { id: 'md5-by-oid', text: 'digestAlgorithm 1.2.840.113549.2.5', find: ['MD5 (OID)'], notFind: [] },
+  // --- true positives: encoded-blob layer (v0.5 — base64/PEM key+cert blobs, algorithm by decoded DER OID) ---
+  { id: 'encoded-rsa', text: 'pub = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A";', find: ['RSA (encoded/PEM)'], notFind: [] },
   // --- FALSE-POSITIVE TRAPS (the hard part — these must NOT mis-fire) ---
   { id: 'mldsa-not-dsa', text: 'sig = ML-DSA-87', find: ['ML-DSA/Dilithium'], notFind: ['DSA'] },
   { id: 'slhdsa-not-dsa', text: 'use SLH-DSA for diversity', find: ['SLH-DSA/SPHINCS+'], notFind: ['DSA'] },
@@ -65,7 +67,7 @@ const BLIND_SPOTS = [
   { id: 'rsa-substring', text: 'const k = rsaEncryption(2048);', why: 'algorithm embedded in a longer identifier (no word boundary)' },
   { id: 'custom-wrapper', text: 'const sig = companyCryptoSign(payload);', why: 'crypto hidden behind a custom wrapper name' },
   { id: 'runtime-alias', text: 'const C = loadCipher(cfg); C.encrypt(x);', why: 'algorithm resolved at runtime via a variable' },
-  { id: 'encoded-key', text: 'pub = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A";', why: 'crypto material in an encoded blob, not a named algorithm' },
+  // (v0.5: 'encoded-key' CLOSED — base64/PEM blobs are now decoded + identified by DER OID; moved to a true-positive case above.)
 ];
 
 export function run() {

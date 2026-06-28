@@ -19,7 +19,9 @@
  * (Blowfish/CAST5, MD4/MD2, RIPEMD, 192-bit/binary-field EC curves, NTLM/WEP), and more libraries (wolfSSL/mbedTLS/
  * BoringSSL, CIRCL, PyNaCl, JWT/JOSE). v0.4 ADDS: cryptographic OID detection (RSA/ECDSA/DSA/EC-curve/Ed25519/X25519/
  * MD5/SHA-1 by standardized numeric OID — closes the published "OID" blind spot; certs/ASN.1/PKI configs name crypto by
- * OID, not by algorithm name). Self-test: node pqcbom.mjs
+ * OID, not by algorithm name). v0.5 ADDS: ENCODED-BLOB detection — decodes base64/PEM key+cert blobs and identifies the
+ * algorithm by its DER OID (closes the "encoded-blob" blind spot; FP-safe — only a DER-anchored crypto OID counts).
+ * Self-test: node pqcbom.mjs
  */
 const RULES = [
   // classically broken (a bug regardless of quantum)
@@ -117,6 +119,36 @@ function scanManifest(filename, text) {
   return [...found.values()];
 }
 
+// ---- v0.5: ENCODED-BLOB layer — decode base64/PEM blobs (certs/keys) + identify the algorithm by its DER OID (closes the
+// "encoded-blob" blind spot; certs/keys are base64, not named). FP-SAFE: a blob is flagged ONLY if it decodes to a
+// DER-ANCHORED crypto OID ('06'<len><body>), so non-crypto base64 (images/JWTs/tokens) never false-positives. The DER
+// bodies were derived + verified programmatically. Cross-env base64 (Node Buffer + browser atob) so the funnel copy works. ----
+const OID_DER = [
+  { der: '06092a864886f70d010101', algo: 'RSA (encoded/PEM)', family: 'pubkey', risk: 'quantum-broken', rec: 'RSA key/cert in an encoded blob (DER OID) — migrate KEM->ML-KEM-1024, sig->ML-DSA-87' },
+  { der: '06072a8648ce3d0201', algo: 'EC key (encoded/PEM)', family: 'pubkey', risk: 'quantum-broken', rec: 'EC key/cert in an encoded blob — Shor-broken; migrate to ML-KEM/ML-DSA' },
+  { der: '06072a8648ce380401', algo: 'DSA (encoded/PEM)', family: 'signature', risk: 'quantum-broken', rec: 'DSA in an encoded blob — migrate to ML-DSA-87 / SLH-DSA' },
+  { der: '06032b6570', algo: 'Ed25519 (encoded/PEM)', family: 'signature', risk: 'classical-hybrid-ok', rec: 'Ed25519 key in an encoded blob — OK only as the classical leg of a HYBRID' },
+  { der: '06032b656e', algo: 'X25519 (encoded/PEM)', family: 'kem', risk: 'classical-hybrid-ok', rec: 'X25519 key in an encoded blob — OK only inside a HYBRID with ML-KEM' },
+];
+function b64ToHex(b64) {
+  try {
+    if (typeof Buffer !== 'undefined') return Buffer.from(b64, 'base64').toString('hex');
+    const bin = atob(b64); let h = ''; for (let i = 0; i < bin.length; i++) h += bin.charCodeAt(i).toString(16).padStart(2, '0'); return h; // browser path
+  } catch { return null; }
+}
+function scanEncodedBlobs(filename, text) {
+  const s = String(text), candidates = [];
+  for (let m, re = /-----BEGIN [^-]+-----([\s\S]*?)-----END/g; (m = re.exec(s)); ) candidates.push(m[1].replace(/[^A-Za-z0-9+/=]/g, '')); // PEM bodies (lines joined)
+  for (const r of (s.match(/[A-Za-z0-9+/]{24,}={0,2}/g) || [])) candidates.push(r);                                                    // inline base64 runs (>=24 chars; OID-gate keeps it FP-safe)
+  const found = new Map();
+  for (const c of candidates) {
+    const hex = b64ToHex(c.slice(0, 1500)); // the algorithm OID sits near the front of a DER key/cert
+    if (!hex) continue;
+    for (const o of OID_DER) if (hex.includes(o.der)) found.set(o.algo, { file: filename, context: 'encoded', confidence: 'likely', algo: o.algo, family: o.family, risk: o.risk, rec: o.rec, count: 1, code_count: 1, comment_count: 0, lines: [] });
+  }
+  return [...found.values()];
+}
+
 // comment detection (heuristic, SAFE-by-design): we scan the FULL line so real code is NEVER hidden (a false
 // NEGATIVE is worse than a false positive in a security scanner); we only TAG each match code vs comment by its
 // position. Handles /* */ block comments + line comments (# and // guarded against ://). Strings are not yet
@@ -169,7 +201,8 @@ export function scanText(filename, text) {
   //   informational = named only in a COMMENT/doc
   const inline = [...found.values()].map((f) => ({ file: filename, context: f.code_count > 0 ? 'code' : 'comment', confidence: f.code_count > 0 ? 'lead-to-verify' : 'informational', ...f }));
   // manifest files ALSO get the higher-signal dependency-library layer (beyond inline grep)
-  const out = MANIFEST.test(filename) ? inline.concat(scanManifest(filename, text)) : inline;
+  const enc = scanEncodedBlobs(filename, text); // v0.5: decode base64/PEM key/cert blobs -> algorithm by DER OID
+  const out = (MANIFEST.test(filename) ? inline.concat(scanManifest(filename, text)) : inline).concat(enc);
   out.suppressed = suppressed; // per-file inline-suppressed occurrence count (array property; read in scanFiles)
   return out;
 }
@@ -423,6 +456,11 @@ function selfTest() {
   ok(algos('1.3.101.112').has('Ed25519/Ed448 (OID)') && algos('digest 1.2.840.113549.2.5').has('MD5 (OID)'), 'Ed25519 OID -> hybrid-ok; MD5 OID -> broken-classical');
   ok(algos('1.2.840.113549.1.1.11').has('RSA-SHA256 sig (OID)') && !algos('1.2.840.113549.1.1.11').has('RSA (OID rsaEncryption)'), 'OID exactness: ...1.1.11 = RSA-SHA256 only (lookahead anchors the exact OID, no prefix mis-fire)');
   ok(scanText('v.txt', 'release 1.2.3, version 2.16.0, build 1.2.840 partial').length === 0, 'v0.4 FP guard: version-like dotted numbers do NOT trip OID rules');
+
+  // --- v0.5: encoded-blob detection (closes the "encoded-blob" blind spot — base64/PEM certs+keys) ---
+  ok(scanText('k.txt', 'pub = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A"').some((f) => f.algo === 'RSA (encoded/PEM)' && f.risk === 'quantum-broken'), 'base64 RSA SubjectPublicKeyInfo blob -> RSA (decoded DER OID)');
+  ok(scanText('cert.pem', '-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A\n-----END PUBLIC KEY-----').some((f) => f.algo === 'RSA (encoded/PEM)'), 'PEM-wrapped RSA key detected (lines joined + decoded)');
+  ok(scanText('img.txt', 'data = "' + 'QUJD'.repeat(30) + '"').filter((f) => f.context === 'encoded').length === 0, 'v0.5 FP guard: non-crypto base64 (no DER crypto OID) -> NO encoded finding');
 
   // --- suppression: inline `pqcbom-ignore` + allowlist (adoption escape hatch) ---
   const inlIgnore = scanFiles([{ name: 'a.js', text: 'const k = RSA.gen(2048); // pqcbom-ignore: accepted legacy' }]);
