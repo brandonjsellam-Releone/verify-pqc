@@ -57,6 +57,10 @@ export function gatewayRespond({ offer, msg1 }, gatewayId, { localSuites, policy
   const neg = gw.negotiate({ localSuites, remoteOffer: offer, policy, trustedPeerPub: trustedClientPub });
   if (!neg.ok) return { ok: false, neg };
   if (SUITE_MAP[neg.chosen] !== tp.SUITE_ID) return { ok: false, neg, reason: 'negotiated suite ' + neg.chosen + ' has no PQ transport implementation (gateway speaks ' + tp.SUITE_ID + ')' };
+  // CROSS-BIND (4th sweep): the OFFER signer MUST equal the HANDSHAKE initiator identity — otherwise (esp. unpinned/TOFU)
+  // the gateway could attest one fused session whose suite/pq derive from A's offer but whose transcript was run by B.
+  if (msg1 && String(offer.id_pub).toLowerCase() !== String(msg1.i_identity_pub).toLowerCase())
+    return { ok: false, neg, reason: 'offer signer != handshake initiator identity (offer/handshake cross-bind)' };
   const { state, msg2 } = tp.responderRespond(msg1, gatewayId);
   return { ok: true, neg, msg2, rstate: state, offer_sha256: offerFingerprint(offer) };
 }

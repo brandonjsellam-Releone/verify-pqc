@@ -85,29 +85,38 @@ export function resolveIssuerKey(events, issuer_id, opts = {}) {
   // issuer key resolves ACTIVE). seq is signed inside the event core, so an attacker cannot forge the sort key.
   let ev;
   try { ev = events.filter((e) => e && e.kind === 'pqkt-key-event' && e.issuer_id === issuer_id).sort((a, b) => (a.seq - b.seq)); } catch { return null; }
-  let state = 'unseen'; let cur = null; const rejected = [];
+  let state = 'unseen'; let cur = null; const rejected = []; const timeline = [];
+  const mark = (e) => timeline.push({ ts: e.ts ?? -Infinity, snap: cur ? { ...cur } : null, state }); // record each accepted transition
   ev.forEach((e, index) => {
     if (!e || e.kind !== 'pqkt-key-event' || e.issuer_id !== issuer_id) return;
-    if (e.ts != null && e.ts > atTime) return;
     const rej = (reason) => rejected.push({ index, seq: e.seq, reason });
     try { // TOTAL: a malformed leaf (e.g. non-hex pubkey_hex) is IGNORED per the contract, never thrown
       const core = coreOf(e);
       if (e.op === 'bind') {
         if (state === 'unseen') {
           const pinOk = opts.expectedBootstrap ? keyHash(e.pubkey_hex) === opts.expectedBootstrap : !!opts.allowTofu;
-          if (e.prev_key_hex === null && e.seq === 0 && sigOk(core, e.auth_sig, e.pubkey_hex, AUTH_CTX) && pinOk) { cur = { pubkey_hex: e.pubkey_hex, pubkey_hash: keyHash(e.pubkey_hex), alg: e.alg, seq: 0, index, valid_from: e.valid_from, bootstrap: true }; state = 'active'; }
+          if (e.prev_key_hex === null && e.seq === 0 && sigOk(core, e.auth_sig, e.pubkey_hex, AUTH_CTX) && pinOk) { cur = { pubkey_hex: e.pubkey_hex, pubkey_hash: keyHash(e.pubkey_hex), alg: e.alg, seq: 0, index, valid_from: e.valid_from, bootstrap: true }; state = 'active'; mark(e); }
           else rej(e.prev_key_hex !== null || e.seq !== 0 ? 'bad bootstrap shape (prev/seq)' : !pinOk ? 'bootstrap not pinned + TOFU not allowed' : 'bootstrap signature invalid');
         } else if (state === 'active') { // rotation: authorized by CURRENT key + possession by NEW key + exact next seq
-          if (e.prev_key_hex === cur.pubkey_hex && e.seq === cur.seq + 1 && sigOk(core, e.auth_sig, cur.pubkey_hex, AUTH_CTX) && e.possession_sig && sigOk(core, e.possession_sig, e.pubkey_hex, POSS_CTX))
-            cur = { pubkey_hex: e.pubkey_hex, pubkey_hash: keyHash(e.pubkey_hex), alg: e.alg, seq: e.seq, index, valid_from: e.valid_from, bootstrap: false };
+          if (e.prev_key_hex === cur.pubkey_hex && e.seq === cur.seq + 1 && sigOk(core, e.auth_sig, cur.pubkey_hex, AUTH_CTX) && e.possession_sig && sigOk(core, e.possession_sig, e.pubkey_hex, POSS_CTX)) {
+            cur = { pubkey_hex: e.pubkey_hex, pubkey_hash: keyHash(e.pubkey_hex), alg: e.alg, seq: e.seq, index, valid_from: e.valid_from, bootstrap: false }; mark(e); }
           else rej('unauthorized/stale rotation (prev/seq/auth/possession)');
         } else rej('bind after REVOKED (post-revoke rebind blocked; re-enrollment is out-of-band)');
       } else if (e.op === 'revoke') {
-        if (state === 'active' && e.pubkey_hex === cur.pubkey_hex && e.seq === cur.seq + 1 && sigOk(core, e.auth_sig, cur.pubkey_hex, AUTH_CTX)) { cur = null; state = 'revoked'; }
+        if (state === 'active' && e.pubkey_hex === cur.pubkey_hex && e.seq === cur.seq + 1 && sigOk(core, e.auth_sig, cur.pubkey_hex, AUTH_CTX)) { cur = null; state = 'revoked'; mark(e); }
         else rej('unauthorized/stale revoke');
       }
     } catch { rej('malformed event'); }
   });
+  // POINT-IN-TIME (4th sweep): NEVER structurally drop an event by ts during the walk — that strands the seq chain and
+  // rolls back a later revoke for an atTime query. Walk the FULL signed-seq chain, then resolve atTime from the
+  // transition timeline: state as-of atTime = the snapshot of the LAST accepted transition whose effective ts <= atTime.
+  if (atTime !== Infinity) {
+    let snap = null, snapState = 'unseen';
+    for (const t of timeline) { if (t.ts <= atTime) { snap = t.snap; snapState = t.state; } }
+    if (snap) { snap.state = snapState; snap.rejected = rejected; }
+    return snap;
+  }
   if (cur) { cur.state = state; cur.rejected = rejected; }
   return cur;
 }
@@ -279,6 +288,15 @@ function selfTest() {
   ok(resolveIssuerKey([e0, e1, e2], 'issuer:R', { expectedBootstrap: rPin }) === null, 'honest order [bind,rot,revoke] -> REVOKED');
   ok(resolveIssuerKey([e0, e2, e1], 'issuer:R', { expectedBootstrap: rPin }) === null, 'REORDERED [bind,revoke,rot] -> STILL REVOKED (sort-by-signed-seq defeats the rollback)');
   ok(resolveIssuerKey([e2, e1, e0], 'issuer:R', { expectedBootstrap: rPin }) === null, 'fully shuffled -> STILL REVOKED');
+  // 7c. atTime + NON-MONOTONIC ts (4th sweep, resume): a future-dated rotation must NOT strand a later revoke for a
+  // point-in-time query (the atTime filter previously broke the seq chain -> revoke dropped -> key resurrected).
+  const Sk = ml_dsa87.keygen(new Uint8Array(32).fill(79)), Sk2 = ml_dsa87.keygen(new Uint8Array(32).fill(80));
+  const sPin = keyHash(Sk.publicKey);
+  const s0 = makeBindEvent({ issuer_id: 'issuer:S', newKey: Sk, seq: 0, ts: 1000 });
+  const s1 = makeBindEvent({ issuer_id: 'issuer:S', newKey: Sk2, priorKey: Sk, seq: 1, ts: 2000 }); // FUTURE-dated rotation
+  const s2 = makeRevokeEvent({ issuer_id: 'issuer:S', key: Sk2, seq: 2, ts: 1500 });                 // revoke ts < rotation ts
+  ok(resolveIssuerKey([s0, s1, s2], 'issuer:S', { expectedBootstrap: sPin, atTime: 1700 }) === null, 'atTime=1700 w/ non-monotonic ts -> REVOKED (no atTime-strand rollback)');
+  ok(resolveIssuerKey([s0, s1, s2], 'issuer:S', { expectedBootstrap: sPin, atTime: 1200 }).pubkey_hash === sPin, 'atTime=1200 (before rotation/revoke) -> historical bootstrap key K0');
 
   // 8. POST-REVOKE REBIND ATTACK (OpenAI critical fix): attacker appends a fresh self-signed bootstrap -> IGNORED
   appendKeyEvent(log, makeBindEvent({ issuer_id: 'issuer:A', newKey: attacker, seq: 0, ts: 1400 }));

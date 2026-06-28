@@ -132,11 +132,17 @@ export function checkRevocation(crl, caPub, serial, opts = {}) {
   let sigOk = false;
   try { sigOk = ml_dsa87.verify(hexToBytes(crl.sig), utf8ToBytes(canon(crl.tbs)), hexToBytes(caPub.mldsa_pub), { context: CRL_CTX }); } catch { sigOk = false; }
   const at = opts.at;
-  const fresh = at == null || crl.tbs.next_update == null ? true : (at >= (crl.tbs.this_update ?? -Infinity) && at <= crl.tbs.next_update);
+  // FRESHNESS (4th sweep): when the caller supplies opts.at, a MISSING next_update is STALE (fail-closed) — NOT a free
+  // pass. The old `at==null || next_update==null ? true : ...` let a CA mint a null-next_update CRL that bypassed the gate.
+  const fresh = at == null ? true : (crl.tbs.next_update != null && at >= (crl.tbs.this_update ?? -Infinity) && at <= crl.tbs.next_update);
   const notRolledBack = opts.minCrlNumber == null || crl.tbs.crl_number >= opts.minCrlNumber;
-  const usable = sigOk && fresh && notRolledBack;
+  // SCOPE (4th sweep): the CRL's SIGNED issuer_kid must match the verifying CA key — makes issuer_kid load-bearing so a
+  // CRL from a DIFFERENT CA (even if its own signature verifies) is marked unusable for THIS key.
+  let scopeOk = true; try { scopeOk = !caPub || caPub.mldsa_pub == null || crl.tbs.issuer_kid === kid(hexToBytes(caPub.mldsa_pub)); } catch { scopeOk = false; }
+  const usable = sigOk && fresh && notRolledBack && scopeOk;
   const revSet = new Set(crl.tbs.revoked.map(String));   // string-canonicalized at BOTH ends → numeric/string serials match
-  return { crl_valid: sigOk, fresh, notRolledBack, usable, revoked: usable && revSet.has(String(serial)),
+  const listedRevoked = revSet.has(String(serial));      // raw membership — exposed so `.revoked` (= usable && listed) can't be misread as "not revoked" when the CRL is unusable
+  return { crl_valid: sigOk, fresh, notRolledBack, scopeOk, usable, listedRevoked, revoked: usable && listedRevoked,
     reason: !sigOk ? 'CRL signature invalid' : !fresh ? 'CRL STALE (outside this_update..next_update) — fetch a fresh CRL; fail closed for high assurance' : !notRolledBack ? 'CRL rolled back (number < highest seen)' : 'ok' };
  } catch { return { crl_valid: false, fresh: false, notRolledBack: false, usable: false, revoked: false, reason: 'malformed CRL' }; }
 }
