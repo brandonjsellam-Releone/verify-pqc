@@ -17,6 +17,7 @@ import { slh_dsa_sha2_256f } from '@noble/post-quantum/slh-dsa.js';
 import { sha512 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { gradeOf, toCycloneDX, scanFiles, riskTally } from './pqcbom.mjs';
+import { buildMigrationPlan, renderMigrationPlan } from './pqcbom-plan.mjs';
 
 const REPORT_CTX = utf8ToBytes('trelyan-pqcbom-evidence-pack-v1');
 // distinct domain-separation context for the OPTIONAL SLH-DSA (FIPS-205, hash-based) diversity leg — algorithm-family
@@ -38,16 +39,7 @@ const COMPLIANCE = [
   { regime: 'PCI DSS 4.0', expects: 'Strong cryptography; no broken/weak primitives for cardholder data', triggeredBy: ['broken-classical', 'quantum-weakened'] },
 ];
 
-function renderRoadmap(findings) {
-  const order = ['broken-classical', 'quantum-broken', 'quantum-weakened', 'classical-hybrid-ok'];
-  const groups = order.map((risk) => {
-    const items = findings.filter((f) => f.risk === risk);
-    if (!items.length) return null;
-    const recs = [...new Set(items.map((f) => '`' + f.algo + '` → ' + f.rec))];
-    return '**' + risk + '** (' + items.reduce((n, f) => n + f.count, 0) + ' occurrences)\n' + recs.map((r) => '  - ' + r).join('\n');
-  }).filter(Boolean);
-  return groups.length ? groups.join('\n\n') : '_No quantum-vulnerable or broken cryptography detected._';
-}
+// (the migration roadmap is now the structured, sequenced plan from pqcbom-plan.mjs — see §3 in renderMarkdown)
 
 function renderMarkdown({ summary, grade, findings, meta }) {
   const present = new Set(findings.map((f) => f.risk));
@@ -81,7 +73,7 @@ function renderMarkdown({ summary, grade, findings, meta }) {
     findings.length > 25 ? '\n_…and ' + (findings.length - 25) + ' more (see the CBOM)._' : '',
     '',
     '## 3. Migration roadmap',
-    renderRoadmap(findings),
+    renderMigrationPlan(buildMigrationPlan({ findings, grade, summary })),
     '',
     '## 4. Compliance crosswalk (informational — not a certification)',
     '| Regime | Status | What it expects |\n|---|---|---|\n' + crosswalk,
