@@ -22,3 +22,11 @@ jobs:
       - name: Full assurance suite (test-all.mjs)
         run: node test-all.mjs
         working-directory: packages/verify-pqc
+      - name: KAT conformance (NIST-style deterministic vectors)
+        run: node test-kat.mjs
+        working-directory: packages/verify-pqc
+      - name: End-to-end demo regression (CBOM -> Evidence Pack -> attestation, self-checking)
+        run: node examples/demo/run-demo.mjs
+        working-directory: packages/verify-pqc
+      - name: Vendored action scanner is byte-identical to canonical (no drift)
+        run: diff -q packages/verify-pqc/pqcbom.mjs packages/verify-pqc/pqcbom-action/pqcbom.mjs

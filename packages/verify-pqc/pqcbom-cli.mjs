@@ -4,16 +4,34 @@
  * Usage: node pqcbom-cli.mjs [path] [--fail-on=broken-classical,quantum-broken] [--min-grade=B] [--json]
  * Writes: cbom.cdx.json (CycloneDX CBOM), quantum-readiness-report.md, quantum-safe-badge.json (shields endpoint).
  */
-import { scanDirectory, toCycloneDX } from './pqcbom.mjs';
+import { scanDirectory, toCycloneDX, toSARIF } from './pqcbom.mjs';
 import { scorecardBadge, policyGate } from './pqcbom-server.mjs';
 import { writeFileSync } from 'fs';
 
 const args = process.argv.slice(2);
+if (args.includes('--help') || args.includes('-h')) {
+  console.log(`pqcbom — TRELYAN Quantum-Safe Scorecard CLI
+
+Usage: node pqcbom-cli.mjs [path] [options]
+
+  path                directory to scan (default: .)
+  --fail-on=LIST      comma-separated risk classes that exit non-zero
+                      (broken-classical,quantum-broken,quantum-weakened,classical-hybrid-ok,quantum-safe)
+  --min-grade=A..F    exit non-zero below this grade
+  --sarif[=PATH]      also write a SARIF 2.1.0 report (default: pqcbom.sarif) for GitHub code-scanning
+  --json              print the CycloneDX CBOM to stdout (suppress the human summary)
+  --help, -h          show this help
+
+Always writes: cbom.cdx.json, quantum-readiness-report.md, quantum-safe-badge.json (+ the SARIF with --sarif).
+Lexical scan — findings are leads to verify, not a complete inventory. Unaudited reference tool.`);
+  process.exit(0);
+}
 const dir = args.find((a) => !a.startsWith('-')) || '.';
 const opt = (k) => { const a = args.find((x) => x.startsWith('--' + k + '=')); return a ? a.split('=')[1] : null; };
 const failOn = (opt('fail-on') || '').split(',').filter(Boolean);
 const minGrade = opt('min-grade');
 const jsonOnly = args.includes('--json');
+const sarifOut = args.includes('--sarif') ? 'pqcbom.sarif' : opt('sarif');   // --sarif -> default path; --sarif=PATH -> PATH
 
 const RISK_EMOJI = { 'broken-classical': '⛔', 'quantum-broken': '🔴', 'quantum-weakened': '🟡', 'classical-hybrid-ok': '🔵', 'quantum-safe': '🟢' };
 function mdReport(r) {
@@ -36,7 +54,8 @@ else {
 writeFileSync('cbom.cdx.json', JSON.stringify(toCycloneDX(report), null, 2));
 writeFileSync('quantum-readiness-report.md', mdReport(report));
 writeFileSync('quantum-safe-badge.json', JSON.stringify(scorecardBadge(report.grade)));
-if (!jsonOnly) console.log('  Wrote cbom.cdx.json, quantum-readiness-report.md, quantum-safe-badge.json');
+if (sarifOut) writeFileSync(sarifOut, JSON.stringify(toSARIF(report, { baseDir: dir }), null, 2));
+if (!jsonOnly) console.log('  Wrote cbom.cdx.json, quantum-readiness-report.md, quantum-safe-badge.json' + (sarifOut ? ', ' + sarifOut : ''));
 
 if (failOn.length || minGrade) {
   const gate = policyGate(report, { failOn, minGrade });
