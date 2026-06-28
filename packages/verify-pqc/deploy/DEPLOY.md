@@ -10,7 +10,7 @@
 - `worker.mjs` — the hosted `/scan` + `/badge` endpoint handler (uses `pqcbom-server`).
 - `wrangler.toml` — Cloudflare Worker config (free tier needs no secrets; paid `full` tier gated by `PAID_KEYS`).
 - `../pqcbom-action/` — the GitHub Action (the viral funnel + CI gate).
-- Marketing: `program/QUANTUM_SCORECARD_README.md`, `program/QUANTUM_SCORECARD_LANDING.md`, `program/QUANTUM_SCORECARD_PITCH.md`.
+- Marketing (in the owner's private `program/` — NOT in this public repo): `QUANTUM_SCORECARD_GTM.md` (landing copy + outbound pitch, consolidated) + `QUANTUM_SCORECARD_README.md`.
 
 ## Owner steps to go live (when you decide)
 1. **Domain (owner):** point `scan.trelyan.dev` at the Worker (DNS + route in `wrangler.toml`). Domain registration/DNS is an owner action.
@@ -18,7 +18,7 @@
 3. **Paid tier (owner):** `wrangler secret put PAID_KEYS` with the issued enterprise API keys; wire billing (Stripe) out-of-band. For the signed **Evidence Pack** (`/scan {evidencePack:true}`): generate an ML-DSA-87 report-signing keypair offline and `wrangler secret put REPORT_SIGNING_SK` + `REPORT_SIGNING_PK` (hex). Without these, the worker returns the pack **unsigned with a reason** (never silently "signed"). Publish the `REPORT_SIGNING_PK` so buyers can `verifyEvidencePack`.
 4. **Publish the GitHub Action (owner):** push `pqcbom-action/` to a public `trelyan/quantum-safe-scorecard` repo, tag `v1`, submit to the GitHub Marketplace (requires accepting the Marketplace agreement — an owner action).
 5. **Landing page (owner):** `deploy/landing.html` is the functional front door — set its `API_BASE` const to your deployed worker URL (e.g. `https://scan.trelyan.dev`), then publish it to the site (Netlify deploy is owner-gated per the website-deploy rule). It carries the PREVIEW banner + honest limitations, embeds the live shields badge, and has working `/scan` + `/verify` forms (CORS is `*` on the worker). It is HTML/CSS only — no mock imagery (media policy). Also place a real `/.well-known/security.txt` (footer links it).
-6. **Outbound (owner):** the pitch in `QUANTUM_SCORECARD_PITCH.md` is a DRAFT — sending it to real prospects is an owner action (no autonomous sending).
+6. **Outbound (owner):** the pitch (owner's private `program/QUANTUM_SCORECARD_GTM.md`) is a DRAFT — sending it to real prospects is an owner action (no autonomous sending).
 
 ## Go-live preflight checklist (tick before the preview soft-launch)
 - [ ] Audit posture confirmed: funnel ships as **PREVIEW**; the crypto SDK is NOT presented as production. `PREVIEW_NOTICE` present on all responses.
