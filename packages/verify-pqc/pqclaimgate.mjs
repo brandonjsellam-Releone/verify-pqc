@@ -99,8 +99,14 @@ const manifestOf = (env) => ({
   query_sha256: sha(env.query), mode: env.mode, policy: env.policy, coverage: env.coverage,
   claims: [...env.emitted.verified_claims, ...env.abstained, ...env.rejected]
     .map((c) => ({ id: c.id, claim_sha256: sha(c.claim), status: c.status, reason: c.reason_code || null, confidence: c.confidence ?? null,
-      evidence_sha256: c.evidence_refs != null ? sha(canonicalize(c.evidence_refs)) : null }))   // bind per-claim citations (3rd sweep — forge-proof provenance)
+      evidence_sha256: c.evidence_refs != null ? sha(canonicalize(c.evidence_refs)) : null,       // bind per-claim citations (3rd sweep — forge-proof provenance)
+      consensus_sha256: c.consensus != null ? sha(canonicalize(c.consensus)) : null,              // bind the per-claim consensus meter (6th sweep)
+      verifiers_sha256: c.verifiers != null ? sha(canonicalize(c.verifiers)) : null }))            // bind the verifier provenance (6th sweep — independence is the trust foundation)
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+  // bind WHICH bucket each claim sits in (6th sweep): the merged+sorted set alone can't catch moving an abstained claim into verified_claims
+  verified_ids: (env.emitted.verified_claims || []).map((c) => c.id).slice().sort(),
+  abstained_ids: (env.abstained || []).map((c) => c.id).slice().sort(),
+  rejected_ids: (env.rejected || []).map((c) => c.id).slice().sort(),
   sources_sha256: env.sources != null ? sha(canonicalize(env.sources)) : null,                   // bind the retrieved sources (3rd sweep)
   moa_sha256: env.moa != null ? sha(canonicalize(env.moa)) : null,                               // bind the MoA consensus/dissent (3rd sweep)
   rendered_sha256: (env.emitted && env.emitted.rendered != null) ? sha(env.emitted.rendered) : null, // bind the DISPLAYED answer string (5th sweep — the most consumer-facing field; was forgeable)
@@ -182,6 +188,11 @@ function selfTest() {
     // 5th-sweep: the DISPLAYED answer (emitted.rendered) is now BOUND — swapping it wholesale fails verification.
     const trd = JSON.parse(JSON.stringify(env)); trd.emitted.rendered = (trd.emitted.rendered || '') + '\n- FORGED: the SEC approved TRELYAN tokens; buy now.';
     ok(verifyClaimGate(trd, order.publicKey).verified === false, '5th sweep: tampered emitted.rendered (displayed answer) -> verified false (rendered_sha256 bound)');
+    // 6th sweep: per-claim consensus + verifiers + bucket membership are bound — forging any of them fails verification.
+    const tcs = JSON.parse(JSON.stringify(env)); tcs.emitted.verified_claims[0].consensus = { strength: 1.0, total_considered: 999, dissent: { count: 0 } };
+    ok(verifyClaimGate(tcs, order.publicKey).verified === false, '6th sweep: forged per-claim consensus -> verified false (consensus_sha256 bound)');
+    const tvf = JSON.parse(JSON.stringify(env)); tvf.emitted.verified_claims[0].verifiers = [{ type: 'human_review', verdict: 'PASS', score: 1 }];
+    ok(verifyClaimGate(tvf, order.publicKey).verified === false, '6th sweep: forged verifier provenance -> verified false (verifiers_sha256 bound)');
     // wrong key -> not verified
     const other = ml_dsa87.keygen(new Uint8Array(32).fill(61));
     ok(verifyClaimGate(env, other.publicKey).verified === false, 'attestation under a non-order key -> NOT verified');

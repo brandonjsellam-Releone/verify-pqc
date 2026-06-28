@@ -85,10 +85,10 @@ export function resolveIssuerKey(events, issuer_id, opts = {}) {
   // issuer key resolves ACTIVE). seq is signed inside the event core, so an attacker cannot forge the sort key.
   let ev;
   try { ev = events.filter((e) => e && e.kind === 'pqkt-key-event' && e.issuer_id === issuer_id).sort((a, b) => (a.seq - b.seq)); } catch { return null; }
-  let state = 'unseen'; let cur = null; const rejected = []; const timeline = []; let effTs = -Infinity;
-  // effTs is NON-DECREASING (5th sweep): a transition's effective time = max(prev, e.ts), so even with non-monotonic
-  // SIGNED ts a rotation/revoke can never predate its bootstrap, and the timeline stays sorted for atTime selection.
-  const mark = (e) => { effTs = Math.max(effTs, e.ts ?? -Infinity); timeline.push({ ts: effTs, snap: cur ? { ...cur } : null, state }); };
+  let state = 'unseen'; let cur = null; const rejected = []; const timeline = []; let effTs = -Infinity; let allFiniteTs = true;
+  // effTs is the NON-DECREASING issuance time (5th sweep: max(prev, e.ts) — a rotation/revoke can never predate its
+  // bootstrap). allFiniteTs gates the atTime path (6th sweep: a null/non-finite ts makes point-in-time ILL-DEFINED).
+  const mark = (e) => { if (!Number.isFinite(e.ts)) allFiniteTs = false; effTs = Math.max(effTs, Number.isFinite(e.ts) ? e.ts : -Infinity); timeline.push({ ts: effTs, snap: cur ? { ...cur } : null, state }); };
   ev.forEach((e, index) => {
     if (!e || e.kind !== 'pqkt-key-event' || e.issuer_id !== issuer_id) return;
     const rej = (reason) => rejected.push({ index, seq: e.seq, reason });
@@ -114,8 +114,13 @@ export function resolveIssuerKey(events, issuer_id, opts = {}) {
   // rolls back a later revoke for an atTime query. Walk the FULL signed-seq chain, then resolve atTime from the
   // transition timeline: state as-of atTime = the snapshot of the LAST accepted transition whose effective ts <= atTime.
   if (atTime !== Infinity) {
-    let snap = null, snapState = 'unseen';
-    for (const t of timeline) { if (t.ts <= atTime) { snap = t.snap; snapState = t.state; } }
+    if (!allFiniteTs) return null; // 6th sweep: point-in-time is ill-defined without a finite ts on every transition -> fail-closed
+    let best = null;
+    for (const t of timeline) { if (t.ts <= atTime) best = t; } // effTs non-decreasing -> last qualifying = greatest effTs <= atTime
+    // 6th sweep: the selected key must ALSO be within its signed validity window (atTime >= valid_from); a future-dated
+    // valid_from means the key is not yet in force -> no valid key in that gap (fail-closed), matching pqmarket's at<valid_from.
+    if (!best || (best.snap && best.snap.valid_from != null && atTime < best.snap.valid_from)) return null;
+    const snap = best.snap, snapState = best.state;
     if (snap) { snap.state = snapState; snap.rejected = rejected; }
     return snap;
   }
@@ -307,6 +312,13 @@ function selfTest() {
   const u1 = makeBindEvent({ issuer_id: 'issuer:U', newKey: Ur, priorKey: Ub, seq: 1, ts: 500 }); // rotation ts < bootstrap ts
   ok(resolveIssuerKey([u0, u1], 'issuer:U', { expectedBootstrap: uPin, atTime: 750 }) === null, 'rotation ts<bootstrap: atTime=750 (before bootstrap effective ts) -> NO key (no pre-bootstrap resurrection)');
   ok(resolveIssuerKey([u0, u1], 'issuer:U', { expectedBootstrap: uPin, atTime: 5000 }).pubkey_hash === keyHash(Ur.publicKey), 'atTime=5000 -> rotated key (rotation effective at max(bootstrap_ts, rotation_ts))');
+  // 6th sweep: a future valid_from gates the validity window; a null/non-finite ts makes atTime ill-defined -> fail-closed.
+  const v0 = makeBindEvent({ issuer_id: 'issuer:V', newKey: Sk, seq: 0, ts: 1000, valid_from: 5000 });
+  ok(resolveIssuerKey([v0], 'issuer:V', { expectedBootstrap: sPin, atTime: 2000 }) === null, '6th: atTime=2000 < valid_from=5000 -> key not yet in force (NULL)');
+  ok(resolveIssuerKey([v0], 'issuer:V', { expectedBootstrap: sPin, atTime: 6000 }).pubkey_hash === sPin, '6th: atTime=6000 >= valid_from=5000 -> key in force');
+  const w0 = makeBindEvent({ issuer_id: 'issuer:W', newKey: Sk, seq: 0, ts: null });
+  ok(resolveIssuerKey([w0], 'issuer:W', { expectedBootstrap: sPin, atTime: 2000 }) === null, '6th: null-ts transition + atTime -> ill-defined -> NULL (fail-closed, no silent return-current)');
+  ok(resolveIssuerKey([w0], 'issuer:W', { expectedBootstrap: sPin }).pubkey_hash === sPin, '6th: null-ts but NO atTime (current-key path) -> resolves fine');
 
   // 8. POST-REVOKE REBIND ATTACK (OpenAI critical fix): attacker appends a fresh self-signed bootstrap -> IGNORED
   appendKeyEvent(log, makeBindEvent({ issuer_id: 'issuer:A', newKey: attacker, seq: 0, ts: 1400 }));
