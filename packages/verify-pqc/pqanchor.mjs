@@ -1,0 +1,204 @@
+/*!
+ * pqanchor — bind a pqauditlog trail to a LEDGER-OF-RECORD anchor (the "QLR chain" in Apex's dual-chain design), and
+ * verify the binding (reference, DRAFT). This is the "write to the QLR chain, tamper-proof + timestamped" step done
+ * honestly: the FULL audit log stays off-chain; only a small, hybrid-signed ANCHOR (the log's root hash + metadata) is
+ * committed on-chain, and the off-chain log is hash-bound to that on-chain commitment — the same off-chain-artifact ->
+ * on-chain-Cell hash-binding the TRELYAN inscription protocol uses (IPFS/Arweave bound to an Algorand Cell).
+ *
+ * It deliberately does NOT broadcast to any chain: actual posting to the QLR ledger (a deployed permissioned-EVM
+ * contract or an Algorand app) needs a funded signer + a deployed contract and is owner-gated. pqanchor produces the
+ * exact bytes you would post (`anchorCalldata` / `onchainCommitment`) and verifies, after the fact, that a given on-chain
+ * commitment provably binds a specific off-chain log state.
+ *
+ * NOVEL FALSIFIABLE PROPERTY: given the off-chain log + an on-chain commitment + the pinned log-signer AND anchor-signer
+ * keys, a third party can confirm (1) the log itself verifies (pqauditlog: hash-chained + Ed25519∧ML-DSA-87 dual-signed +
+ * replay-proof), (2) the anchor's `log_root` equals the log's tip and names the correct log signer, (3) the anchor is
+ * itself dual-signed by the pinned ledger authority, and (4) the on-chain commitment equals this exact anchor's hash —
+ * i.e. THIS log state, and no other, is the one committed on the QLR chain. Anchors also form their own hash-chain
+ * (prev_anchor), so a sequence of periodic anchors is tamper-evident against drop/reorder. HONEST: this proves the
+ * binding off-chain↔on-chain; it does not prove the chain itself is honest/available (that is the ledger's job), and it
+ * proves nothing was posted until a real transaction carrying `onchainCommitment` exists on-chain.
+ *
+ * Dependency-light: @noble/curves (ed25519) + @noble/post-quantum (ml-dsa-87) + @noble/hashes (sha256) + ./pqauditlog.
+ * Self-test: node pqanchor.mjs
+ */
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, hexToBytes, utf8ToBytes, concatBytes } from '@noble/hashes/utils.js';
+import { verifyLog } from './pqauditlog.mjs';
+
+const ANCHOR_CTX = utf8ToBytes('trelyan-qlr-anchor-v1');        // signing domain (both legs)
+const ANCHOR_HASH_TAG = utf8ToBytes('trelyan-qlr-anchor-hash-v1');
+const GENESIS = '0'.repeat(64);
+const CHAINS = ['qlr-evm', 'algorand', 'generic'];             // target ledger encodings supported
+
+function canon(v) {
+  if (v === null || typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string') return JSON.stringify(v);
+  if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
+  return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}';
+}
+// signable core of an anchor (everything except the signatures + derived anchor_hash)
+function anchorCore(a) {
+  return { v: '1', chain: a.chain, seq: a.seq, ts: a.ts, n: a.n, log_root: a.log_root,
+    log_signer: { ed: a.log_signer.ed, mldsa: a.log_signer.mldsa }, prev_anchor: a.prev_anchor };
+}
+const anchorHashOf = (coreBytes) => bytesToHex(sha256(concatBytes(ANCHOR_HASH_TAG, coreBytes)));
+const u64hex = (n) => { const b = new Uint8Array(8); new DataView(b.buffer).setBigUint64(0, BigInt(n)); return bytesToHex(b); };
+
+// anchorSigner = { ed:{secretKey,publicKey}, mldsa:{secretKey,publicKey} } — the LEDGER AUTHORITY that signs anchors.
+export function createAnchorChain(anchorSigner, opts = {}) {
+  if (!anchorSigner || !anchorSigner.ed || !anchorSigner.mldsa) throw new Error('anchorSigner must be { ed, mldsa } keypairs');
+  return { anchors: [], signer: anchorSigner, chain: CHAINS.includes(opts.chain) ? opts.chain : 'generic',
+    anchor_signer_pub: { ed: bytesToHex(anchorSigner.ed.publicKey), mldsa: bytesToHex(anchorSigner.mldsa.publicKey) } };
+}
+
+// tip = { root, n, logSignerPubs:{ ed:hex, mldsa:hex } } — typically taken from verifyLog(entries, pinnedLogKeys).
+export function appendAnchor(achain, tip, opts = {}) {
+  if (!tip || typeof tip.root !== 'string' || typeof tip.n !== 'number' || !tip.logSignerPubs) throw new Error('tip must be { root, n, logSignerPubs }');
+  const last = achain.anchors[achain.anchors.length - 1];
+  const seq = achain.anchors.length;
+  const ts = opts.ts ?? (last ? last.ts : 0);
+  if (last && ts < last.ts) throw new Error('ts must be non-decreasing');
+  const core = anchorCore({ chain: achain.chain, seq, ts, n: tip.n, log_root: tip.root,
+    log_signer: { ed: tip.logSignerPubs.ed, mldsa: tip.logSignerPubs.mldsa }, prev_anchor: last ? last.anchor_hash : GENESIS });
+  const coreBytes = utf8ToBytes(canon(core));
+  const anchor = { ...core,
+    ed_sig: bytesToHex(ed25519.sign(concatBytes(ANCHOR_CTX, coreBytes), achain.signer.ed.secretKey)),
+    mldsa_sig: bytesToHex(ml_dsa87.sign(coreBytes, achain.signer.mldsa.secretKey, { context: ANCHOR_CTX })),
+    anchor_hash: anchorHashOf(coreBytes) };
+  achain.anchors.push(anchor);
+  return anchor;
+}
+
+// the 32-byte on-chain commitment to post to the QLR ledger (the full anchor lives off-chain, hash-bound to this).
+export const onchainCommitment = (anchor) => anchor.anchor_hash;
+
+// a deterministic, versioned wire encoding to post on the target chain (EVM calldata hex / Algorand note):
+//   "TRLNA1" | chain-tag(2 hex) | seq(8B) | log_root(32B) | anchor_hash(32B)
+export function anchorCalldata(anchor) {
+  const tag = { 'qlr-evm': '01', 'algorand': '02', 'generic': '00' }[anchor.chain] ?? '00';
+  const body = tag + u64hex(anchor.seq) + anchor.log_root + anchor.anchor_hash;
+  const hex = bytesToHex(utf8ToBytes('TRLNA1')) + body;
+  return anchor.chain === 'qlr-evm' ? '0x' + hex : hex;
+}
+
+// verify ONE anchor binds a given off-chain log to a given on-chain commitment. TOTAL / fail-closed.
+// trusted = { log:{ ed, mldsa }, anchor:{ ed, mldsa } } (Uint8Array pubkeys). opts.logOpts forwarded to verifyLog.
+export function verifyAnchored(logEntries, anchor, onchainCommitmentHex, trusted, opts = {}) {
+  const fail = (reason) => ({ verified: false, logOk: false, rootOk: false, anchorSigOk: false, commitmentOk: false, reason });
+  try {
+    if (!anchor || typeof anchor !== 'object' || !trusted || !trusted.log || !trusted.anchor) return fail('args');
+    const lv = verifyLog(logEntries, trusted.log, opts.logOpts || {});
+    if (!lv.verified) return fail('log does not verify: ' + lv.reason);
+    const coreBytes = utf8ToBytes(canon(anchorCore(anchor)));
+    // (2) the anchor commits to THIS log's tip + count, and names the correct log signer
+    const rootOk = anchor.log_root === lv.tip && anchor.n === lv.n
+      && anchor.log_signer && anchor.log_signer.ed === bytesToHex(trusted.log.ed) && anchor.log_signer.mldsa === bytesToHex(trusted.log.mldsa);
+    if (!rootOk) return { ...fail('anchor does not bind this log tip/signer'), logOk: true };
+    // (3) the anchor is dual-signed by the pinned ledger authority (AND-composition: no downgrade)
+    let edOk = false, pqOk = false;
+    try { edOk = ed25519.verify(hexToBytes(anchor.ed_sig), concatBytes(ANCHOR_CTX, coreBytes), trusted.anchor.ed); } catch { edOk = false; }
+    try { pqOk = ml_dsa87.verify(hexToBytes(anchor.mldsa_sig), coreBytes, trusted.anchor.mldsa, { context: ANCHOR_CTX }); } catch { pqOk = false; }
+    const anchorSigOk = edOk && pqOk;
+    // (4) the on-chain commitment equals this exact anchor's hash
+    const computed = anchorHashOf(coreBytes);
+    const commitmentOk = computed === anchor.anchor_hash && computed === String(onchainCommitmentHex).toLowerCase();
+    return { verified: lv.verified && rootOk && anchorSigOk && commitmentOk, logOk: true, rootOk, anchorSigOk, edOk, pqOk, commitmentOk, log_root: lv.tip, n: lv.n, reason: anchorSigOk && commitmentOk ? 'ok' : (!anchorSigOk ? 'anchor signature invalid' : 'commitment mismatch') };
+  } catch { return fail('exception'); }
+}
+
+// verify a CHAIN of periodic anchors (links + signs + monotonic ts). TOTAL / fail-closed.
+export function verifyAnchorChain(anchors, trustedAnchor, opts = {}) {
+  const base = { verified: false, n: 0, broken_at: 0, reason: '' };
+  try {
+    if (!Array.isArray(anchors) || !trustedAnchor || !trustedAnchor.ed || !trustedAnchor.mldsa) return { ...base, reason: 'args' };
+    let prev = GENESIS, lastTs = -Infinity;
+    for (let i = 0; i < anchors.length; i++) {
+      const a = anchors[i]; const at = (reason) => ({ ...base, n: anchors.length, broken_at: i, reason });
+      if (!a || a.seq !== i) return at('seq/shape');
+      const coreBytes = utf8ToBytes(canon(anchorCore(a)));
+      if (a.prev_anchor !== prev) return at('anchor chain linkage');
+      if (anchorHashOf(coreBytes) !== a.anchor_hash) return at('anchor_hash mismatch (tamper)');
+      if (!CHAINS.includes(a.chain)) return at('unknown chain tag');
+      if (typeof a.ts !== 'number' || a.ts < lastTs) return at('ts not non-decreasing');
+      let edOk = false, pqOk = false;
+      try { edOk = ed25519.verify(hexToBytes(a.ed_sig), concatBytes(ANCHOR_CTX, coreBytes), trustedAnchor.ed); } catch { edOk = false; }
+      try { pqOk = ml_dsa87.verify(hexToBytes(a.mldsa_sig), coreBytes, trustedAnchor.mldsa, { context: ANCHOR_CTX }); } catch { pqOk = false; }
+      if (!edOk) return at('Ed25519 anchor signature invalid');
+      if (!pqOk) return at('ML-DSA-87 anchor signature invalid (or PQ leg stripped)');
+      prev = a.anchor_hash; lastTs = a.ts;
+    }
+    return { verified: true, n: anchors.length, broken_at: -1, reason: 'ok', tip: anchors.length ? anchors[anchors.length - 1].anchor_hash : GENESIS };
+  } catch { return base; }
+}
+
+/* ---------- self-test: node pqanchor.mjs ---------- */
+async function selfTest() {
+  const { createLog, append } = await import('./pqauditlog.mjs');
+  let pass = 0, fail = 0; const ok = (c, m) => { if (c) pass++; else { fail++; console.error('FAIL:', m); } };
+  const ed = (n) => ({ secretKey: new Uint8Array(32).fill(n), publicKey: ed25519.getPublicKey(new Uint8Array(32).fill(n)) });
+  const logSigner = { ed: ed(3), mldsa: ml_dsa87.keygen(new Uint8Array(32).fill(4)) };
+  const anchorSigner = { ed: ed(5), mldsa: ml_dsa87.keygen(new Uint8Array(32).fill(6)) };
+  const trustedLog = { ed: logSigner.ed.publicKey, mldsa: logSigner.mldsa.publicKey };
+  const trustedAnchor = { ed: anchorSigner.ed.publicKey, mldsa: anchorSigner.mldsa.publicKey };
+  const trusted = { log: trustedLog, anchor: trustedAnchor };
+
+  // build a real audit log, take its verified tip, anchor it
+  const log = createLog(logSigner);
+  append(log, { actor: 'feed', action: 'tick', stage: 'input', ts: 1 });
+  append(log, { actor: 'council', action: 'vote UP', stage: 'signal', ts: 2, parentSeq: 0 });
+  append(log, { actor: 'risk', action: 'GO', stage: 'decision', ts: 3, parentSeq: 1 });
+  const entries = log.entries.map((e) => ({ ...e }));
+  const lv = verifyLog(entries, trustedLog);
+  const achain = createAnchorChain(anchorSigner, { chain: 'qlr-evm' });
+  const a0 = appendAnchor(achain, { root: lv.tip, n: lv.n, logSignerPubs: { ed: bytesToHex(trustedLog.ed), mldsa: bytesToHex(trustedLog.mldsa) } }, { ts: 4 });
+
+  // happy path
+  const v = verifyAnchored(entries, a0, onchainCommitment(a0), trusted);
+  ok(v.verified === true, 'happy: anchor binds the verified log tip + matches the on-chain commitment, dual-signed by the ledger authority');
+  ok(/^0x54524c4e413101/.test(anchorCalldata(a0)), 'EVM calldata is the versioned TRLNA1 encoding (0x-prefixed)');
+
+  // failure: wrong on-chain commitment
+  ok(verifyAnchored(entries, a0, '00'.repeat(32), trusted).verified === false, 'wrong on-chain commitment -> FAILS');
+  // failure: anchor binds a DIFFERENT log state (append more, tip moves) -> old anchor no longer matches new log
+  append(log, { actor: 'oms', action: 'SIM order', stage: 'execution', ts: 5, parentSeq: 2 });
+  const entries2 = log.entries.map((e) => ({ ...e }));
+  const r2 = verifyAnchored(entries2, a0, onchainCommitment(a0), trusted);
+  ok(r2.verified === false && r2.rootOk === false, 'anchor checked against a MUTATED log (extra entry) -> FAILS (binds a specific state)');
+  // failure: tamper the anchor.log_root
+  const t1 = JSON.parse(JSON.stringify(a0)); t1.log_root = '11'.repeat(32);
+  ok(verifyAnchored(entries, t1, onchainCommitment(t1), trusted).verified === false, 'tampered anchor.log_root -> FAILS');
+
+  // adversarial: anchor signed by an attacker ledger key
+  const evil = createAnchorChain({ ed: ed(9), mldsa: ml_dsa87.keygen(new Uint8Array(32).fill(9)) }, { chain: 'qlr-evm' });
+  const aEvil = appendAnchor(evil, { root: lv.tip, n: lv.n, logSignerPubs: { ed: bytesToHex(trustedLog.ed), mldsa: bytesToHex(trustedLog.mldsa) } }, { ts: 4 });
+  ok(verifyAnchored(entries, aEvil, onchainCommitment(aEvil), trusted).verified === false, 'adversarial: anchor forged under attacker ledger keys -> FAILS against the pinned authority');
+  // adversarial: strip the PQ leg of the anchor signature (downgrade)
+  const t2 = JSON.parse(JSON.stringify(a0)); t2.mldsa_sig = '00';
+  ok(verifyAnchored(entries, t2, onchainCommitment(t2), trusted).verified === false, 'adversarial: stripped PQ leg on the anchor -> FAILS (anti-downgrade)');
+  // adversarial: anchor over a log signed by the WRONG log signer (claims our log_signer but log verifies under attacker)
+  ok(verifyAnchored(entries, a0, onchainCommitment(a0), { log: { ed: ed(9).publicKey, mldsa: ml_dsa87.keygen(new Uint8Array(32).fill(9)).publicKey }, anchor: trustedAnchor }).verified === false, 'wrong pinned LOG signer -> FAILS (log will not verify)');
+
+  // anchor CHAIN: three periodic anchors over a growing log
+  const ach = createAnchorChain(anchorSigner, { chain: 'algorand' });
+  const lv2 = verifyLog(entries2, trustedLog);
+  appendAnchor(ach, { root: lv.tip, n: lv.n, logSignerPubs: { ed: bytesToHex(trustedLog.ed), mldsa: bytesToHex(trustedLog.mldsa) } }, { ts: 10 });
+  appendAnchor(ach, { root: lv2.tip, n: lv2.n, logSignerPubs: { ed: bytesToHex(trustedLog.ed), mldsa: bytesToHex(trustedLog.mldsa) } }, { ts: 11 });
+  appendAnchor(ach, { root: lv2.tip, n: lv2.n, logSignerPubs: { ed: bytesToHex(trustedLog.ed), mldsa: bytesToHex(trustedLog.mldsa) } }, { ts: 12 });
+  ok(verifyAnchorChain(ach.anchors, trustedAnchor).verified === true, 'anchor chain of 3 periodic anchors verifies (linked + dual-signed)');
+  const tc = JSON.parse(JSON.stringify(ach.anchors)); tc[1].log_root = '22'.repeat(32);
+  ok(verifyAnchorChain(tc, trustedAnchor).verified === false, 'tampered anchor in the chain -> chain verify FAILS');
+  const reordered = [ach.anchors[0], ach.anchors[2], ach.anchors[1]];
+  ok(verifyAnchorChain(reordered, trustedAnchor).verified === false, 'reordered anchor chain -> FAILS (linkage)');
+  ok(verifyAnchorChain(ach.anchors, { ed: ed(9).publicKey, mldsa: ml_dsa87.keygen(new Uint8Array(32).fill(2)).publicKey }).verified === false, 'wrong pinned anchor authority -> chain FAILS');
+
+  // TOTAL: malformed -> fail-closed, never throws
+  let total = true;
+  for (const bad of [null, undefined, {}, 42, { seq: 0 }]) { try { if (verifyAnchored(entries, bad, '00', trusted).verified !== false) total = false; if (verifyAnchorChain(bad, trustedAnchor).verified !== false) total = false; } catch { total = false; } }
+  ok(total, 'TOTAL: malformed anchors -> verified:false, never throws');
+
+  console.log('pqanchor self-test: ' + pass + ' pass, ' + fail + ' fail');
+  if (typeof process !== 'undefined' && process.exit) process.exit(fail ? 1 : 0);
+}
+if (typeof process !== 'undefined' && process.argv && /pqanchor\.mjs$/.test(process.argv[1] || '')) selfTest();
