@@ -1,0 +1,18 @@
+# Cursor rules — TRELYAN verify-pqc SDK
+
+FOLLOW `AGENTS.md` in this repo root. It is the source of truth; these are the highlights Cursor must obey.
+
+HARD rules (do not violate):
+- Crypto ONLY via @noble/post-quantum + @noble/curves + @noble/hashes. No new runtime deps.
+- 0-downgrade / only-upgrade: additive changes only. `PQC_SKIP_LIVE=1 node test-all.mjs` must print "ALL MODULES PASS" before any commit; modules may be added, never silently removed (MIN_MODULES ratchet).
+- Every module's `canon()` is byte-identical to the reference (sorted-key, type-distinct) — see AGENTS.md.
+- Verifiers are TOTAL/fail-closed: wrap in try/catch, return {verified:false} on bad input, never throw.
+- Hybrid signing is AND-composition: all legs (Ed25519 ∧ ML-DSA-87 ∧ SLH-DSA) must verify; stripping any leg fails.
+- Unique domain-separation context string per module (`trelyan-<module>-v1`).
+- Each module ships a self-test and is wired into test-all.mjs.
+
+Honesty (claims must be falsifiable): NEVER "military-grade"/"unbreakable"/"FIPS-validated"/"quantum-proof". Say "downgrade-detecting under the declared trust model" / "tamper-evident" / "unaudited reference implementation". Canonical QLR ledger = Algorand; liboqs is NOT NIST-certified; NERION is software+cloud-KMS not HSM-backed.
+
+Secrets: never put secrets in code/logs; .env stays out of git; never stage .env/_scratch*.
+
+Code-gen helper: StarCoder2 via `python -m apex_jarvis.tools.starcoder2` (completion / --infill). Code model only — not for architecture/security reasoning.

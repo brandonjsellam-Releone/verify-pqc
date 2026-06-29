@@ -1,0 +1,16 @@
+# Windsurf rules — TRELYAN verify-pqc SDK
+
+FOLLOW `AGENTS.md` in this repo root (source of truth). Windsurf/Cascade must obey these highlights:
+
+- Crypto ONLY via @noble/post-quantum + @noble/curves + @noble/hashes. No new runtime deps.
+- 0-downgrade / only-upgrade: additive only. `PQC_SKIP_LIVE=1 node test-all.mjs` must print "ALL MODULES PASS" before any commit; modules may be added, never silently removed (MIN_MODULES ratchet in test-all.mjs).
+- Every module's `canon()` is byte-identical to the reference (sorted-key, type-distinct) — see AGENTS.md.
+- Verifiers are TOTAL / fail-closed (try/catch, return {verified:false}, never throw).
+- Hybrid signing = AND-composition (Ed25519 ∧ ML-DSA-87 ∧ SLH-DSA all verify; stripping a leg fails).
+- Unique domain-separation context per module (`trelyan-<module>-v1`); each module has a self-test wired into test-all.mjs.
+
+Honesty: no "military-grade"/"unbreakable"/"FIPS-validated"/"quantum-proof". Use "downgrade-detecting under the declared trust model" / "tamper-evident" / "unaudited reference implementation". Canonical QLR ledger = Algorand; liboqs ≠ NIST-certified; NERION = software + cloud-KMS (not HSM-backed).
+
+Secrets: none in code/logs; .env out of git; never stage .env/_scratch*.
+
+StarCoder2 code-gen helper: `python -m apex_jarvis.tools.starcoder2` (completion / --infill) — code model only.
