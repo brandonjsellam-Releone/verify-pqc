@@ -112,7 +112,7 @@ export function verifyRedacted(disclosure, trustedSignerPub, opts = {}) {
     let sigOk = false;
     try { sigOk = ml_dsa87.verify(hexToBytes(d.sig), coreBytes, trustedSignerPub ? trustedSignerPub : hexToBytes(d.signer_pub), { context: REDACT_CTX }); } catch { sigOk = false; }
     let slhOk = true;
-    if (opts.requireHybrid || (opts.trustedSlhPub && d.slh)) {
+    if (opts.requireHybrid || opts.trustedSlhPub) {   // pinning the SLH key IMPLIES the leg is required: stripping d.slh now fails closed
       slhOk = false;
       try {
         const pub = opts.trustedSlhPub ? opts.trustedSlhPub : (d.slh ? hexToBytes(d.slh.signer_pub) : null);
@@ -121,7 +121,7 @@ export function verifyRedacted(disclosure, trustedSignerPub, opts = {}) {
       } catch { slhOk = false; }
     }
     // every disclosed field must (a) sit at its claimed index in the signed key list and (b) recompute to the signed root
-    let rootOk = true; const out = {};
+    let rootOk = true; const out = Object.create(null);   // null-proto: a field literally keyed "__proto__" is a normal data key, not prototype pollution
     for (const item of disclosure.disclosed) {
       if (!item || typeof item.index !== 'number' || d.keys[item.index] !== String(item.key) || !Array.isArray(item.path)) { rootOk = false; break; }
       const leaf = leafHash(item.key, item.value, item.salt);
@@ -177,6 +177,15 @@ function selfTest() {
   ok(verifyRedacted(hyView, signer.publicKey, { requireHybrid: true, trustedSlhPub: slh.publicKey }).verified === true, 'hybrid ML-DSA ∧ SLH-DSA disclosure verifies under both pinned keys');
   ok(verifyRedacted(hyView, signer.publicKey, { requireHybrid: true, trustedSlhPub: slh_dsa_sha2_256f.keygen(new Uint8Array(96).fill(2)).publicKey }).verified === false, 'wrong pinned SLH key -> verify FAILS');
   ok(verifyRedacted(redact(full, ['org']), signer.publicKey, { requireHybrid: true }).verified === false, 'requireHybrid on a non-hybrid doc -> verify FAILS');
+  // RED-TEAM: pinning trustedSlhPub IMPLIES the SLH leg is required — stripping d.slh must fail even without requireHybrid
+  const stripped = JSON.parse(JSON.stringify(hyView)); delete stripped.doc.slh;
+  ok(verifyRedacted(stripped, signer.publicKey, { trustedSlhPub: slh.publicKey }).verified === false, 'red-team: stripping d.slh when trustedSlhPub is pinned -> verify FAILS (no silent SLH downgrade)');
+
+  // 6b. RED-TEAM: a field literally keyed "__proto__" is disclosed as ordinary data (no prototype pollution / silent drop)
+  const protoFull = buildRedactable([{ key: '__proto__', value: 'evil' }, { key: 'ok', value: 1 }], signer.secretKey, signer.publicKey);
+  const protoView = redact(protoFull, ['__proto__', 'ok']);
+  const pv = verifyRedacted(protoView, signer.publicKey);
+  ok(pv.verified === true && pv.disclosed['__proto__'] === 'evil' && pv.disclosed.ok === 1, 'red-team: "__proto__"-keyed field discloses as normal data (null-proto result, no pollution)');
 
   // 7. TOTAL: malformed disclosures fail closed, never throw
   let total = true;

@@ -25,5 +25,10 @@ try {
   if (!haveAll) failed++;
 } catch (e) { failed++; console.error('✗ sdk.mjs load failed: ' + e.message); }
 
+// 0-DOWNGRADE RATCHET (constant max-apex law: 0 downgrade, only upgrade). Modules may be ADDED, never silently
+// removed — raise MIN_MODULES only upward when you add one. Dropping below the floor is a regression and fails CI.
+const MIN_MODULES = 47;
+if (mods.length < MIN_MODULES) { failed++; console.error('✗ 0-downgrade ratchet: mods.length ' + mods.length + ' < floor ' + MIN_MODULES + ' (a module was removed — only-upgrade law violated; restore it or this is a downgrade)'); }
+
 console.log('\n=== PQ SDK: ' + (failed ? failed + ' module(s) FAILED' : 'ALL MODULES PASS') + ' ===');
 if (typeof process !== 'undefined' && process.exit) process.exit(failed ? 1 : 0);

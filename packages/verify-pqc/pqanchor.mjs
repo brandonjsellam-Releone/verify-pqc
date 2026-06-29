@@ -1,20 +1,23 @@
 /*!
- * pqanchor — bind a pqauditlog trail to a LEDGER-OF-RECORD anchor (the "QLR chain" in Apex's dual-chain design), and
- * verify the binding (reference, DRAFT). This is the "write to the QLR chain, tamper-proof + timestamped" step done
- * honestly: the FULL audit log stays off-chain; only a small, hybrid-signed ANCHOR (the log's root hash + metadata) is
- * committed on-chain, and the off-chain log is hash-bound to that on-chain commitment — the same off-chain-artifact ->
- * on-chain-Cell hash-binding the TRELYAN inscription protocol uses (IPFS/Arweave bound to an Algorand Cell).
+ * pqanchor — bind a pqauditlog trail to a LEDGER-OF-RECORD anchor (the QRL chain in Apex's dual-chain design), and
+ * verify the binding (reference, DRAFT). The ledger is QRL — the open-source Quantum Resistant Ledger (github.com/theQRL);
+ * its EVM-compatible PQ Layer-1, QRL 2.0 / Project Zond, natively verifies ML-DSA-87 (CRYSTALS-Dilithium) via the Hyperion
+ * compiler — the SAME signature our anchor + log use, so the anchor's PQ leg is on-chain-verifiable there (end-to-end
+ * post-quantum). This is the "write to the ledger, tamper-proof + timestamped" step done honestly: the FULL audit log
+ * stays off-chain; only a small, hybrid-signed ANCHOR (the log's root hash + metadata) is committed on-chain, and the
+ * off-chain log is hash-bound to that on-chain commitment — the same off-chain-artifact -> on-chain-Cell hash-binding the
+ * TRELYAN inscription protocol uses (IPFS/Arweave bound to an Algorand Cell).
  *
- * It deliberately does NOT broadcast to any chain: actual posting to the QLR ledger (a deployed permissioned-EVM
- * contract or an Algorand app) needs a funded signer + a deployed contract and is owner-gated. pqanchor produces the
- * exact bytes you would post (`anchorCalldata` / `onchainCommitment`) and verifies, after the fact, that a given on-chain
- * commitment provably binds a specific off-chain log state.
+ * It deliberately does NOT broadcast to any chain: actual posting to QRL Zond (Testnet V2 live since Mar 2026; mainnet
+ * planned 2026) — or an Algorand app — needs a funded signer + a deployed contract and is owner-gated. pqanchor produces
+ * the exact bytes you would post (`anchorCalldata` / `onchainCommitment`) and verifies, after the fact, that a given
+ * on-chain commitment provably binds a specific off-chain log state.
  *
  * NOVEL FALSIFIABLE PROPERTY: given the off-chain log + an on-chain commitment + the pinned log-signer AND anchor-signer
  * keys, a third party can confirm (1) the log itself verifies (pqauditlog: hash-chained + Ed25519∧ML-DSA-87 dual-signed +
  * replay-proof), (2) the anchor's `log_root` equals the log's tip and names the correct log signer, (3) the anchor is
  * itself dual-signed by the pinned ledger authority, and (4) the on-chain commitment equals this exact anchor's hash —
- * i.e. THIS log state, and no other, is the one committed on the QLR chain. Anchors also form their own hash-chain
+ * i.e. THIS log state, and no other, is the one committed on the QRL chain. Anchors also form their own hash-chain
  * (prev_anchor), so a sequence of periodic anchors is tamper-evident against drop/reorder. HONEST: this proves the
  * binding off-chain↔on-chain; it does not prove the chain itself is honest/available (that is the ledger's job), and it
  * proves nothing was posted until a real transaction carrying `onchainCommitment` exists on-chain.
@@ -28,10 +31,12 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, utf8ToBytes, concatBytes } from '@noble/hashes/utils.js';
 import { verifyLog } from './pqauditlog.mjs';
 
-const ANCHOR_CTX = utf8ToBytes('trelyan-qlr-anchor-v1');        // signing domain (both legs)
-const ANCHOR_HASH_TAG = utf8ToBytes('trelyan-qlr-anchor-hash-v1');
+const ANCHOR_CTX = utf8ToBytes('trelyan-qrl-anchor-v1');        // signing domain (both legs)
+const ANCHOR_HASH_TAG = utf8ToBytes('trelyan-qrl-anchor-hash-v1');
 const GENESIS = '0'.repeat(64);
-const CHAINS = ['qlr-evm', 'algorand', 'generic'];             // target ledger encodings supported
+// target ledger encodings. qrl-zond = QRL 2.0 / Project Zond (EVM-compatible PQ L1; ML-DSA-87 native via the Hyperion
+// compiler; Testnet V2 live Mar 2026, mainnet planned 2026). qrl = legacy QRL PoW chain (XMSS, STATEFUL one-time keys).
+const CHAINS = ['qrl-zond', 'qrl', 'algorand', 'generic'];
 
 function canon(v) {
   if (v === null || typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string') return JSON.stringify(v);
@@ -71,16 +76,16 @@ export function appendAnchor(achain, tip, opts = {}) {
   return anchor;
 }
 
-// the 32-byte on-chain commitment to post to the QLR ledger (the full anchor lives off-chain, hash-bound to this).
+// the 32-byte on-chain commitment to post to the QRL ledger (the full anchor lives off-chain, hash-bound to this).
 export const onchainCommitment = (anchor) => anchor.anchor_hash;
 
 // a deterministic, versioned wire encoding to post on the target chain (EVM calldata hex / Algorand note):
 //   "TRLNA1" | chain-tag(2 hex) | seq(8B) | log_root(32B) | anchor_hash(32B)
 export function anchorCalldata(anchor) {
-  const tag = { 'qlr-evm': '01', 'algorand': '02', 'generic': '00' }[anchor.chain] ?? '00';
+  const tag = { 'qrl-zond': '01', 'qrl': '03', 'algorand': '02', 'generic': '00' }[anchor.chain] ?? '00';
   const body = tag + u64hex(anchor.seq) + anchor.log_root + anchor.anchor_hash;
   const hex = bytesToHex(utf8ToBytes('TRLNA1')) + body;
-  return anchor.chain === 'qlr-evm' ? '0x' + hex : hex;
+  return anchor.chain === 'qrl-zond' ? '0x' + hex : hex;   // Zond is EVM-compatible -> 0x calldata
 }
 
 // verify ONE anchor binds a given off-chain log to a given on-chain commitment. TOTAL / fail-closed.
@@ -108,12 +113,14 @@ export function verifyAnchored(logEntries, anchor, onchainCommitmentHex, trusted
   } catch { return fail('exception'); }
 }
 
-// verify a CHAIN of periodic anchors (links + signs + monotonic ts). TOTAL / fail-closed.
+// verify a CHAIN of periodic anchors (links + signs + monotonic ts). TOTAL / fail-closed. opts.expectedTip pins the
+// known latest anchor_hash and opts.minLength a known minimum, so TAIL-TRUNCATION/rollback (invisible from a chain
+// alone) becomes detectable; opts.requireMonotonicN rejects an anchored log-state rollback (n decreasing across anchors).
 export function verifyAnchorChain(anchors, trustedAnchor, opts = {}) {
   const base = { verified: false, n: 0, broken_at: 0, reason: '' };
   try {
     if (!Array.isArray(anchors) || !trustedAnchor || !trustedAnchor.ed || !trustedAnchor.mldsa) return { ...base, reason: 'args' };
-    let prev = GENESIS, lastTs = -Infinity;
+    let prev = GENESIS, lastTs = -Infinity, lastN = -1;
     for (let i = 0; i < anchors.length; i++) {
       const a = anchors[i]; const at = (reason) => ({ ...base, n: anchors.length, broken_at: i, reason });
       if (!a || a.seq !== i) return at('seq/shape');
@@ -122,14 +129,19 @@ export function verifyAnchorChain(anchors, trustedAnchor, opts = {}) {
       if (anchorHashOf(coreBytes) !== a.anchor_hash) return at('anchor_hash mismatch (tamper)');
       if (!CHAINS.includes(a.chain)) return at('unknown chain tag');
       if (typeof a.ts !== 'number' || a.ts < lastTs) return at('ts not non-decreasing');
+      if (opts.requireMonotonicN && typeof a.n === 'number' && a.n < lastN) return at('log-state rollback (anchored n decreased across the chain)');
       let edOk = false, pqOk = false;
       try { edOk = ed25519.verify(hexToBytes(a.ed_sig), concatBytes(ANCHOR_CTX, coreBytes), trustedAnchor.ed); } catch { edOk = false; }
       try { pqOk = ml_dsa87.verify(hexToBytes(a.mldsa_sig), coreBytes, trustedAnchor.mldsa, { context: ANCHOR_CTX }); } catch { pqOk = false; }
       if (!edOk) return at('Ed25519 anchor signature invalid');
       if (!pqOk) return at('ML-DSA-87 anchor signature invalid (or PQ leg stripped)');
-      prev = a.anchor_hash; lastTs = a.ts;
+      prev = a.anchor_hash; lastTs = a.ts; lastN = a.n;
     }
-    return { verified: true, n: anchors.length, broken_at: -1, reason: 'ok', tip: anchors.length ? anchors[anchors.length - 1].anchor_hash : GENESIS };
+    // tail-truncation / rollback is undetectable from the chain alone — a caller who knows the latest anchor pins it.
+    const tip = anchors.length ? anchors[anchors.length - 1].anchor_hash : GENESIS;
+    if (opts.minLength != null && anchors.length < opts.minLength) return { ...base, n: anchors.length, broken_at: Math.max(0, anchors.length - 1), reason: 'chain shorter than expected minLength (tail truncation?)' };
+    if (opts.expectedTip != null && String(opts.expectedTip).toLowerCase() !== tip.toLowerCase()) return { ...base, n: anchors.length, broken_at: Math.max(0, anchors.length - 1), reason: 'tip != expectedTip (tail truncation / fork)' };
+    return { verified: true, n: anchors.length, broken_at: -1, reason: 'ok', tip };
   } catch { return base; }
 }
 
@@ -151,7 +163,7 @@ async function selfTest() {
   append(log, { actor: 'risk', action: 'GO', stage: 'decision', ts: 3, parentSeq: 1 });
   const entries = log.entries.map((e) => ({ ...e }));
   const lv = verifyLog(entries, trustedLog);
-  const achain = createAnchorChain(anchorSigner, { chain: 'qlr-evm' });
+  const achain = createAnchorChain(anchorSigner, { chain: 'qrl-zond' });
   const a0 = appendAnchor(achain, { root: lv.tip, n: lv.n, logSignerPubs: { ed: bytesToHex(trustedLog.ed), mldsa: bytesToHex(trustedLog.mldsa) } }, { ts: 4 });
 
   // happy path
@@ -171,7 +183,7 @@ async function selfTest() {
   ok(verifyAnchored(entries, t1, onchainCommitment(t1), trusted).verified === false, 'tampered anchor.log_root -> FAILS');
 
   // adversarial: anchor signed by an attacker ledger key
-  const evil = createAnchorChain({ ed: ed(9), mldsa: ml_dsa87.keygen(new Uint8Array(32).fill(9)) }, { chain: 'qlr-evm' });
+  const evil = createAnchorChain({ ed: ed(9), mldsa: ml_dsa87.keygen(new Uint8Array(32).fill(9)) }, { chain: 'qrl-zond' });
   const aEvil = appendAnchor(evil, { root: lv.tip, n: lv.n, logSignerPubs: { ed: bytesToHex(trustedLog.ed), mldsa: bytesToHex(trustedLog.mldsa) } }, { ts: 4 });
   ok(verifyAnchored(entries, aEvil, onchainCommitment(aEvil), trusted).verified === false, 'adversarial: anchor forged under attacker ledger keys -> FAILS against the pinned authority');
   // adversarial: strip the PQ leg of the anchor signature (downgrade)
@@ -192,6 +204,16 @@ async function selfTest() {
   const reordered = [ach.anchors[0], ach.anchors[2], ach.anchors[1]];
   ok(verifyAnchorChain(reordered, trustedAnchor).verified === false, 'reordered anchor chain -> FAILS (linkage)');
   ok(verifyAnchorChain(ach.anchors, { ed: ed(9).publicKey, mldsa: ml_dsa87.keygen(new Uint8Array(32).fill(2)).publicKey }).verified === false, 'wrong pinned anchor authority -> chain FAILS');
+  // RED-TEAM: tail-truncation + log-state rollback are invisible from a chain alone -> opt-in pins make them detectable
+  const fullTip = verifyAnchorChain(ach.anchors, trustedAnchor).tip;
+  ok(verifyAnchorChain(ach.anchors, trustedAnchor, { expectedTip: fullTip }).verified === true, 'expectedTip matching the real tip -> verifies');
+  const trunc = ach.anchors.slice(0, 2);
+  ok(verifyAnchorChain(trunc, trustedAnchor).verified === true, 'a truncated prefix is itself a valid chain (truncation invisible by default — documented)');
+  ok(verifyAnchorChain(trunc, trustedAnchor, { expectedTip: fullTip }).verified === false && verifyAnchorChain(trunc, trustedAnchor, { minLength: 3 }).verified === false, 'red-team: tail truncation DETECTED via expectedTip / minLength');
+  const ach2 = createAnchorChain(anchorSigner, { chain: 'qrl-zond' });
+  appendAnchor(ach2, { root: lv2.tip, n: 5, logSignerPubs: { ed: bytesToHex(trustedLog.ed), mldsa: bytesToHex(trustedLog.mldsa) } }, { ts: 1 });
+  appendAnchor(ach2, { root: lv.tip, n: 2, logSignerPubs: { ed: bytesToHex(trustedLog.ed), mldsa: bytesToHex(trustedLog.mldsa) } }, { ts: 2 });
+  ok(verifyAnchorChain(ach2.anchors, trustedAnchor).verified === true && verifyAnchorChain(ach2.anchors, trustedAnchor, { requireMonotonicN: true }).verified === false, 'red-team: anchored log-state rollback (n 5->2) DETECTED via requireMonotonicN');
 
   // TOTAL: malformed -> fail-closed, never throws
   let total = true;

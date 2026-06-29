@@ -9,10 +9,12 @@
  * public keys, anyone can confirm (1) every entry is dual-signed by the pinned signer — forging one requires breaking a
  * CLASSICAL *and* a post-quantum signature (AND-composition: stripping the PQ leg is detected, no silent downgrade);
  * (2) the entries form an unbroken hash chain (no insertion / deletion / reorder); (3) no nonce is replayed and
- * timestamps are non-decreasing (no replay / no back-dating within the log); (4) every decision/execution entry names a
- * custody parent that is present and earlier — a complete, falsifiable input->...->ledger chain of custody. HONEST: this
- * proves integrity + authenticity + ordering + non-replay of what WAS logged; it does not prove the producer logged
- * every real-world event (completeness is a process/attestation property, not a cryptographic one).
+ * timestamps are finite + non-decreasing (no replay / no back-dating within the log); (4) every custody link that IS
+ * named references a present, earlier entry — and with `opts.requireCustody` the verifier additionally enforces a
+ * COMPLETE chain: every non-input stage must name a parent of the immediately-prior stage (input<-signal<-decision<-
+ * execution<-ledger), so an orphan decision/execution or a stage-skip/inversion fails closed. HONEST: this proves integrity + authenticity +
+ * ordering + non-replay of what WAS logged (and, under requireCustody, structural custody completeness among logged
+ * entries); it does not prove the producer logged every real-world event (external completeness is a process property).
  *
  * Dependency-light: @noble/curves (ed25519) + @noble/post-quantum (ml-dsa-87) + @noble/hashes (sha256). Self-test: node pqauditlog.mjs
  */
@@ -31,8 +33,11 @@ function canon(v) {
   if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
   return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}';
 }
-const toBytes = (x) => (x instanceof Uint8Array ? x : utf8ToBytes(typeof x === 'string' ? x : canon(x)));
-const payloadHash = (p) => bytesToHex(sha256(concatBytes(HASH_TAG, toBytes(p))));
+// payload binding: a 1-byte TYPE TAG + canonical bytes, so a raw string can NEVER collide with the structured value
+// whose canon() equals it (red-team: string S and value P were interchangeable when S === canon(P)). Uint8Array keeps a
+// raw fast-path under its own tag. Both producer (append) and verifier (verifyResponse) run this identical transform.
+function payloadTag(p) { return p instanceof Uint8Array ? 6 : (p === null ? 3 : Array.isArray(p) ? 4 : ({ number: 1, boolean: 2, string: 0, object: 5 })[typeof p] ?? 7); }
+const payloadHash = (p) => bytesToHex(sha256(concatBytes(HASH_TAG, new Uint8Array([payloadTag(p)]), p instanceof Uint8Array ? p : utf8ToBytes(canon(p)))));
 // the signable core of an entry (everything except the signatures + the derived entry_hash)
 function coreOf(e) {
   return { v: '1', seq: e.seq, ts: e.ts, nonce: e.nonce, actor: e.actor, action: e.action, stage: e.stage, parent_seq: e.parent_seq ?? null, payload_sha256: e.payload_sha256, prev_hash: e.prev_hash };
@@ -52,6 +57,7 @@ export function append(log, rec) {
   const last = log.entries[log.entries.length - 1];
   const seq = log.entries.length;
   const ts = rec.ts ?? (last ? last.ts : 0);
+  if (!Number.isFinite(ts)) throw new Error('ts must be a finite number');  // NaN/Infinity canonicalize to null + disable ordering
   if (last && ts < last.ts) throw new Error('ts must be non-decreasing');
   if (!STAGES.includes(rec.stage)) throw new Error('unknown stage: ' + rec.stage);
   const nonce = rec.nonce ?? bytesToHex(randomBytes(16));
@@ -87,9 +93,17 @@ export function verifyLog(entries, trusted, opts = {}) {
       if (e.prev_hash !== prev) return at('chain linkage (prev_hash)');           // no insert/delete/reorder
       if (entryHash(coreBytes) !== e.entry_hash) return at('entry_hash mismatch (tamper)');
       if (!STAGES.includes(e.stage)) return at('unknown stage');
-      if (typeof e.ts !== 'number' || e.ts < lastTs) return at('ts not non-decreasing (back-dating)');
+      if (typeof e.ts !== 'number' || !Number.isFinite(e.ts) || e.ts < lastTs) return at('ts not finite/non-decreasing (back-dating)');
       if (seen.has(e.nonce)) return at('nonce replay');                            // no replay
-      if (e.parent_seq !== null && !(Number.isInteger(e.parent_seq) && e.parent_seq < i)) return at('custody parent missing/forward');
+      if (e.parent_seq !== null && !(Number.isInteger(e.parent_seq) && e.parent_seq >= 0 && e.parent_seq < i)) return at('custody parent missing/forward');
+      if (opts.requireCustody) {                                                   // STRICT, complete input->...->ledger chain
+        const si = STAGES.indexOf(e.stage);
+        if (si > 0) {
+          if (e.parent_seq === null) return at('custody incomplete (non-input stage has no parent)');
+          const ps = STAGES.indexOf(entries[e.parent_seq].stage);
+          if (ps !== si - 1) return at('illegal custody stage transition (each stage must derive from the immediately prior one)');
+        }
+      }
       // AND-composition: BOTH the classical and the PQ signature must verify under the pinned keys (anti-downgrade).
       if (!trusted || !trusted.ed || !trusted.mldsa) return at('no pinned signer keys (authenticity uncheckable)');
       let edOk = false, pqOk = false;
@@ -150,6 +164,21 @@ function selfTest() {
   const entries = exportLog(log);
   ok(verifyLog(entries, trusted).verified === true, 'happy path: full 5-stage custody chain verifies under the pinned hybrid signer');
   ok(JSON.stringify(custodyChain(entries, e4.seq).map((x) => x.stage)) === JSON.stringify(STAGES), 'chain of custody reconstructs input->signal->decision->execution->ledger');
+
+  // RED-TEAM FIX 1 — payload type-confusion: a string equal to canon(object) must NOT verify under the object's signature
+  ok(verifyResponse(e1, { up: 7, down: 4 }, trusted).verified === true, 'verifyResponse: the correct object payload verifies');
+  ok(verifyResponse(e1, '{"up":7,"down":4}', trusted).verified === false, 'red-team: a string == canon(object) does NOT collide with the object payload (type-tagged binding)');
+  // RED-TEAM FIX 2 — strict chain of custody (opts.requireCustody): orphans + stage-skips fail closed; default unchanged
+  ok(verifyLog(entries, trusted, { requireCustody: true }).verified === true, 'requireCustody: a complete input->...->ledger chain passes');
+  const orphan = createLog(signer); append(orphan, { actor: 'x', action: 'GO', stage: 'decision', ts: 1, nonce: 'n-orphan' });
+  ok(verifyLog(exportLog(orphan), trusted).verified === true && verifyLog(exportLog(orphan), trusted, { requireCustody: true }).verified === false, 'red-team: orphan decision passes by default but FAILS under requireCustody');
+  const skip = createLog(signer); const si0 = append(skip, { actor: 'f', action: 't', stage: 'input', ts: 1, nonce: 'n-i' }); append(skip, { actor: 'q', action: 'anchor', stage: 'ledger', ts: 2, parentSeq: si0.seq, nonce: 'n-l' });
+  ok(verifyLog(exportLog(skip), trusted, { requireCustody: true }).verified === false, 'red-team: ledger parented straight to input (stage-skip) FAILS under requireCustody');
+  // RED-TEAM FIX 3 — non-finite timestamp rejected at append AND at verify
+  let nanRejected = false; try { append(createLog(signer), { actor: 'x', action: 'y', stage: 'input', ts: NaN }); } catch { nanRejected = true; }
+  ok(nanRejected, 'red-team: append with NaN ts -> rejected (finite-ts guard; NaN/Infinity canonicalize to null + would disable ordering)');
+  const tNan = JSON.parse(JSON.stringify(entries)); tNan[2].ts = null;
+  ok(verifyLog(tNan, trusted).verified === false, 'red-team: a forged non-numeric ts in the log -> verify FAILS');
 
   // failure 1: tamper a field in the middle -> entry_hash + signature both fail at that seq
   const t1 = JSON.parse(JSON.stringify(entries)); t1[2].action = 'GO size=5kelly';
