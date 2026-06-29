@@ -55,6 +55,14 @@ export function initiatorStart(iIdentity, opts = {}) {
 }
 
 // R receives msg1 -> derives keys, signs (responder context) -> msg2
+// pin check: `undefined` = explicit TOFU (ok, but NOT identity-anchored); a provided-but-empty / non-string pin is a
+// MISCONFIGURATION and FAILS CLOSED (never silently accept-anyone); a real pin must match the presented identity exactly.
+function pinCheck(expectedHex, actualHex) {
+  if (expectedHex === undefined) return { ok: true, pinned: false };
+  if (typeof expectedHex !== 'string' || expectedHex.length === 0) return { ok: false, pinned: false };
+  return { ok: actualHex.toLowerCase() === expectedHex.toLowerCase(), pinned: true };
+}
+
 export function responderRespond(msg1, rIdentity, opts = {}) {
   if (msg1.suite_id !== SUITE_ID) throw new Error('unsupported suite: ' + msg1.suite_id);
   const i_identity_pub = hexToBytes(msg1.i_identity_pub), i_random = hexToBytes(msg1.i_random), i_eph_x = hexToBytes(msg1.i_eph_x), i_eph_mlkem = hexToBytes(msg1.i_eph_mlkem);
@@ -78,19 +86,24 @@ export function initiatorFinish(msg2, iState, iIdentity, expectedRIdentityPubHex
   const t = { suite_id: SUITE_ID, i_identity_pub: iState.i_identity_pub, i_random: iState.i_random, i_eph_x: iState.i_eph_x, i_eph_mlkem: iState.i_eph_mlkem, r_identity_pub, r_random, r_eph_x, mlkem_ct };
   const th = transcriptHash(t);
   let rSigOk = false; try { rSigOk = ml_dsa87.verify(hexToBytes(msg2.r_sig), th, r_identity_pub, { context: AUTH_CTX_R }); } catch { rSigOk = false; }
-  const rPinOk = !expectedRIdentityPubHex || msg2.r_identity_pub.toLowerCase() === expectedRIdentityPubHex.toLowerCase();
+  const rPin = pinCheck(expectedRIdentityPubHex, msg2.r_identity_pub);
   const i_sig = ml_dsa87.sign(th, iIdentity.secretKey, { context: AUTH_CTX_I });
-  const session = deriveSession(ss_x, ss_m, th);
+  const R_auth_ok = rSigOk && rPin.ok;
+  // FAIL-CLOSED: never hand back usable session keys on a failed authentication — removes the seal-before-verify
+  // footgun (a caller that ignores R_auth_ok cannot encrypt to a MITM, because there is simply no key to encrypt with).
+  const session = R_auth_ok ? deriveSession(ss_x, ss_m, th) : null;
   // th = the public handshake transcript hash (binds suite + both identities + all ephemerals); exposed so a PQC
   // gateway can bind its session attestation to the REAL transcript (see pqgateway-session.mjs).
-  return { msg3: { i_sig: bytesToHex(i_sig) }, session, th: bytesToHex(th), R_auth_ok: rSigOk && rPinOk, rSigOk, rPinOk };
+  return { msg3: { i_sig: bytesToHex(i_sig) }, session, th: bytesToHex(th), R_auth_ok, rSigOk, rPinOk: rPin.ok, R_pinned: rPin.pinned };
 }
 
 // R receives msg3 -> verifies I (initiator context + pin against the identity seen in msg1)
 export function responderFinish(msg3, rState, expectedIIdentityPubHex) {
   let iSigOk = false; try { iSigOk = ml_dsa87.verify(hexToBytes(msg3.i_sig), rState.th, rState.i_identity_pub, { context: AUTH_CTX_I }); } catch { iSigOk = false; }
-  const iPinOk = !expectedIIdentityPubHex || bytesToHex(rState.i_identity_pub).toLowerCase() === expectedIIdentityPubHex.toLowerCase();
-  return { session: rState.session, th: bytesToHex(rState.th), I_auth_ok: iSigOk && iPinOk, iSigOk, iPinOk };
+  const iPin = pinCheck(expectedIIdentityPubHex, bytesToHex(rState.i_identity_pub));
+  const I_auth_ok = iSigOk && iPin.ok;
+  // FAIL-CLOSED: withhold the session keys unless the initiator is authenticated (no use-before-verify on R's side).
+  return { session: I_auth_ok ? rState.session : null, th: bytesToHex(rState.th), I_auth_ok, iSigOk, iPinOk: iPin.ok, I_pinned: iPin.pinned };
 }
 
 /* ---------- AEAD channel: deterministic per-direction COUNTER nonces (no reuse) ---------- */
@@ -144,6 +157,18 @@ function selfTest() {
   // identity binding: if an attacker swaps the identity in msg1 (so th would differ), R signs a different th than I expects -> auth fails
   const downgradeRejected = (() => { try { responderRespond({ ...a.msg1, suite_id: 'WEAK-RSA-1' }, R); return false; } catch { return true; } })();
   ok(downgradeRejected, 'downgrade to an unsupported suite -> rejected');
+
+  // FIX (red-team A): an empty-string / falsy pin must FAIL CLOSED, not silently become accept-anyone (TOFU)
+  const cEmpty = initiatorFinish(bM.msg2, a.state, I, '');  // '' = misconfigured pin, against MITM M
+  ok(cEmpty.R_auth_ok === false && cEmpty.R_pinned === false, "empty-string responder pin -> FAILS CLOSED (not silent accept-anyone)");
+  // FIX (red-team B): session keys are WITHHELD on a failed authentication (no seal-before-verify leak to a MITM)
+  ok(cM.session === null && cEmpty.session === null, 'failed auth -> session keys withheld (null): cannot encrypt to a MITM');
+  // explicit TOFU (pin omitted) still authenticates on the signature, but reports it is NOT identity-anchored
+  const cTofu = initiatorFinish(b.msg2, a.state, I, undefined);
+  ok(cTofu.R_auth_ok === true && cTofu.R_pinned === false && cTofu.session !== null, 'omitted pin = TOFU: auth passes on signature, R_pinned:false (validity != anchored trust), keys issued');
+  // responder side: empty initiator pin also fails closed + withholds keys
+  const dEmpty = responderFinish(c.msg3, b.state, '');
+  ok(dEmpty.I_auth_ok === false && dEmpty.session === null, 'empty-string initiator pin -> responder FAILS CLOSED + withholds keys');
 
   console.log('pqtransport self-test: ' + pass + ' pass, ' + fail + ' fail');
   if (typeof process !== 'undefined' && process.exit) process.exit(fail ? 1 : 0);
