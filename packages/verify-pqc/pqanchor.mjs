@@ -146,6 +146,32 @@ export function verifyAnchorChain(anchors, trustedAnchor, opts = {}) {
   } catch { return base; }
 }
 
+// ---- DUAL-CHAIN: anchor the SAME log/Cell root to TWO ledgers at once (default Algorand + QRL-Zond) ----
+// WHY both: Algorand is the live inscription substrate (Falcon-1024 / falcon_verify), but a standard Algorand account
+// signs with Ed25519 — quantum-vulnerable at the WALLET layer (a Falcon logic-sig can harden it, but that is the
+// default-Ed25519 caveat). QRL is PQ-native at the wallet layer (XMSS / ML-DSA-87 on Zond). Committing to BOTH means the
+// record survives even if one chain's account layer is broken by a CRQC. These are two independent anchor chains.
+export function createDualAnchor(anchorSigner, opts = {}) {
+  return { primary: createAnchorChain(anchorSigner, { chain: opts.primary || 'algorand' }),
+    secondary: createAnchorChain(anchorSigner, { chain: opts.secondary || 'qrl-zond' }) };
+}
+// append the same tip to both chains; returns both anchors + the per-chain on-chain commitments you would post.
+export function appendDual(dual, tip, opts = {}) {
+  const primary = appendAnchor(dual.primary, tip, opts);
+  const secondary = appendAnchor(dual.secondary, tip, opts);
+  return { primary, secondary, commitments: { [dual.primary.chain]: onchainCommitment(primary), [dual.secondary.chain]: onchainCommitment(secondary) } };
+}
+// verify BOTH anchors bind the SAME off-chain log (TOTAL / fail-closed). dual = { primary, secondary } anchors.
+export function verifyDual(logEntries, dual, trusted, opts = {}) {
+  try {
+    if (!dual || !dual.primary || !dual.secondary) return { verified: false };
+    const p = verifyAnchored(logEntries, dual.primary, onchainCommitment(dual.primary), trusted, opts);
+    const s = verifyAnchored(logEntries, dual.secondary, onchainCommitment(dual.secondary), trusted, opts);
+    const sameRoot = dual.primary.log_root === dual.secondary.log_root;
+    return { verified: !!(p.verified && s.verified && sameRoot), dual_bound: !!(p.verified && s.verified && sameRoot), primary: p, secondary: s, chains: [dual.primary.chain, dual.secondary.chain] };
+  } catch { return { verified: false }; }
+}
+
 /* ---------- self-test: node pqanchor.mjs ---------- */
 async function selfTest() {
   const { createLog, append } = await import('./pqauditlog.mjs');
@@ -215,6 +241,14 @@ async function selfTest() {
   appendAnchor(ach2, { root: lv2.tip, n: 5, logSignerPubs: { ed: bytesToHex(trustedLog.ed), mldsa: bytesToHex(trustedLog.mldsa) } }, { ts: 1 });
   appendAnchor(ach2, { root: lv.tip, n: 2, logSignerPubs: { ed: bytesToHex(trustedLog.ed), mldsa: bytesToHex(trustedLog.mldsa) } }, { ts: 2 });
   ok(verifyAnchorChain(ach2.anchors, trustedAnchor).verified === true && verifyAnchorChain(ach2.anchors, trustedAnchor, { requireMonotonicN: true }).verified === false, 'red-team: anchored log-state rollback (n 5->2) DETECTED via requireMonotonicN');
+
+  // DUAL-CHAIN: anchor the same log to Algorand + QRL-Zond at once; both must verify + bind the same root
+  const dual = createDualAnchor(anchorSigner);
+  const da = appendDual(dual, { root: lv.tip, n: lv.n, logSignerPubs: { ed: bytesToHex(trustedLog.ed), mldsa: bytesToHex(trustedLog.mldsa) } }, { ts: 20 });
+  ok(verifyDual(entries, da, trusted).verified === true && verifyDual(entries, da, trusted).dual_bound === true, 'dual-anchor: same log committed to Algorand + QRL-Zond -> both verify + bind the same root');
+  ok(da.commitments.algorand && da.commitments['qrl-zond'] && da.commitments.algorand !== da.commitments['qrl-zond'], 'dual-anchor: distinct per-chain on-chain commitments (one per ledger)');
+  const dtamper = { primary: JSON.parse(JSON.stringify(da.primary)), secondary: da.secondary }; dtamper.primary.log_root = '33'.repeat(32);
+  ok(verifyDual(entries, dtamper, trusted).verified === false, 'dual-anchor: tampering ONE chain anchor -> dual verify FAILS (both must hold)');
 
   // TOTAL: malformed -> fail-closed, never throws
   let total = true;
