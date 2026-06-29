@@ -20,6 +20,7 @@
  * Self-test (offline): node pqposture.mjs   ·   Live probe: PQC_LIVE_PROBE=1 node pqposture.mjs cloudflare.com
  */
 import tls from 'node:tls';
+import { probeKexGroup } from './pqtls.mjs';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -75,15 +76,15 @@ export function buildPostureReport(obs) {
     ? { leg: 'kex', group: obs.kex_group, pq: null, risk: 'inconclusive', label: 'INCONCLUSIVE — this probe client (OpenSSL ' + obs.client_openssl + ') cannot offer ML-KEM, so server PQ-KEX support was not tested' }
     : (obs.kex_group
       ? classifyKex(obs.kex_group)
-      : { leg: 'kex', group: '', pq: null, risk: 'inconclusive', label: "INCONCLUSIVE — Node's public TLS API does not expose the negotiated TLS-1.3 KEX group (getEphemeralKeyInfo() returns {}); reliable KEX detection needs a raw key_share parser (planned). The TLS-version + auth-leg findings ARE reliable." });
+      : { leg: 'kex', group: '', pq: null, risk: 'inconclusive', label: "INCONCLUSIVE — the raw key_share probe returned no group (network/parse error) and Node's TLS API does not expose the TLS-1.3 group either. The TLS-version + auth-leg findings ARE reliable." });
   const auth = classifyAuth(obs.auth_key_type, obs.auth_detail);
   const tls = classifyTls(obs.tls_version);
   return {
     v: '1', ok: true, host: obs.host, port: obs.port, observed_at: obs.observed_at,
-    tls_version: obs.tls_version, cipher: obs.cipher || null, kex, auth,
+    tls_version: obs.tls_version, cipher: obs.cipher || null, kex_source: obs.kex_source || 'node-api', kex, auth,
     grade: gradePosture({ kex, auth, tls, inconclusive: kex.risk === 'inconclusive' }),
     client: { openssl: obs.client_openssl, pq_capable: obs.client_pq_capable },
-    note: 'Posture observed in THIS probe handshake (downgrade-detecting under the declared trust model). KEX-leg PQ detection requires the probe client to OFFER ML-KEM; the auth leg is classified from the leaf certificate key type. Not a penetration test; a fuller probe enumerates every offered group.',
+    note: 'Posture observed in THIS probe (downgrade-detecting under the declared trust model). The KEX group is read from the raw TLS key_share (the probe offers ML-KEM first; kex_source = raw-hrr / raw-serverhello, or a node-api fallback); the auth leg is classified from the leaf certificate key type. Not a penetration test; a fuller probe enumerates every offered group.',
   };
 }
 
@@ -118,7 +119,7 @@ export function verifyPosture(pack, trusted) {
 function clientOpenssl() { return (process.versions && process.versions.openssl) || '0'; }
 function clientPqCapable() { const m = clientOpenssl().match(/^(\d+)\.(\d+)/); return !!m && (Number(m[1]) > 3 || (Number(m[1]) === 3 && Number(m[2]) >= 5)); }
 
-export function probe(host, port = 443, opts = {}) {
+function tlsProbe(host, port = 443, opts = {}) {
   return new Promise((resolve) => {
     let done = false;
     const finish = (o) => { if (!done) { done = true; try { socket.destroy(); } catch { /* noop */ } resolve(o); } };
@@ -137,6 +138,20 @@ export function probe(host, port = 443, opts = {}) {
     socket.setTimeout(opts.timeout || 10000, () => finish({ ok: false, host, port, reason: 'timeout' }));
     socket.on('error', (e) => finish({ ok: false, host, port, reason: e.message }));
   });
+}
+// combined probe: the raw KEX prober (offers ML-KEM first -> authoritative negotiated group) runs alongside the TLS
+// handshake (TLS version / cipher / leaf-cert auth leg). The raw group overrides Node's (empty) getEphemeralKeyInfo.
+export async function probe(host, port = 443, opts = {}) {
+  const [tlsObs, kex] = await Promise.all([
+    tlsProbe(host, port, opts),
+    probeKexGroup(host, port, opts).catch((e) => ({ error: String((e && e.message) || e) })),
+  ]);
+  if (!tlsObs || !tlsObs.ok) return tlsObs || { ok: false, host, port, reason: 'tls probe failed' };
+  const rawOk = !!(kex && !kex.error && kex.group_name);
+  return { ...tlsObs,
+    kex_group: rawOk ? kex.group_name : tlsObs.kex_group,
+    kex_source: rawOk ? (kex.is_hrr ? 'raw-hrr' : 'raw-serverhello') : 'node-api',
+    client_pq_capable: rawOk ? true : tlsObs.client_pq_capable };  // the raw prober ALWAYS offers ML-KEM, so a hit genuinely tested PQ-KEX
 }
 export async function scanAndSign(host, port, signer, opts = {}) { return signPosture(buildPostureReport(await probe(host, port, opts)), signer); }
 
@@ -163,6 +178,7 @@ async function selfTest() {
   // build report: PQ-capable client sees ML-KEM + RSA -> grade B
   const r1 = buildPostureReport({ ok: true, host: 'example.com', port: 443, observed_at: 1000, tls_version: 'TLSv1.3', cipher: 'TLS_AES_256_GCM_SHA384', kex_group: 'X25519MLKEM768', auth_key_type: 'RSA', auth_detail: '2048-bit', client_openssl: '3.5.0', client_pq_capable: true });
   ok(r1.grade === 'B' && r1.kex.pq === true && r1.auth.pq === false, 'report: ML-KEM KEX + RSA auth -> grade B');
+  ok(buildPostureReport({ ok: true, host: 'h', port: 443, observed_at: 1, tls_version: 'TLSv1.3', kex_group: 'X25519MLKEM768', kex_source: 'raw-hrr', auth_key_type: 'RSA', client_pq_capable: true }).kex_source === 'raw-hrr', 'raw key_share source (raw-hrr) is recorded in the signed report');
   // build report: client CANNOT offer ML-KEM -> KEX inconclusive (never falsely "classical")
   const r2 = buildPostureReport({ ok: true, host: 'example.com', port: 443, observed_at: 1000, tls_version: 'TLSv1.3', cipher: 'x', kex_group: 'X25519', auth_key_type: 'RSA', auth_detail: '2048-bit', client_openssl: '3.0.2', client_pq_capable: false });
   ok(r2.kex.risk === 'inconclusive' && r2.grade === 'C', 'old probe client -> KEX INCONCLUSIVE (honest, not a false classical fail)');
