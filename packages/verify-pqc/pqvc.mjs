@@ -142,6 +142,32 @@ export function verifyPresentation(vp, trustedIssuer, opts = {}) {
   } catch { return { verified: false }; }
 }
 
+// ---- W3C Verifiable Credentials interop (structural) ----
+// Export a QuantumDNA credential in the standard W3C-VC SHAPE so wallets/verifiers can display + extract it. HONEST: the
+// proof type is `TrelyanHybrid2026` (Ed25519∧ML-DSA-87[∧SLH]) — structurally interoperable, but NOT a W3C-registered
+// Data Integrity cryptosuite; verification uses TRELYAN's hybrid verifier (verifyW3CCredential), not a generic suite.
+export function toW3CCredential(vc, claims) {
+  const out = {
+    '@context': ['https://www.w3.org/ns/credentials/v2', 'https://trelyan.foundation/ns/quantumdna/v1'],
+    id: vc.id, type: Array.isArray(vc.type) ? vc.type : ['VerifiableCredential'],
+    issuer: vc.issuer, credentialSubject: { id: vc.subject, ...(claims || {}) },
+    proof: { type: 'TrelyanHybrid2026', cryptosuite: 'ed25519+ml-dsa-87' + (vc.proof && vc.proof.slh_sig ? '+slh-dsa-256f' : ''), claims_root: vc.claims_root, ...vc.proof },
+  };
+  if (vc.issuanceDate != null) out.validFrom = vc.issuanceDate;
+  if (vc.expirationDate != null) out.validUntil = vc.expirationDate;
+  return out;
+}
+// Verify a W3C-exported credential by reconstructing the TRELYAN core from the standard fields. TOTAL / fail-closed.
+export function verifyW3CCredential(w3c, trustedIssuer, opts = {}) {
+  try {
+    if (!w3c || typeof w3c !== 'object' || !w3c.proof) return { verified: false };
+    const core = { v: '1', id: w3c.id, type: w3c.type, issuer: w3c.issuer,
+      subject: w3c.credentialSubject && w3c.credentialSubject.id,
+      issuanceDate: w3c.validFrom ?? null, expirationDate: w3c.validUntil ?? null, claims_root: w3c.proof.claims_root };
+    return verifyCredential({ ...core, proof: w3c.proof }, trustedIssuer, opts);
+  } catch { return { verified: false }; }
+}
+
 /* ---------- self-test: node pqvc.mjs ---------- */
 function selfTest() {
   let pass = 0, fail = 0; const ok = (c, m) => { if (c) pass++; else { fail++; console.error('FAIL:', m); } };
@@ -195,6 +221,15 @@ function selfTest() {
   ok(typeof vc3.proof.slh_sig === 'string' && verifyCredential(vc3, tIssuer3, { now: 1 }).verified === true, '3-leg (Ed25519∧ML-DSA∧SLH-DSA) credential verifies');
   const vc3s = JSON.parse(JSON.stringify(vc3)); vc3s.proof.slh_sig = '00';
   ok(verifyCredential(vc3s, tIssuer3, { now: 1 }).verified === false, 'stripped SLH leg fails when issuer.slh pinned (anti-downgrade)');
+
+  // W3C-VC interop: export to the standard shape, verify the round-trip, and prove tampering a W3C field fails
+  const w3c = toW3CCredential(vc, { name: 'Ada Lovelace', over18: true, country: 'CH', clearance: 'secret' });
+  ok(w3c['@context'][0] === 'https://www.w3.org/ns/credentials/v2' && w3c.credentialSubject.id === subjectDid && w3c.proof.type === 'TrelyanHybrid2026', 'W3C export has the standard VC shape + TrelyanHybrid proof');
+  ok(verifyW3CCredential(w3c, tIssuer, { now: 2000 }).verified === true, 'W3C-exported credential verifies (round-trip) under the pinned issuer');
+  const w3cT = JSON.parse(JSON.stringify(w3c)); w3cT.credentialSubject.id = makeDid(issuer);
+  ok(verifyW3CCredential(w3cT, tIssuer, { now: 2000 }).verified === false, 'tampered W3C subject -> verify FAILS');
+  const w3cE = JSON.parse(JSON.stringify(w3c)); w3cE.validUntil = 999999;
+  ok(verifyW3CCredential(w3cE, tIssuer, { now: 2000 }).verified === false, 'tampered W3C validUntil (extend expiry) -> verify FAILS');
 
   // TOTAL fail-closed
   let total = true; for (const bad of [null, undefined, {}, 42, { vc: {} }]) { try { if (verifyCredential(bad, tIssuer).verified !== false) total = false; if (verifyPresentation(bad, tIssuer).verified !== false) total = false; } catch { total = false; } }
