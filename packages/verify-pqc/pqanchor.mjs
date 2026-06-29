@@ -1,15 +1,16 @@
 /*!
- * pqanchor — bind a pqauditlog trail to a LEDGER-OF-RECORD anchor (the QRL chain in Apex's dual-chain design), and
- * verify the binding (reference, DRAFT). The ledger is QRL — the open-source Quantum Resistant Ledger (github.com/theQRL);
- * its EVM-compatible PQ Layer-1, QRL 2.0 / Project Zond, natively verifies ML-DSA-87 (CRYSTALS-Dilithium) via the Hyperion
- * compiler — the SAME signature our anchor + log use, so the anchor's PQ leg is on-chain-verifiable there (end-to-end
- * post-quantum). This is the "write to the ledger, tamper-proof + timestamped" step done honestly: the FULL audit log
+ * pqanchor — bind a pqauditlog trail to a LEDGER-OF-RECORD anchor (the QLR ledger role in Apex's dual-chain design), and
+ * verify the binding (reference, DRAFT). The CANONICAL ledger is Algorand — TRELYAN's live PQ chain (Falcon-1024 via the
+ * on-chain falcon_verify opcode; 1,024 Vault Cells; the dual-chain PDF + the live site both define QLR = Algorand). QRL 2.0
+ * / Project Zond (github.com/theQRL; EVM-compatible PQ L1, ML-DSA-87 native via the Hyperion compiler; Testnet V2 Mar 2026)
+ * is supported as an OPTIONAL second PQ chain — the same ML-DSA-87 our anchor uses is verifiable there. This is the "write
+ * to the ledger, tamper-proof + timestamped" step done honestly: the FULL audit log
  * stays off-chain; only a small, hybrid-signed ANCHOR (the log's root hash + metadata) is committed on-chain, and the
  * off-chain log is hash-bound to that on-chain commitment — the same off-chain-artifact -> on-chain-Cell hash-binding the
  * TRELYAN inscription protocol uses (IPFS/Arweave bound to an Algorand Cell).
  *
- * It deliberately does NOT broadcast to any chain: actual posting to QRL Zond (Testnet V2 live since Mar 2026; mainnet
- * planned 2026) — or an Algorand app — needs a funded signer + a deployed contract and is owner-gated. pqanchor produces
+ * It deliberately does NOT broadcast to any chain: actual posting to Algorand (the canonical QLR — a funded account + a
+ * deployed app) — or optionally QRL Zond — needs a funded signer + a deployed contract and is owner-gated. pqanchor produces
  * the exact bytes you would post (`anchorCalldata` / `onchainCommitment`) and verifies, after the fact, that a given
  * on-chain commitment provably binds a specific off-chain log state.
  *
@@ -34,9 +35,9 @@ import { verifyLog } from './pqauditlog.mjs';
 const ANCHOR_CTX = utf8ToBytes('trelyan-qrl-anchor-v1');        // signing domain (both legs)
 const ANCHOR_HASH_TAG = utf8ToBytes('trelyan-qrl-anchor-hash-v1');
 const GENESIS = '0'.repeat(64);
-// target ledger encodings. qrl-zond = QRL 2.0 / Project Zond (EVM-compatible PQ L1; ML-DSA-87 native via the Hyperion
-// compiler; Testnet V2 live Mar 2026, mainnet planned 2026). qrl = legacy QRL PoW chain (XMSS, STATEFUL one-time keys).
-const CHAINS = ['qrl-zond', 'qrl', 'algorand', 'generic'];
+// target ledger encodings. algorand = CANONICAL QLR (TRELYAN's live Falcon-1024 chain). qrl-zond = optional QRL 2.0 /
+// Project Zond (EVM-compatible PQ L1; ML-DSA-87 native via Hyperion; Testnet V2 Mar 2026). qrl = legacy QRL PoW (XMSS, stateful).
+const CHAINS = ['algorand', 'qrl-zond', 'qrl', 'generic'];
 
 function canon(v) {
   if (v === null || typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string') return JSON.stringify(v);
@@ -54,7 +55,7 @@ const u64hex = (n) => { const b = new Uint8Array(8); new DataView(b.buffer).setB
 // anchorSigner = { ed:{secretKey,publicKey}, mldsa:{secretKey,publicKey} } — the LEDGER AUTHORITY that signs anchors.
 export function createAnchorChain(anchorSigner, opts = {}) {
   if (!anchorSigner || !anchorSigner.ed || !anchorSigner.mldsa) throw new Error('anchorSigner must be { ed, mldsa } keypairs');
-  return { anchors: [], signer: anchorSigner, chain: CHAINS.includes(opts.chain) ? opts.chain : 'generic',
+  return { anchors: [], signer: anchorSigner, chain: CHAINS.includes(opts.chain) ? opts.chain : 'algorand',
     anchor_signer_pub: { ed: bytesToHex(anchorSigner.ed.publicKey), mldsa: bytesToHex(anchorSigner.mldsa.publicKey) } };
 }
 
@@ -76,7 +77,7 @@ export function appendAnchor(achain, tip, opts = {}) {
   return anchor;
 }
 
-// the 32-byte on-chain commitment to post to the QRL ledger (the full anchor lives off-chain, hash-bound to this).
+// the 32-byte on-chain commitment to post to the ledger (Algorand canonical; the full anchor lives off-chain, hash-bound to this).
 export const onchainCommitment = (anchor) => anchor.anchor_hash;
 
 // a deterministic, versioned wire encoding to post on the target chain (EVM calldata hex / Algorand note):
