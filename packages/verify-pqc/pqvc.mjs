@@ -37,7 +37,9 @@ function canon(v) {
 const _pub = (k) => (k && k.publicKey ? k.publicKey : k);  // accept a {publicKey} keypair OR a raw Uint8Array pubkey
 export function makeDid(keys) {
   if (!keys || !keys.ed || !keys.mldsa) throw new Error('keys must be { ed, mldsa[, slh] }');
-  const id = bytesToHex(sha256(concatBytes(utf8ToBytes('did:trelyan:'), _pub(keys.ed), _pub(keys.mldsa)))).slice(0, 40);
+  // FULL 256-bit id binding the COMPLETE hybrid key set (ed + mldsa + slh-if-present), versioned preimage. Apex-team
+  // hardening: a 40-hex (160-bit) id had only ~2^80 collision resistance; full SHA-256 removes that and binds every leg.
+  const id = bytesToHex(sha256(concatBytes(utf8ToBytes('did:trelyan:v1:'), _pub(keys.ed), _pub(keys.mldsa), keys.slh ? _pub(keys.slh) : new Uint8Array(0))));
   return 'did:trelyan:' + id;
 }
 export function didDocument(keys) {
@@ -152,6 +154,8 @@ function selfTest() {
   ok(makeDid(issuer).startsWith('did:trelyan:') && makeDid(issuer) === makeDid(issuer), 'did:trelyan deterministic');
   ok(makeDid(issuer) !== makeDid(holder), 'distinct keys -> distinct DIDs');
   ok(didDocument(issuer).verificationMethod.length === 2, 'DID document lists the verification keys');
+  ok(makeDid(issuer).length === 'did:trelyan:'.length + 64, 'DID id is full 256-bit (apex-team hardening: no 160-bit truncation)');
+  ok(makeDid({ ...issuer, slh: slh_dsa_sha2_256f.keygen(new Uint8Array(96).fill(9)) }) !== makeDid(issuer), 'DID binds the SLH leg when present (distinct from the 2-leg DID)');
 
   // issue + verify
   const subjectDid = makeDid(holder);
