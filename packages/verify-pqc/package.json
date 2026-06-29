@@ -6,7 +6,7 @@
   "main": "index.js",
   "browser": "index.js",
   "type": "commonjs",
-  "files": ["index.js", "mldsa.mjs", "slhdsa.mjs", "verify.mjs", "throndar-sth-key.mjs", "throndar-slh-key.mjs", "README.md"],
+  "files": ["index.js", "mldsa.mjs", "slhdsa.mjs", "verify.mjs", "throndar-sth-key.mjs", "throndar-slh-key.mjs", "README.md", "LICENSE", "COMMERCIAL.md"],
   "exports": {
     ".": "./index.js",
     "./mldsa": "./mldsa.mjs",
