@@ -20,10 +20,12 @@
  */
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
+import { slh_dsa_sha2_256f } from '@noble/post-quantum/slh-dsa.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, utf8ToBytes, concatBytes, randomBytes } from '@noble/hashes/utils.js';
 
-const AUDIT_CTX = utf8ToBytes('trelyan-apex-auditlog-v1');   // signing domain separation (both legs)
+const AUDIT_CTX = utf8ToBytes('trelyan-apex-auditlog-v1');   // signing domain separation (Ed25519 + ML-DSA legs)
+const AUDIT_SLH_CTX = utf8ToBytes('trelyan-apex-auditlog-slh-v1'); // distinct domain for the optional SLH-DSA hash-based leg
 const HASH_TAG = utf8ToBytes('trelyan-apex-auditlog-hash-v1'); // chain-hash domain tag
 const GENESIS = '0'.repeat(64);
 const STAGES = ['input', 'signal', 'decision', 'execution', 'ledger']; // chain-of-custody stages (ordered)
@@ -44,11 +46,13 @@ function coreOf(e) {
 }
 const entryHash = (coreBytes) => bytesToHex(sha256(concatBytes(HASH_TAG, coreBytes)));
 
-// signer = { ed: {secretKey, publicKey}, mldsa: {secretKey, publicKey} }
+// signer = { ed, mldsa, slh? } — slh (SLH-DSA-256f) is an OPTIONAL hash-based THIRD leg: with it, forging an entry
+// requires breaking a classical (Ed25519) AND a lattice (ML-DSA) AND a hash-based (SLH-DSA) scheme — family diversity.
 export function createLog(signer, opts = {}) {
   if (!signer || !signer.ed || !signer.mldsa) throw new Error('signer must be { ed, mldsa } keypairs');
-  return { entries: [], seenNonces: new Set(), signer, ctx: opts.ctx ?? null,
-    signer_pub: { ed: bytesToHex(signer.ed.publicKey), mldsa: bytesToHex(signer.mldsa.publicKey) } };
+  const signer_pub = { ed: bytesToHex(signer.ed.publicKey), mldsa: bytesToHex(signer.mldsa.publicKey) };
+  if (signer.slh) signer_pub.slh = bytesToHex(signer.slh.publicKey);
+  return { entries: [], seenNonces: new Set(), signer, ctx: opts.ctx ?? null, signer_pub };
 }
 
 // append one event. rec = { actor, action, stage, payload?, parentSeq?, ts?, nonce? }. Enforces unique nonce +
@@ -70,6 +74,7 @@ export function append(log, rec) {
     ed_sig: bytesToHex(ed25519.sign(concatBytes(AUDIT_CTX, coreBytes), log.signer.ed.secretKey)),
     mldsa_sig: bytesToHex(ml_dsa87.sign(coreBytes, log.signer.mldsa.secretKey, { context: AUDIT_CTX })),
     entry_hash: entryHash(coreBytes) };
+  if (log.signer.slh) entry.slh_sig = bytesToHex(slh_dsa_sha2_256f.sign(coreBytes, log.signer.slh.secretKey, { context: AUDIT_SLH_CTX }));
   log.seenNonces.add(nonce); log.entries.push(entry);
   return entry;
 }
@@ -111,6 +116,11 @@ export function verifyLog(entries, trusted, opts = {}) {
       try { pqOk = ml_dsa87.verify(hexToBytes(e.mldsa_sig), coreBytes, trusted.mldsa, { context: AUDIT_CTX }); } catch { pqOk = false; }
       if (!edOk) return at('Ed25519 signature invalid');
       if (!pqOk) return at('ML-DSA-87 signature invalid (or PQ leg stripped/downgraded)');
+      if (trusted.slh) {  // pinning the hash-based key IMPLIES the SLH leg is required (anti-downgrade, family diversity)
+        let slhOk = false;
+        try { slhOk = !!(e.slh_sig && slh_dsa_sha2_256f.verify(hexToBytes(e.slh_sig), coreBytes, trusted.slh, { context: AUDIT_SLH_CTX })); } catch { slhOk = false; }
+        if (!slhOk) return at('SLH-DSA hash-based leg invalid or missing (required when trusted.slh is pinned)');
+      }
       seen.add(e.nonce); prev = e.entry_hash; lastTs = e.ts;
     }
     if (opts.now != null && opts.maxAgeMs != null && entries.length) {
@@ -131,7 +141,9 @@ export function verifyResponse(entry, payload, trusted) {
     let edOk = false, pqOk = false;
     try { edOk = ed25519.verify(hexToBytes(entry.ed_sig), concatBytes(AUDIT_CTX, coreBytes), trusted.ed); } catch { edOk = false; }
     try { pqOk = ml_dsa87.verify(hexToBytes(entry.mldsa_sig), coreBytes, trusted.mldsa, { context: AUDIT_CTX }); } catch { pqOk = false; }
-    return { verified: bindOk && hashOk && edOk && pqOk, bindOk, hashOk, edOk, pqOk };
+    let slhOk = true;  // optional hash-based leg: required iff the verifier pins trusted.slh
+    if (trusted.slh) { try { slhOk = !!(entry.slh_sig && slh_dsa_sha2_256f.verify(hexToBytes(entry.slh_sig), coreBytes, trusted.slh, { context: AUDIT_SLH_CTX })); } catch { slhOk = false; } }
+    return { verified: bindOk && hashOk && edOk && pqOk && slhOk, bindOk, hashOk, edOk, pqOk, slhOk };
   } catch { return { verified: false }; }
 }
 
@@ -217,6 +229,22 @@ function selfTest() {
 
   // freshness window
   ok(verifyLog(entries, trusted, { now: 1004, maxAgeMs: 10 }).verified === true && verifyLog(entries, trusted, { now: 99999, maxAgeMs: 10 }).verified === false, 'freshness window on the tip enforced');
+
+  // MORE-PQ-APEX: optional SLH-DSA hash-based THIRD leg -> family diversity (classical Ed25519 ∧ lattice ML-DSA ∧ hash-based SLH-DSA)
+  const slh3 = slh_dsa_sha2_256f.keygen(new Uint8Array(96).fill(5));
+  const signer3 = { ed: signer.ed, mldsa: signer.mldsa, slh: slh3 };
+  const trusted3 = { ed: trusted.ed, mldsa: trusted.mldsa, slh: slh3.publicKey };
+  const log3 = createLog(signer3);
+  append(log3, { actor: 'a', action: 'x', stage: 'input', ts: 1, nonce: 'n3a' });
+  append(log3, { actor: 'b', action: 'y', stage: 'signal', ts: 2, parentSeq: 0, nonce: 'n3b' });
+  const entries3 = exportLog(log3);
+  ok(typeof entries3[0].slh_sig === 'string', '3-leg: entries carry an SLH-DSA hash-based signature');
+  ok(verifyLog(entries3, trusted3).verified === true, '3-leg: verifies under classical ∧ lattice ∧ hash-based pinned keys');
+  ok(verifyLog(entries3, trusted).verified === true, '3-leg log still verifies as 2-leg when verifier does not pin trusted.slh (additive / 0-downgrade)');
+  const entries3strip = JSON.parse(JSON.stringify(entries3)); delete entries3strip[0].slh_sig;
+  ok(verifyLog(entries3strip, trusted3).verified === false, '3-leg: stripping the SLH leg FAILS when trusted.slh is pinned (anti-downgrade)');
+  ok(verifyLog(entries3, { ed: trusted.ed, mldsa: trusted.mldsa, slh: slh_dsa_sha2_256f.keygen(new Uint8Array(96).fill(2)).publicKey }).verified === false, '3-leg: wrong pinned SLH key FAILS');
+  ok(verifyResponse(entries3[0], '', trusted3).verified === true, 'verifyResponse: 3-leg entry verifies under all three pinned legs');
 
   // TOTAL: malformed inputs never throw
   let total = true;

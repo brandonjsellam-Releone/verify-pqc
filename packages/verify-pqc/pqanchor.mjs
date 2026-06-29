@@ -28,11 +28,13 @@
  */
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
+import { slh_dsa_sha2_256f } from '@noble/post-quantum/slh-dsa.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, utf8ToBytes, concatBytes } from '@noble/hashes/utils.js';
 import { verifyLog } from './pqauditlog.mjs';
 
-const ANCHOR_CTX = utf8ToBytes('trelyan-qrl-anchor-v1');        // signing domain (both legs)
+const ANCHOR_CTX = utf8ToBytes('trelyan-qrl-anchor-v1');        // signing domain (Ed25519 + ML-DSA legs)
+const ANCHOR_SLH_CTX = utf8ToBytes('trelyan-qrl-anchor-slh-v1'); // distinct domain for the optional SLH-DSA hash-based leg
 const ANCHOR_HASH_TAG = utf8ToBytes('trelyan-qrl-anchor-hash-v1');
 const GENESIS = '0'.repeat(64);
 // target ledger encodings. algorand = CANONICAL QLR (TRELYAN's live Falcon-1024 chain). qrl-zond = optional QRL 2.0 /
@@ -55,8 +57,9 @@ const u64hex = (n) => { const b = new Uint8Array(8); new DataView(b.buffer).setB
 // anchorSigner = { ed:{secretKey,publicKey}, mldsa:{secretKey,publicKey} } — the LEDGER AUTHORITY that signs anchors.
 export function createAnchorChain(anchorSigner, opts = {}) {
   if (!anchorSigner || !anchorSigner.ed || !anchorSigner.mldsa) throw new Error('anchorSigner must be { ed, mldsa } keypairs');
-  return { anchors: [], signer: anchorSigner, chain: CHAINS.includes(opts.chain) ? opts.chain : 'algorand',
-    anchor_signer_pub: { ed: bytesToHex(anchorSigner.ed.publicKey), mldsa: bytesToHex(anchorSigner.mldsa.publicKey) } };
+  const anchor_signer_pub = { ed: bytesToHex(anchorSigner.ed.publicKey), mldsa: bytesToHex(anchorSigner.mldsa.publicKey) };
+  if (anchorSigner.slh) anchor_signer_pub.slh = bytesToHex(anchorSigner.slh.publicKey);  // optional hash-based 3rd leg
+  return { anchors: [], signer: anchorSigner, chain: CHAINS.includes(opts.chain) ? opts.chain : 'algorand', anchor_signer_pub };
 }
 
 // tip = { root, n, logSignerPubs:{ ed:hex, mldsa:hex } } — typically taken from verifyLog(entries, pinnedLogKeys).
@@ -73,6 +76,7 @@ export function appendAnchor(achain, tip, opts = {}) {
     ed_sig: bytesToHex(ed25519.sign(concatBytes(ANCHOR_CTX, coreBytes), achain.signer.ed.secretKey)),
     mldsa_sig: bytesToHex(ml_dsa87.sign(coreBytes, achain.signer.mldsa.secretKey, { context: ANCHOR_CTX })),
     anchor_hash: anchorHashOf(coreBytes) };
+  if (achain.signer.slh) anchor.slh_sig = bytesToHex(slh_dsa_sha2_256f.sign(coreBytes, achain.signer.slh.secretKey, { context: ANCHOR_SLH_CTX }));
   achain.anchors.push(anchor);
   return anchor;
 }
@@ -103,10 +107,11 @@ export function verifyAnchored(logEntries, anchor, onchainCommitmentHex, trusted
       && anchor.log_signer && anchor.log_signer.ed === bytesToHex(trusted.log.ed) && anchor.log_signer.mldsa === bytesToHex(trusted.log.mldsa);
     if (!rootOk) return { ...fail('anchor does not bind this log tip/signer'), logOk: true };
     // (3) the anchor is dual-signed by the pinned ledger authority (AND-composition: no downgrade)
-    let edOk = false, pqOk = false;
+    let edOk = false, pqOk = false, slhOk = true;
     try { edOk = ed25519.verify(hexToBytes(anchor.ed_sig), concatBytes(ANCHOR_CTX, coreBytes), trusted.anchor.ed); } catch { edOk = false; }
     try { pqOk = ml_dsa87.verify(hexToBytes(anchor.mldsa_sig), coreBytes, trusted.anchor.mldsa, { context: ANCHOR_CTX }); } catch { pqOk = false; }
-    const anchorSigOk = edOk && pqOk;
+    if (trusted.anchor.slh) { try { slhOk = !!(anchor.slh_sig && slh_dsa_sha2_256f.verify(hexToBytes(anchor.slh_sig), coreBytes, trusted.anchor.slh, { context: ANCHOR_SLH_CTX })); } catch { slhOk = false; } }
+    const anchorSigOk = edOk && pqOk && slhOk;  // AND-composition incl. the optional hash-based leg when pinned
     // (4) the on-chain commitment equals this exact anchor's hash
     const computed = anchorHashOf(coreBytes);
     const commitmentOk = computed === anchor.anchor_hash && computed === String(onchainCommitmentHex).toLowerCase();
@@ -136,6 +141,7 @@ export function verifyAnchorChain(anchors, trustedAnchor, opts = {}) {
       try { pqOk = ml_dsa87.verify(hexToBytes(a.mldsa_sig), coreBytes, trustedAnchor.mldsa, { context: ANCHOR_CTX }); } catch { pqOk = false; }
       if (!edOk) return at('Ed25519 anchor signature invalid');
       if (!pqOk) return at('ML-DSA-87 anchor signature invalid (or PQ leg stripped)');
+      if (trustedAnchor.slh) { let slhOk = false; try { slhOk = !!(a.slh_sig && slh_dsa_sha2_256f.verify(hexToBytes(a.slh_sig), coreBytes, trustedAnchor.slh, { context: ANCHOR_SLH_CTX })); } catch { slhOk = false; } if (!slhOk) return at('SLH-DSA hash-based anchor leg invalid/missing (required when trustedAnchor.slh pinned)'); }
       prev = a.anchor_hash; lastTs = a.ts; lastN = a.n;
     }
     // tail-truncation / rollback is undetectable from the chain alone — a caller who knows the latest anchor pins it.
@@ -249,6 +255,18 @@ async function selfTest() {
   ok(da.commitments.algorand && da.commitments['qrl-zond'] && da.commitments.algorand !== da.commitments['qrl-zond'], 'dual-anchor: distinct per-chain on-chain commitments (one per ledger)');
   const dtamper = { primary: JSON.parse(JSON.stringify(da.primary)), secondary: da.secondary }; dtamper.primary.log_root = '33'.repeat(32);
   ok(verifyDual(entries, dtamper, trusted).verified === false, 'dual-anchor: tampering ONE chain anchor -> dual verify FAILS (both must hold)');
+
+  // MORE-PQ-APEX: optional SLH-DSA hash-based 3rd leg on anchors (classical Ed25519 ∧ lattice ML-DSA ∧ hash-based SLH-DSA)
+  const aSigner3 = { ed: anchorSigner.ed, mldsa: anchorSigner.mldsa, slh: slh_dsa_sha2_256f.keygen(new Uint8Array(96).fill(8)) };
+  const tA3 = { log: trustedLog, anchor: { ed: trustedAnchor.ed, mldsa: trustedAnchor.mldsa, slh: aSigner3.slh.publicKey } };
+  const ach3 = createAnchorChain(aSigner3, { chain: 'algorand' });
+  const an3 = appendAnchor(ach3, { root: lv.tip, n: lv.n, logSignerPubs: { ed: bytesToHex(trustedLog.ed), mldsa: bytesToHex(trustedLog.mldsa) } }, { ts: 30 });
+  ok(typeof an3.slh_sig === 'string', '3-leg anchor: carries an SLH-DSA hash-based signature');
+  ok(verifyAnchored(entries, an3, onchainCommitment(an3), tA3).verified === true, '3-leg anchor: verifies under classical ∧ lattice ∧ hash-based pinned keys');
+  ok(verifyAnchored(entries, an3, onchainCommitment(an3), trusted).verified === true, '3-leg anchor still verifies as 2-leg when slh not pinned (additive / 0-downgrade)');
+  const an3strip = JSON.parse(JSON.stringify(an3)); delete an3strip.slh_sig;
+  ok(verifyAnchored(entries, an3strip, onchainCommitment(an3strip), tA3).verified === false, '3-leg anchor: stripping the SLH leg FAILS when trustedAnchor.slh is pinned (anti-downgrade)');
+  ok(verifyAnchorChain(ach3.anchors, tA3.anchor).verified === true, '3-leg anchor chain verifies under the pinned hash-based authority key');
 
   // TOTAL: malformed -> fail-closed, never throws
   let total = true;
