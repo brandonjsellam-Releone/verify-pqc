@@ -13,4 +13,4 @@ Honesty: no "military-grade"/"unbreakable"/"FIPS-validated"/"quantum-proof". Use
 
 Secrets: none in code/logs; .env out of git; never stage .env/_scratch*.
 
-StarCoder2 code-gen helper: `python -m apex_jarvis.tools.starcoder2` (completion / --infill) — code model only.
+Qwen2.5-Coder code-gen helper: `python -m apex_jarvis.tools.codegen` (HF_CODE_MODEL-switchable; generation / --infill) — code model only.

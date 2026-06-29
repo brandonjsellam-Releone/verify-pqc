@@ -1,4 +1,4 @@
-# AGENTS.md — TRELYAN `verify-pqc` SDK · rules for AI dev tools (Cursor, Windsurf, Claude Code, StarCoder2)
+# AGENTS.md — TRELYAN `verify-pqc` SDK · rules for AI dev tools (Cursor, Windsurf, Claude Code, Qwen2.5-Coder)
 
 This is a **dependency-light post-quantum REFERENCE implementation**. The rules below are HARD — code that
 violates them must not be committed. Cursor and Windsurf read this file (plus `.cursorrules` / `.windsurfrules`);
@@ -37,10 +37,11 @@ follow it exactly.
 - No secrets in code, tests, logs, or committed files. `.env` stays OUT of git. Before committing, confirm no
   `.env` / `_scratch*` / key material is staged.
 
-## StarCoder2 (the code-gen helper in this stack)
-- StarCoder2 is a CODE model — use it for completion / fill-in-the-middle, NOT for architecture or security reasoning.
-- Client: `python -m apex_jarvis.tools.starcoder2 "def foo():"` or
-  `python -m apex_jarvis.tools.starcoder2 --infill --prefix "..." --suffix "..."` (reads `HUGGINGFACE_API_KEY` from `.env`).
+## Qwen2.5-Coder (the code-gen helper in this stack)
+- Qwen2.5-Coder (HF; default `Qwen/Qwen2.5-Coder-32B-Instruct`, `HF_CODE_MODEL`-switchable) is a CODE model — use it for
+  generation / completion / fill-in-the-middle, NOT for architecture or security reasoning.
+- Client: `python -m apex_jarvis.tools.codegen "write an LRU cache decorator"` or
+  `python -m apex_jarvis.tools.codegen --infill --prefix "..." --suffix "..."` (reads `HUGGINGFACE_API_KEY` from `.env`).
 
 ## Before every commit
 1. `PQC_SKIP_LIVE=1 node test-all.mjs` → `ALL MODULES PASS`.
