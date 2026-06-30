@@ -30,7 +30,19 @@ const argv = process.argv.slice(2);
 const cmd = argv[0];
 const flag = (k) => { const i = argv.indexOf('--' + k); return i >= 0 && i + 1 < argv.length ? argv[i + 1] : null; };
 const has = (k) => argv.includes('--' + k);
-const positional = argv.slice(1).filter((a) => !a.startsWith('--') && argv[argv.indexOf(a) - 1] !== undefined && !argv[argv.indexOf(a) - 1].startsWith('--'));
+// robust positional extraction: a token is positional unless it is a flag (--x) or the value of a NON-boolean flag.
+function positionals(args) {
+  const BOOL = new Set(['slh', 'selftest']);
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i].startsWith('--')) continue;
+    const prev = args[i - 1];
+    if (prev && prev.startsWith('--') && !BOOL.has(prev.slice(2))) continue;
+    out.push(args[i]);
+  }
+  return out;
+}
+const positional = positionals(argv.slice(1));
 
 function keyset(withSlh) {
   const eds = randomBytes(32);
@@ -54,6 +66,20 @@ const readJson = (p) => JSON.parse(readFileSync(p, 'utf8'));
 
 function run() {
   if (!cmd || cmd === '--help' || cmd === '-h') { console.log(HELP); process.exit(0); }
+
+  if (cmd === '--selftest') {   // exercises the CLI's own serialize↔load + IO layer (the value-add over the module)
+    let pass = 0, fail = 0; const ok = (c, m) => { if (c) pass++; else { fail++; console.error('FAIL:', m); } };
+    const ks = keyset(true);
+    const rt = loadSecret(serializeSecret(ks));                 // round-trip the keyfile format
+    const pub = loadPub(pubOf(ks));
+    const fw = new Uint8Array(512).fill(7);
+    const m = signFirmware({ vendorKeys: rt, deviceModel: 'X', version: 5, buildId: 'b', artifactBytes: fw });
+    ok(verifyFirmware(m, pub, { artifactBytes: fw, currentVersion: 4, deviceModel: 'X' }).verified === true, 'keyfile roundtrip → sign → verify-before-flash');
+    ok(verifyFirmware(m, pub, { artifactBytes: new Uint8Array(512).fill(9), currentVersion: 4 }).verified === false, 'tampered binary rejected');
+    ok(verifyFirmware(m, pub, { artifactBytes: fw, currentVersion: 6 }).verified === false, 'rollback (installed >= manifest) rejected');
+    ok(verifyFirmware(m, pub, { artifactBytes: fw, currentVersion: 4, deviceModel: 'Y' }).verified === false, 'wrong model rejected');
+    console.log('pqfirmware-cli self-test: ' + pass + ' pass, ' + fail + ' fail'); process.exit(fail ? 1 : 0);
+  }
 
   if (cmd === 'keygen') {
     const out = flag('out'); if (!out) { console.error('keygen: --out <prefix> required'); process.exit(2); }

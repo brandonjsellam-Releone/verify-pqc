@@ -8,7 +8,7 @@
  *   node pqvc-cli.mjs verify  --vc vc.json --pub issuer.pub.json
  *
  * ⚠️ KEY HANDLING: `keygen` writes SECRET keys to a JSON file for DEV/TEST only — production keys belong in an HSM/KMS,
- *    never a plaintext file (see KEY_HANDLING.md). Unaudited reference tool.
+ *    never a plaintext file (see KEY_HANDLING.md). Unaudited reference tool. Self-test: node pqvc-cli.mjs --selftest
  */
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
@@ -46,6 +46,20 @@ const readJson = (p) => JSON.parse(readFileSync(p, 'utf8'));
 
 function run() {
   if (!cmd || cmd === '--help' || cmd === '-h') { console.log(HELP); process.exit(0); }
+
+  if (cmd === '--selftest') {   // exercises the CLI's own serialize↔load layer (the value-add over the module)
+    let pass = 0, fail = 0; const ok = (c, m) => { if (c) pass++; else { fail++; console.error('FAIL:', m); } };
+    const issuer = keyset(true), subject = keyset();
+    const irt = loadSecret(serializeSecret(issuer));            // round-trip the keyfile format
+    const ipub = loadPub(pubOf(issuer));
+    const subjectDid = makeDid(loadPub(pubOf(subject)));
+    const { vc } = issueCredential({ issuerKeys: irt, subjectDid, claims: { role: 'supplier' }, id: 'vc-st' });
+    ok(verifyCredential(vc, ipub).verified === true, 'keyfile roundtrip → issue → verify under pinned issuer');
+    ok(verifyCredential(vc, loadPub(pubOf(subject))).verified === false, 'wrong issuer key rejected');
+    const t = JSON.parse(JSON.stringify(vc)); t.subject = 'did:trelyan:ffff';
+    ok(verifyCredential(t, ipub).verified === false, 'tampered signed field (subject) rejected');
+    console.log('pqvc-cli self-test: ' + pass + ' pass, ' + fail + ' fail'); process.exit(fail ? 1 : 0);
+  }
 
   if (cmd === 'keygen') {
     const out = flag('out'); if (!out) { console.error('keygen: --out <prefix> required'); process.exit(2); }
