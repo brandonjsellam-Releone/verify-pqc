@@ -72,6 +72,14 @@ export function verifyFirmware(manifest, trustedVendor, opts = {}) {
     try { pqOk = ml_dsa87.verify(hexToBytes(manifest.mldsa_sig), coreBytes, trustedVendor.mldsa, { context: FW_CTX }); } catch { pqOk = false; }
     if (trustedVendor.slh) { try { slhOk = !!(manifest.slh_sig && slh_dsa_sha2_256f.verify(hexToBytes(manifest.slh_sig), coreBytes, trustedVendor.slh, { context: FW_SLH_CTX })); } catch { slhOk = false; } }
     if (!edOk || !pqOk || !slhOk) return { verified: false, reason: 'hybrid signature invalid (or required leg missing)' };
+    // ANTI-ROLLBACK is the IoT-critical property — it must NEVER be silently skipped. Require a valid INTEGER
+    // currentVersion (the device's installed version; -1 = first install) unless an explicit metadata-only opt-out. A
+    // non-integer currentVersion would coerce to NaN and disable BOTH the rollback and the min_version floor (DeepSeek
+    // 1 Jul, CRITICAL: a forgotten/corrupted version would otherwise flash a signed-but-OLD vulnerable firmware).
+    if (opts.currentVersion != null && !Number.isInteger(opts.currentVersion)) return { verified: false, reason: 'currentVersion must be an integer (a non-integer would disable anti-rollback via NaN)' };
+    if (opts.currentVersion == null && opts.allowNoRollbackCheck !== true) return { verified: false, reason: 'currentVersion required to enforce anti-rollback (installed version, -1 for first install; or set allowNoRollbackCheck for a metadata-only check)' };
+    // model binding: a forgotten deviceModel → cross-model flash (bricking). Signal whether it was checked; requireModel forces it.
+    if (opts.requireModel === true && opts.deviceModel == null) return { verified: false, reason: 'requireModel: supply deviceModel to bind the hardware (prevents a cross-model flash)' };
     // artifact binding: the received binary MUST hash to the signed digest. SAFE DEFAULT (apex-team fix): if no binary
     // is supplied, REJECT — a valid manifest signature must NEVER be mistaken for a verified payload. The only skip is
     // the explicit, dangerous opts.allowUnboundArtifact (metadata-only checks); production always passes artifactBytes.
@@ -83,7 +91,7 @@ export function verifyFirmware(manifest, trustedVendor, opts = {}) {
     const belowFloor = manifest.min_version != null && opts.currentVersion != null && Number(opts.currentVersion) < Number(manifest.min_version);
     const wrongModel = opts.deviceModel != null && manifest.device_model !== String(opts.deviceModel);
     const verified = artifactOk && !rollback && !belowFloor && !wrongModel;
-    return { verified, artifactOk, rollback, belowFloor, wrongModel, vendor: manifest.vendor, device_model: manifest.device_model, version: manifest.version, build_id: manifest.build_id };
+    return { verified, artifactOk, rollback, belowFloor, wrongModel, rollback_checked: opts.currentVersion != null, model_checked: opts.deviceModel != null, vendor: manifest.vendor, device_model: manifest.device_model, version: manifest.version, build_id: manifest.build_id };
   } catch { return { verified: false }; }
 }
 
@@ -117,6 +125,13 @@ function selfTest() {
   // min_version forced-upgrade floor
   const m2 = signFirmware({ vendorKeys: vendor, deviceModel: 'TRLN-Sensor-A', version: 20, buildId: 'b-20', artifactBytes: binary, minVersion: 15 });
   ok(verifyFirmware(m2, tVendor, { artifactBytes: binary, currentVersion: 10 }).verified === false && verifyFirmware(m2, tVendor, { artifactBytes: binary, currentVersion: 16 }).verified === true, 'min_version floor: device below floor rejected, at/above floor accepted');
+
+  // DeepSeek 1 Jul (CRITICAL): anti-rollback must NOT be silently skippable
+  ok(verifyFirmware(m, tVendor, { artifactBytes: binary, deviceModel: 'TRLN-Sensor-A' }).verified === false, 'currentVersion omitted → refused (anti-rollback cannot be silently skipped)');
+  ok(verifyFirmware(m, tVendor, { artifactBytes: binary, currentVersion: 'abc', deviceModel: 'TRLN-Sensor-A' }).verified === false, 'non-integer currentVersion (would NaN-disable the version checks) → refused');
+  ok(verifyFirmware(m, tVendor, { artifactBytes: binary, currentVersion: -1, deviceModel: 'TRLN-Sensor-A' }).verified === true, 'first-install currentVersion=-1 → newer firmware verifies');
+  ok(verifyFirmware(m, tVendor, { artifactBytes: binary, currentVersion: 6, requireModel: true }).verified === false, 'requireModel without deviceModel → refused (no cross-model flash)');
+  ok(verifyFirmware(m, tVendor, { artifactBytes: binary, allowNoRollbackCheck: true, deviceModel: 'TRLN-Sensor-A' }).rollback_checked === false, 'allowNoRollbackCheck → metadata-only path; rollback_checked=false signaled');
   // version must be a non-negative integer
   let badV = false; try { signFirmware({ vendorKeys: vendor, deviceModel: 'x', version: 1.5, buildId: 'b', artifactBytes: binary }); } catch { badV = true; }
   ok(badV, 'non-integer version rejected at signing');
