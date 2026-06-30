@@ -41,6 +41,7 @@ import * as pqvc from './pqvc.mjs';
 import * as pqfirmware from './pqfirmware.mjs';
 import * as pqflow from './pqflow.mjs';
 import * as pqdelegate from './pqdelegate.mjs';
+import * as pqconsentflow from './pqconsentflow.mjs';
 
 const seed = (n) => new Uint8Array(32).fill(n);
 // flip one leaf to a DIFFERENT same-typed value (hex-safe for hex strings)
@@ -307,6 +308,18 @@ function selfTest() {
   const dgRoot = pqcap.issueCapability({ issuerKeys: dgPrin, agent: hpub(dgA), tool: 'T', caveats: { arg_in: { op: ['read'] } }, audience: 'aud', nonce: 'r' });
   const dgLink = pqdelegate.delegate({ delegatorKeys: dgA, parent: dgRoot, delegatee: hpub(dgB), tool: 'T', addedCaveats: {}, audience: 'aud', nonce: 'd' });
   runScenario({ label: 'pqdelegate.verifyDelegationChain', obj: [dgRoot, dgLink], verify: (o) => pqdelegate.verifyDelegationChain(o, hpub(dgPrin), { request: { tool: 'T', args: { op: 'read' } }, audience: 'aud' }).verified, skipPaths: ['0.ed_sig', '0.mldsa_sig', '1.ed_sig', '1.mldsa_sig'], unbound: new Set(['0.v', '0.issuer_pub.ed', '0.issuer_pub.mldsa', '1.v', '1.slh_signer_pub_hex']) }, ok);
+
+  // 27) pqconsentflow lifecycle log [grant, access] — each entry is controller-signed (core bound by entry_hash + sig);
+  //     the embedded grant receipt is bound via the genesis embed_sha256 (every receipt.* field bound); receipt_id is
+  //     cross-checked per entry + the flow header (v/controller/subject/receipt_id) is bound to the pinned parties. The
+  //     carried entry `v` (hardcoded in entryCore on recompute) + embedded controller_pub (verify uses the pinned
+  //     controller) + the null slh_signer_pub_hex (no SLH leg) are documented-unsigned.
+  const cfSub = hk(200, 201), cfCtrl = hk(202, 203);
+  const cfRcpt = pqconsent.grantConsent({ subjectKeys: cfSub, controller: 'vh', purposes: ['p1'], categories: ['c1'], legalBasis: 'GDPR-Art-9-2-a', nonce: 'tb' });
+  const cfFlow = pqconsentflow.openConsentFlow({ receipt: cfRcpt, subjectPub: hpub(cfSub), controllerKeys: cfCtrl, at: 1 });
+  pqconsentflow.logAccess(cfFlow, { purpose: 'p1', category: 'c1', controllerKeys: cfCtrl, nonce: 'a1', at: 2 });
+  runScenario({ label: 'pqconsentflow.verifyConsentFlow (grant+access)', obj: cfFlow, verify: (o) => pqconsentflow.verifyConsentFlow(o, hpub(cfSub), hpub(cfCtrl)).verified, skipPaths: ['entries.0.ed_sig', 'entries.0.mldsa_sig', 'entries.1.ed_sig', 'entries.1.mldsa_sig'], unbound: new Set(['entries.0.v', 'entries.1.v', 'entries.0.controller_pub.ed', 'entries.0.controller_pub.mldsa', 'entries.1.controller_pub.ed', 'entries.1.controller_pub.mldsa', 'entries.0.slh_signer_pub_hex', 'entries.1.slh_signer_pub_hex']) }, ok);
+  ok(!pqconsentflow.verifyConsentFlow(cfFlow, hpub(cfSub), hpub(hk(204, 205))).verified, 'pqconsentflow: swapped controller key -> FALSE (key binding)');
 
   console.log('tamper-binding: ' + pass + ' pass, ' + fail + ' fail');
   if (typeof process !== 'undefined' && process.exit) process.exit(fail ? 1 : 0);
