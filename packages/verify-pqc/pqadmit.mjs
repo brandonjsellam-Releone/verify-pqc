@@ -145,7 +145,7 @@ export function verifyAdmission(cert, trustedIssuer, opts = {}) {
     if (opts.requireAllChecks !== false) { const c = cert.checks || {}; if (!(c.cbom_pass && c.cve_pass && c.opa_pass && c.pqc_pass)) return { verified: false, reason: 'a recorded supply-chain check did not pass' }; }
     if (opts.revoked && typeof opts.revoked.has === 'function' && opts.revoked.has(cert.cert_id)) return { verified: false, reason: 'revoked' };
     if (opts.expectedAnchor != null && cert.anchor_commitment !== opts.expectedAnchor) return { verified: false, reason: 'anchor commitment mismatch' };
-    return { verified: true, cert_id: cert.cert_id, app: cert.app, version: cert.version, cert_level: cert.cert_level, artifact_digest: cert.artifact_digest };
+    return { verified: true, artifactOk, cert_id: cert.cert_id, app: cert.app, version: cert.version, cert_level: cert.cert_level, artifact_digest: cert.artifact_digest };
   } catch { return { verified: false }; }
 }
 

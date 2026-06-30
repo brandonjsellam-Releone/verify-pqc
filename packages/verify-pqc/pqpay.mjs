@@ -60,8 +60,10 @@ export function createAuthorization({ payerKeys, id, payee, amount, currency, no
   return auth;
 }
 
-// TOTAL / fail-closed. trustedPayer = { ed, mldsa[, slh] } pinned payer pubkeys. opts: now (expiry), seenNonces (Set —
-// replay), maxAmount (cap), expectedPayee / expectedCurrency (bind). The caller owns the seen-nonce ledger (double-spend).
+// TOTAL / fail-closed. trustedPayer = { ed, mldsa[, slh] } pinned payer pubkeys. opts: now (expiry), seenNonces
+// ({has,add} ledger — replay), maxAmount (cap), expectedPayee / expectedCurrency (bind), allowUnmeteredCheck (permit a
+// NON-consuming validity check without a ledger). FAIL-CLOSED: an otherwise-valid auth WITHOUT a seenNonces ledger is
+// rejected (replay = double-spend) unless allowUnmeteredCheck — the caller owns a DURABLE ledger (use verifyAndConsume).
 export function verifyAuthorization(auth, trustedPayer, opts = {}) {
   try {
     if (!auth || typeof auth !== 'object' || !trustedPayer || !trustedPayer.ed || !trustedPayer.mldsa) return { verified: false };
@@ -78,7 +80,14 @@ export function verifyAuthorization(auth, trustedPayer, opts = {}) {
     const overCap = opts.maxAmount != null && auth.amount > Number(opts.maxAmount);
     const wrongPayee = opts.expectedPayee != null && auth.payee !== String(opts.expectedPayee);
     const wrongCurrency = opts.expectedCurrency != null && auth.currency !== String(opts.expectedCurrency);
-    const verified = !expired && !replayed && !overCap && !wrongPayee && !wrongCurrency;
+    const verified0 = !expired && !replayed && !overCap && !wrongPayee && !wrongCurrency;
+    // FAIL-CLOSED (apex-team): a payment authorization always carries a nonce, so replay = double-spend. Do NOT report a
+    // clean verify without a durable seen-nonce ledger enforcing single-use — unless the caller explicitly asks for a
+    // NON-consuming check (allowUnmeteredCheck). Failures for other reasons (expiry/cap/payee/currency) are unaffected.
+    if (verified0 && !(opts.seenNonces && typeof opts.seenNonces.has === 'function') && opts.allowUnmeteredCheck !== true) {
+      return { verified: false, reason: 'seenNonces ledger required for replay protection (or set allowUnmeteredCheck for a non-consuming check)', expired, replayed: false, overCap, wrongPayee, wrongCurrency };
+    }
+    const verified = verified0;
     return { verified, expired, replayed, overCap, wrongPayee, wrongCurrency, payer: auth.payer, payee: auth.payee, amount: auth.amount, currency: auth.currency, id: auth.id };
   } catch { return { verified: false }; }
 }
@@ -106,7 +115,8 @@ function selfTest() {
 
   const auth = createAuthorization({ payerKeys: payer, id: 'pay-1', payee: 'merchant:acme', amount: 4999, currency: 'USD', nonce: 'n1', expiresAt: 5000 });
   ok(makePayerId(payer).startsWith('pay:trelyan:') && auth.payer === makePayerId(payer), 'payer id binds the payer keys');
-  ok(verifyAuthorization(auth, tPayer, { now: 2000 }).verified === true, 'valid authorization verifies under the pinned payer');
+  ok(verifyAuthorization(auth, tPayer, { now: 2000, allowUnmeteredCheck: true }).verified === true, 'valid authorization verifies under the pinned payer (non-consuming check)');
+  ok(verifyAuthorization(auth, tPayer, { now: 2000 }).verified === false, 'APEX-TEAM FIX: an otherwise-valid auth with NO seenNonces ledger -> fail-closed (replay unprotected)');
   ok(verifyAuthorization(auth, { ed: attacker.ed.publicKey, mldsa: attacker.mldsa.publicKey }, { now: 2000 }).verified === false, 'wrong pinned payer -> FAILS');
   // tamper amount (the classic attack) -> hybrid sig fails
   const t = JSON.parse(JSON.stringify(auth)); t.amount = 1;
@@ -117,7 +127,7 @@ function selfTest() {
   ok(verifyAuthorization(auth, tPayer, { now: 2000, maxAmount: 1000 }).verified === false, 'over amount cap -> FAILS');
   ok(verifyAuthorization(auth, tPayer, { now: 2000, expectedPayee: 'merchant:evil' }).verified === false, 'payee mismatch -> FAILS');
   ok(verifyAuthorization(auth, tPayer, { now: 2000, expectedCurrency: 'EUR' }).verified === false, 'currency mismatch -> FAILS');
-  ok(verifyAuthorization(auth, tPayer, { now: 2000, maxAmount: 5000, expectedPayee: 'merchant:acme', expectedCurrency: 'USD' }).verified === true, 'within cap + correct payee/currency -> verifies');
+  ok(verifyAuthorization(auth, tPayer, { now: 2000, maxAmount: 5000, expectedPayee: 'merchant:acme', expectedCurrency: 'USD', allowUnmeteredCheck: true }).verified === true, 'within cap + correct payee/currency -> verifies');
 
   // amount must be a positive integer in minor units
   let badAmt = false; try { createAuthorization({ payerKeys: payer, id: 'x', payee: 'p', amount: 49.99, currency: 'USD' }); } catch { badAmt = true; }
@@ -130,7 +140,7 @@ function selfTest() {
   const payer3 = { ed: payer.ed, mldsa: payer.mldsa, slh };
   const tPayer3 = { ed: tPayer.ed, mldsa: tPayer.mldsa, slh: slh.publicKey };
   const auth3 = createAuthorization({ payerKeys: payer3, id: 'pay-3', payee: 'm', amount: 100, currency: 'USD', nonce: 'n3' });
-  ok(typeof auth3.slh_sig === 'string' && verifyAuthorization(auth3, tPayer3, {}).verified === true, '3-leg (Ed25519∧ML-DSA∧SLH-DSA) authorization verifies');
+  ok(typeof auth3.slh_sig === 'string' && verifyAuthorization(auth3, tPayer3, { allowUnmeteredCheck: true }).verified === true, '3-leg (Ed25519∧ML-DSA∧SLH-DSA) authorization verifies');
   const auth3s = JSON.parse(JSON.stringify(auth3)); auth3s.slh_sig = '00';
   ok(verifyAuthorization(auth3s, tPayer3, {}).verified === false, 'stripped SLH leg fails when payer.slh pinned (anti-downgrade)');
 
