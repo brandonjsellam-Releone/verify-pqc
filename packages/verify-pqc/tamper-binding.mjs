@@ -34,6 +34,13 @@ import * as pqshield from './pqshield.mjs';
 import * as pqmonitor from './pqmonitor.mjs';
 import * as pqgate from './pqgate.mjs';
 import * as pqadmit from './pqadmit.mjs';
+import * as pqcap from './pqcap.mjs';
+import * as pqconsent from './pqconsent.mjs';
+import * as pqpay from './pqpay.mjs';
+import * as pqvc from './pqvc.mjs';
+import * as pqfirmware from './pqfirmware.mjs';
+import * as pqflow from './pqflow.mjs';
+import * as pqdelegate from './pqdelegate.mjs';
 
 const seed = (n) => new Uint8Array(32).fill(n);
 // flip one leaf to a DIFFERENT same-typed value (hex-safe for hex strings)
@@ -242,6 +249,64 @@ function selfTest() {
 
   // 17) pqgate policy — policyCore (rules + policy_id + at) is authority-signed; policy_id binds the rules.
   runScenario({ label: 'pqgate.verifyPolicy', obj: gPol, verify: (o) => pqgate.verifyPolicy(o, hpub(gPAuth)).verified, skipPaths: ['ed_sig', 'mldsa_sig'], unbound: new Set(['v', 'authority_pub.ed', 'authority_pub.mldsa', 'slh_signer_pub_hex']) }, ok);
+
+  // ---- Wave-2 signed cores (this session) — batch 1 ----
+  // 18) pqshield posture report — shieldCore bound by sig; assets[] bound via assets_hash recompute; top_critical is
+  //     display (skipped); the embedded issuer_pub + carried `v` are informational (verify uses the pinned issuer).
+  const shIss = hk(170, 171);
+  const shRep = pqshield.createShieldReport({ issuerKeys: shIss, target: 't', assets: [{ label: 'edge', algorithm: 'RSA-2048', internet_facing: true }, { label: 'db', algorithm: 'AES-256' }], generatedAt: 5 });
+  runScenario({ label: 'pqshield.verifyShieldReport', obj: shRep, verify: (o) => pqshield.verifyShieldReport(o, hpub(shIss)).verified, skipPaths: ['ed_sig', 'mldsa_sig', 'top_critical'], unbound: new Set(['v', 'issuer_pub.ed', 'issuer_pub.mldsa']) }, ok);
+  ok(!pqshield.verifyShieldReport(shRep, hpub(hk(180, 181))).verified, 'pqshield: swapped issuer key -> FALSE (key binding)');
+
+  // 19) pqcap capability token — capCore bound; agent_pub binds the agent id (bound); issuer_pub + `v` informational.
+  const capIss = hk(172, 173), capAg = hk(174, 175);
+  const capTok = pqcap.issueCapability({ issuerKeys: capIss, agent: hpub(capAg), tool: 'T', caveats: { arg_in: { op: ['read'] } }, nonce: 'tb' });
+  runScenario({ label: 'pqcap.verifyCapability', obj: capTok, verify: (o) => pqcap.verifyCapability(o, hpub(capIss), { request: { tool: 'T', args: { op: 'read' } } }).verified, skipPaths: ['ed_sig', 'mldsa_sig'], unbound: new Set(['v', 'issuer_pub.ed', 'issuer_pub.mldsa']) }, ok);
+
+  // 20) pqadmit app cert — certCore bound; cert_id binds the identifying fields; artifact_digest binds the binary.
+  const adIss = hk(176, 177); const adImg = new Uint8Array(64).fill(0x55);
+  const adCert = pqadmit.issueAppCert({ issuerKeys: adIss, app: 'a/b', version: '1.0.0', artifactBytes: adImg, certLevel: 'SOVEREIGN_GOLD', checks: { cbom_pass: true, cve_pass: true, opa_pass: true, pqc_pass: true } });
+  runScenario({ label: 'pqadmit.verifyAdmission', obj: adCert, verify: (o) => pqadmit.verifyAdmission(o, hpub(adIss), { artifactBytes: adImg }).verified, skipPaths: ['ed_sig', 'mldsa_sig'], unbound: new Set(['v', 'issuer_pub.ed', 'issuer_pub.mldsa']) }, ok);
+
+  // 21) pqconsent receipt — self-sovereign: subject_pub binds the subject id (bound, no external pin); only `v` is informational.
+  const coSub = hk(178, 179);
+  const coRcpt = pqconsent.grantConsent({ subjectKeys: coSub, controller: 'c', purposes: ['p1'], categories: ['c1'], legalBasis: 'GDPR-Art-9-2-a', nonce: 'tb' });
+  runScenario({ label: 'pqconsent.verifyConsent', obj: coRcpt, verify: (o) => pqconsent.verifyConsent(o, { purpose: 'p1', category: 'c1' }).verified, skipPaths: ['ed_sig', 'mldsa_sig'], unbound: new Set(['v']) }, ok);
+
+  // ---- Wave-2 signed cores — batch 2 ----
+  // 22) pqpay authorization — authCore bound; payer_pub + `v` informational (verify uses the pinned payer).
+  const payP = hk(182, 183);
+  const payAuth = pqpay.createAuthorization({ payerKeys: payP, id: 'p', payee: 'm', amount: 100, currency: 'USD', nonce: 'tb' });
+  runScenario({ label: 'pqpay.verifyAuthorization', obj: payAuth, verify: (o) => pqpay.verifyAuthorization(o, hpub(payP), { allowUnmeteredCheck: true }).verified, skipPaths: ['ed_sig', 'mldsa_sig'], unbound: new Set(['v', 'payer_pub.ed', 'payer_pub.mldsa']) }, ok);
+
+  // 23) pqfirmware manifest — core bound; artifact_sha256 binds the binary; vendor_pub + `v` informational.
+  const fwV = hk(184, 185); const fwBin = new Uint8Array(64).fill(0x66);
+  const fwMan = pqfirmware.signFirmware({ vendorKeys: fwV, deviceModel: 'M', version: 7, buildId: 'b7', artifactBytes: fwBin });
+  runScenario({ label: 'pqfirmware.verifyFirmware', obj: fwMan, verify: (o) => pqfirmware.verifyFirmware(o, hpub(fwV), { artifactBytes: fwBin, currentVersion: 6, deviceModel: 'M' }).verified, skipPaths: ['ed_sig', 'mldsa_sig'], unbound: new Set(['v', 'vendor_pub.ed', 'vendor_pub.mldsa']) }, ok);
+
+  // 24) pqvc verifiable credential — the issuer signs {v, issuer, subject, claims-commitment, id, ...} (all bound).
+  //     `proof` is the signature container (skip); `claims_doc` is the holder's selective-disclosure artifact — NOT bound
+  //     by the issuer credential (it is committed via claims_root and verified separately at presentation time), so skip
+  //     it here; issuer_pub is informational (verify uses the pinned issuer DID key).
+  const vcIss = hk(186, 187), vcSub = hk(188, 189);
+  const { vc: vcObj } = pqvc.issueCredential({ issuerKeys: vcIss, subjectDid: pqvc.makeDid(hpub(vcSub)), claims: { role: 'x' }, id: 'vc-tb' });
+  runScenario({ label: 'pqvc.verifyCredential', obj: vcObj, verify: (o) => pqvc.verifyCredential(o, hpub(vcIss)).verified, skipPaths: ['ed_sig', 'mldsa_sig', 'proof', 'claims_doc'], unbound: new Set(['issuer_pub.ed', 'issuer_pub.mldsa']) }, ok);
+
+  // ---- nested platform-engine chains (this session) ----
+  // 25) pqflow genesis — the merchant signs transitionCore (bound); the embedded pqpay auth is bound via auth_sha256
+  //     (so every auth.* field is bound); merchant_pub + the top-level flow convenience copies (payer/payee/currency/v,
+  //     not re-checked by verifyFlow — the authoritative data is the bound genesis auth) are documented-unsigned.
+  const flP = hk(190, 191), flM = hk(192, 193);
+  const flAuth = pqpay.createAuthorization({ payerKeys: flP, id: 'p', payee: 'm', amount: 1000, currency: 'USD', nonce: 'tb' });
+  const flFlow = pqflow.openFlow({ auth: flAuth, payerPub: hpub(flP), merchantKeys: flM, at: 1, allowUnmeteredOpen: true });
+  runScenario({ label: 'pqflow.verifyFlow (genesis)', obj: flFlow, verify: (o) => pqflow.verifyFlow(o, hpub(flM), hpub(flP)).verified, skipPaths: ['transitions.0.ed_sig', 'transitions.0.mldsa_sig'], unbound: new Set(['v', 'payer', 'payee', 'currency', 'transitions.0.v', 'transitions.0.merchant_pub.ed', 'transitions.0.merchant_pub.mldsa', 'transitions.0.slh_signer_pub_hex']) }, ok);
+
+  // 26) pqdelegate chain [root, delegation] — each link's core is bound by its signer; agent/delegator/delegatee pubs
+  //     bind their ids (bound); the carried `v` + the root's informational issuer_pub + the (null) slh pub are unsigned.
+  const dgPrin = hk(194, 195), dgA = hk(196, 197), dgB = hk(198, 199);
+  const dgRoot = pqcap.issueCapability({ issuerKeys: dgPrin, agent: hpub(dgA), tool: 'T', caveats: { arg_in: { op: ['read'] } }, audience: 'aud', nonce: 'r' });
+  const dgLink = pqdelegate.delegate({ delegatorKeys: dgA, parent: dgRoot, delegatee: hpub(dgB), tool: 'T', addedCaveats: {}, audience: 'aud', nonce: 'd' });
+  runScenario({ label: 'pqdelegate.verifyDelegationChain', obj: [dgRoot, dgLink], verify: (o) => pqdelegate.verifyDelegationChain(o, hpub(dgPrin), { request: { tool: 'T', args: { op: 'read' } }, audience: 'aud' }).verified, skipPaths: ['0.ed_sig', '0.mldsa_sig', '1.ed_sig', '1.mldsa_sig'], unbound: new Set(['0.v', '0.issuer_pub.ed', '0.issuer_pub.mldsa', '1.v', '1.slh_signer_pub_hex']) }, ok);
 
   console.log('tamper-binding: ' + pass + ' pass, ' + fail + ' fail');
   if (typeof process !== 'undefined' && process.exit) process.exit(fail ? 1 : 0);

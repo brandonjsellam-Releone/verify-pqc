@@ -15,7 +15,7 @@ node fuzz-robustness.mjs     # negative/fuzz sweep (59 verifiers × 72 adversari
 node conformance-vectors.mjs # Wave-2 cores KAT (25): pinned deterministic ids / did:trelyan / commitments reproduce from fixed seeds + round-trip & negatives (hedged ML-DSA/SLH sigs not byte-pinned)
 node platform-conformance-vectors.mjs # platform engines KAT (16): pqmonitor/pqgate/pqflow/pqdelegate deterministic ids + policy_id/cert_id/ledger-head/parent_ref + round-trip & attenuation negatives
 node product-flows.mjs       # end-to-end product lifecycles through the real cores (Shield/Agent/Market/Consent) — 16 assertions
-node tamper-binding.mjs      # signature-coverage — flips every signed field across the signing surface, asserts each is bound (832 assertions; incl. pqmonitor/pqgate platform engines)
+node tamper-binding.mjs      # signature-coverage — flips every signed field across the signing surface, asserts each is bound (1,011 assertions; covers all 11 of this session's signed cores incl. the 4 platform engines + 7 Wave-2 cores)
 node domain-separation.mjs   # 0 bare sign/verify (187 sites), 63 distinct contexts, cross-context rejection
 node canon-determinism.mjs   # canon() byte-identical across 27 modules + deterministic/injective
 ```
