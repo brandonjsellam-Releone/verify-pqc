@@ -72,7 +72,8 @@ council-reviewed; the design + spec each had a downgrade caught and closed). Hon
 Plus CLI + GitHub Action (`pqcbom-cli.mjs`, `pqcbom-action/` — SARIF→code-scanning, report-only default), a standalone
 Evidence-Pack verifier (`verify-pack.mjs`), a **60-second runnable demo** (`examples/demo/run-demo.mjs` — scans a sample
 repo → SARIF + CBOM + a hybrid-signed, fully-attested Evidence Pack, self-checked) and owner-gated hosted config (`deploy/`).
-Plus the **Wave-2 product CLIs** (`pqfirmware-cli.mjs`, `pqvc-cli.mjs` — keygen / sign / verify, each with `--selftest`),
+Plus the **Wave-2 product CLIs** (`pqfirmware-cli.mjs`, `pqvc-cli.mjs` — keygen / sign / verify, each with `--selftest`;
+`pqverify-cli.mjs` — verify ANY artifact type from the command line via the hosted-API surface, key-pinned),
 the in-browser **PQ Trust Sandbox** (website `/sandbox` — runs pqshield's scoring client-side), and Wave-2 assurance
 harnesses (`conformance-vectors.mjs` 25 KAT, `product-flows.mjs` 16 end-to-end, `sandbox-parity.mjs` drift-guard).
 
