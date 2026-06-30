@@ -61,10 +61,20 @@ council-reviewed; the design + spec each had a downgrade caught and closed). Hon
 | `pqcompliance` | **Signed cryptographic-control gap mapper** — CBOM scan → per-control gap/no-gap for CNSA 2.0 / NIS2 / CRA / DORA / SC-13 (code-context; CNSA needs real PQ-asymmetric); ML-DSA-87-signed, findings-hash-bound, recompute-verified; honest *not-a-certification* framing | 15 |
 | `fips-conformance` | Hedged signing, exact sizes, ML-KEM implicit rejection, context separation, length rejection | 12 |
 | `kat-conformance` | Deterministic NIST-style known-answer vectors (seed-pinned) for ML-KEM-1024 / ML-DSA-87 / SLH-DSA-SHAKE-256s | 10 |
+| `pqvc` | **QuantumDNA** — PQ verifiable credentials: hybrid-signed (Ed25519∧ML-DSA-87∧opt SLH), `did:trelyan`, selective disclosure (pqredact), holder proof-of-possession, expiry/revocation, W3C-VC export | 24 |
+| `pqpay` | **QuantumPay** — payment-AUTHORIZATION signing (payee/amount-minor-units/currency/nonce/expiry), amount/payee-bound, fail-closed replay (durable nonce ledger). NOT money movement — settlement is a licensed rail | 20 |
+| `pqfirmware` | **QuantumShield IoT** — firmware-manifest signing; device verifies before flash: pinned vendor, binary hashes to the signed digest, version strictly-newer (monotonic anti-rollback), model-bound | 15 |
+| `pqshield` | **TRELYANShield** — signed quantum-risk posture report; the A–F grade is RECOMPUTED by the verifier from the signed CBOM (can't sign a clean grade over bad crypto); FAIL-DANGEROUS scoring; dual-anchor-ready | 21 |
+| `pqcap` | **Agent capability tokens** — least-privilege tool authorization (ThrondarAgent/QuantumFlow): scoped caveats + deny-unlisted-args, holder-PoP-bound, expiry, fail-closed max_uses; `verifyAndConsume` commit-on-success | 29 |
+| `pqadmit` | **SovereignMarket admission** — signed app cert (CBOM/CVE/OPA/PQC + level) + verify-before-deploy: artifact-digest-bound, cert-level floor, monotonic anti-rollback, revocation deny-set | 23 |
+| `pqconsent` | **Self-sovereign consent receipt** (VaultHealth GDPR-Art.9): subject-signed purposes×categories, deny-by-default scope, subject-only revocation, strict ASCII-token canon. Evidence, not legal validity | 19 |
 
 Plus CLI + GitHub Action (`pqcbom-cli.mjs`, `pqcbom-action/` — SARIF→code-scanning, report-only default), a standalone
 Evidence-Pack verifier (`verify-pack.mjs`), a **60-second runnable demo** (`examples/demo/run-demo.mjs` — scans a sample
 repo → SARIF + CBOM + a hybrid-signed, fully-attested Evidence Pack, self-checked) and owner-gated hosted config (`deploy/`).
+Plus the **Wave-2 product CLIs** (`pqfirmware-cli.mjs`, `pqvc-cli.mjs` — keygen / sign / verify, each with `--selftest`),
+the in-browser **PQ Trust Sandbox** (website `/sandbox` — runs pqshield's scoring client-side), and Wave-2 assurance
+harnesses (`conformance-vectors.mjs` 25 KAT, `product-flows.mjs` 16 end-to-end, `sandbox-parity.mjs` drift-guard).
 
 **Every module self-test + harness green in this build** (`node test-all.mjs` runs all of them + the unified `sdk.mjs`
 surface smoke test). Beyond the per-module self-tests: **`tamper-binding.mjs` — 781 mutation assertions** (every signed
