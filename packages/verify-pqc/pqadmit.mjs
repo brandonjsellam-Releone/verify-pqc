@@ -133,6 +133,7 @@ export function verifyAdmission(cert, trustedIssuer, opts = {}) {
     if (opts.artifactBytes) artifactOk = bytesToHex(sha256(opts.artifactBytes)).toLowerCase() === cert.artifact_digest;
     else artifactOk = opts.allowUnboundArtifact === true;
     if (!artifactOk) return { verified: false, reason: 'deployed artifact != attested digest (or no artifact bound)' };
+    if (cert.expires_at != null && opts.now == null && opts.allowNoExpiryClock !== true) return { verified: false, reason: 'expires_at declared but no clock (opts.now) supplied — cannot verify freshness' };
     if (cert.expires_at != null && opts.now != null && Number(opts.now) >= Number(cert.expires_at)) return { verified: false, reason: 'expired' };
     if (opts.minCertLevel != null) { const need = CERT_RANK[opts.minCertLevel]; if (!need || CERT_RANK[cert.cert_level] < need) return { verified: false, reason: 'cert level below policy floor' }; }
     // monotonic version floor — refuse a rollback to an older (signed-but-now-vulnerable) version (apex-team fix,
@@ -162,6 +163,7 @@ function selfTest() {
   const c = issueAppCert({ issuerKeys: auth, app: 'acme/api', version: '1.4.2', artifactBytes: image, sbomHash: 'ab'.repeat(32), certLevel: 'SOVEREIGN_PLUS', checks: allChecks, policyId: 'opa-bundle-10', expiresAt: 1000 });
   ok(typeof c.cert_id === 'string' && c.artifact_digest === bytesToHex(sha256(image)), 'cert binds artifact digest + has a cert_id');
   ok(verifyAdmission(c, tAuth, { artifactBytes: image, now: 1, minCertLevel: 'SOVEREIGN_READY' }).verified === true, 'valid cert + bound artifact + meets floor -> ADMIT');
+  ok(verifyAdmission(c, tAuth, { artifactBytes: image, minCertLevel: 'SOVEREIGN_READY' }).verified === false, 'declared expires_at + no opts.now -> refused (no silent expiry bypass)');
   ok(verifyAdmission(c, { ed: attacker.ed.publicKey, mldsa: attacker.mldsa.publicKey }, { artifactBytes: image, now: 1 }).verified === false, 'wrong pinned authority -> FAILS');
   const evil = new Uint8Array(4096).fill(0xcd);
   ok(verifyAdmission(c, tAuth, { artifactBytes: evil, now: 1 }).verified === false, 'deployed binary != attested digest -> FAILS (no swap)');

@@ -128,6 +128,7 @@ export function verifyConsent(receipt, opts = {}) {
     if (opts.requireSlh) { try { slhOk = !!(subPub.slh && receipt.slh_sig && slh_dsa_sha2_256f.verify(hexToBytes(receipt.slh_sig), coreBytes, subPub.slh, { context: CONSENT_SLH_CTX })); } catch { slhOk = false; } }
     if (!edOk || !pqOk || !slhOk) return { verified: false, reason: 'subject hybrid signature invalid (or required leg missing)' };
     if (opts.controller != null && receipt.controller !== opts.controller) return { verified: false, reason: 'controller mismatch' };
+    if (receipt.expires_at != null && opts.now == null && opts.allowNoExpiryClock !== true) return { verified: false, reason: 'expires_at declared but no clock (opts.now) supplied — cannot verify freshness' };
     if (receipt.expires_at != null && opts.now != null && Number(opts.now) >= Number(receipt.expires_at)) return { verified: false, reason: 'expired' };
     // scope: deny-by-default — a purpose/category not explicitly granted is NOT consented
     if (opts.purpose != null) { const p = normToken(opts.purpose); if (p === null || !receipt.purposes.includes(p)) return { verified: false, reason: 'purpose not consented' }; }
@@ -149,6 +150,7 @@ function selfTest() {
     categories: ['HEART_RATE', 'SLEEP'], legalBasis: 'GDPR-Art-9-2-a-explicit', jurisdiction: 'EU', expiresAt: 1000, nonce: 'c-1' });
   ok(r.subject === makeSubjectId(subject) && typeof r.receipt_id === 'string', 'receipt binds subject id + receipt_id');
   ok(verifyConsent(r, { now: 1, controller: 'vaulthealth', purpose: 'ai_coaching', category: 'HEART_RATE' }).verified === true, 'granted purpose+category verifies');
+  ok(verifyConsent(r, { controller: 'vaulthealth', purpose: 'ai_coaching', category: 'HEART_RATE' }).verified === false, 'declared expires_at + no opts.now → refused (no silent expiry bypass)');
   // DENY-BY-DEFAULT scope (GDPR Art.9 explicit)
   ok(verifyConsent(r, { now: 1, purpose: 'ad_targeting' }).verified === false, 'an UNGRANTED purpose (ad_targeting) -> NOT consented -> FAILS');
   ok(verifyConsent(r, { now: 1, category: 'MENTAL_HEALTH' }).verified === false, 'an UNGRANTED category (MENTAL_HEALTH) -> NOT consented -> FAILS');

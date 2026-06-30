@@ -156,7 +156,9 @@ export function verifyConsentFlow(flow, subjectPub, controllerPub, opts = {}) {
     if (g.type !== 'grant' || !g.receipt) return { verified: false, reason: 'genesis is not a grant with an embedded receipt' };
     if (g.embed_sha256 !== h(canon(g.receipt))) return { verified: false, reason: 'embedded receipt hash != bound embed_sha256' };
     if (g.receipt.subject !== makeSubjectId(subjectPub)) return { verified: false, reason: 'grant subject != pinned subject' };
-    if (!verifyConsent(g.receipt, { now: opts.now }).verified || g.receipt.receipt_id !== flow.receipt_id) return { verified: false, reason: 'embedded consent receipt invalid' };
+    // the grant's signature + scope are checked here; temporal validity is enforced PER-ACCESS (now: e.at below), so a
+    // historical log with no single "now" verifies the genesis without a clock (the leaf's strict-clock guard is waived here).
+    if (!verifyConsent(g.receipt, { now: opts.now, allowNoExpiryClock: true }).verified || g.receipt.receipt_id !== flow.receipt_id) return { verified: false, reason: 'embedded consent receipt invalid' };
     // each access must be in the granted scope; each withdraw must carry a valid revocation by the pinned subject
     for (let i = 1; i < flow.entries.length; i++) {
       const e = flow.entries[i];

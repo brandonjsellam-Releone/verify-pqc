@@ -146,6 +146,7 @@ export function verifyDelegationChain(chain, trustedRoot, opts = {}) {
         if (!cav.ok) return { verified: false, reason: 'caveat at link ' + i + ': ' + cav.reason };
       }
       // expiry conjunction
+      if (d.expires_at != null && opts.now == null && opts.allowNoExpiryClock !== true) return { verified: false, reason: 'delegation ' + i + ' declares expires_at but no clock (opts.now) supplied' };
       if (d.expires_at != null && opts.now != null && Number(opts.now) >= Number(d.expires_at)) return { verified: false, reason: 'delegation ' + i + ' expired' };
       if (d.audience != null && opts.audience !== d.audience) return { verified: false, reason: 'audience mismatch at ' + i };
       parent = d; currentTool = d.tool; currentGrantee = d.delegatee;
@@ -191,6 +192,7 @@ async function selfTest() {
   const okReq = { tool: 'DatabaseQuery', args: { op: 'select', limit: 50, table: 'public.users' } };
 
   ok(verifyDelegationChain(chain, tRoot, { request: okReq, now: 1, audience: 'orch', requireHolderProof: true, challenge: chal, holderProof: proveLeafHolder(C, chal) }).verified === true, 'in-bounds request down a 2-hop chain verifies (with leaf PoP)');
+  ok(verifyDelegationChain(chain, tRoot, { request: okReq, audience: 'orch', requireHolderProof: true, challenge: chal, holderProof: proveLeafHolder(C, chal) }).verified === false, 'declared expiry + no opts.now → refused (no silent expiry bypass)');
   ok(verifyDelegationChain(chain, { ed: attacker.ed.publicKey, mldsa: attacker.mldsa.publicKey }, { request: okReq, now: 1, audience: 'orch' }).verified === false, 'wrong pinned root principal → FAILS');
 
   // ATTENUATION via caveat accumulation

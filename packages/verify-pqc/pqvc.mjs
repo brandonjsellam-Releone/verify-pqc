@@ -94,6 +94,7 @@ export function verifyCredential(vc, trustedIssuer, opts = {}) {
     if (vc.issuer !== makeDid(trustedIssuer)) return { verified: false, reason: 'issuer DID != pinned issuer keys' };
     const sigOk = hybridVerify(utf8ToBytes(canon(vcCore(vc))), vc.proof, trustedIssuer);
     if (!sigOk) return { verified: false, reason: 'hybrid proof invalid' };
+    if (vc.expirationDate != null && opts.now == null && opts.allowNoExpiryClock !== true) return { verified: false, reason: 'expirationDate declared but no clock (opts.now) supplied — cannot verify freshness' };
     const expired = vc.expirationDate != null && opts.now != null && Number(opts.now) > Number(vc.expirationDate);
     const revokedSet = opts.revoked instanceof Set ? opts.revoked : new Set(opts.revoked || []);
     const revoked = revokedSet.has(vc.id);
@@ -188,6 +189,7 @@ function selfTest() {
   const { vc, holder: hrec } = issueCredential({ issuerKeys: issuer, subjectDid, id: 'urn:vc:1',
     claims: { name: 'Ada Lovelace', over18: true, country: 'CH', clearance: 'secret' }, issuanceDate: 1000, expirationDate: 5000, type: ['VerifiableCredential', 'PQClearance'] });
   ok(verifyCredential(vc, tIssuer, { now: 2000 }).verified === true, 'valid credential verifies under the pinned issuer');
+  ok(verifyCredential(vc, tIssuer, {}).verified === false, 'declared expirationDate + no opts.now → refused (no silent expiry bypass)');
   ok(verifyCredential(vc, { ed: holder.ed.publicKey, mldsa: holder.mldsa.publicKey }, { now: 2000 }).verified === false, 'wrong pinned issuer -> FAILS (issuer DID mismatch)');
   ok(verifyCredential(vc, tIssuer, { now: 9000 }).verified === false && verifyCredential(vc, tIssuer, { now: 9000 }).expired === true, 'expired credential -> FAILS');
   ok(verifyCredential(vc, tIssuer, { now: 2000, revoked: ['urn:vc:1'] }).verified === false, 'revoked credential -> FAILS');
