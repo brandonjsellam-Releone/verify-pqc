@@ -30,6 +30,10 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import * as pqcompliance from './pqcompliance.mjs';
 import * as pqkt from './pqkt.mjs';
 import * as pqclaimgate from './pqclaimgate.mjs';
+import * as pqshield from './pqshield.mjs';
+import * as pqmonitor from './pqmonitor.mjs';
+import * as pqgate from './pqgate.mjs';
+import * as pqadmit from './pqadmit.mjs';
 
 const seed = (n) => new Uint8Array(32).fill(n);
 // flip one leaf to a DIFFERENT same-typed value (hex-safe for hex strings)
@@ -213,6 +217,31 @@ function selfTest() {
   runScenario({ label: 'pqclaimgate.verifyClaimGate (attested answer)', obj: cgEnv, verify: (o) => pqclaimgate.verifyClaimGate(o, cgOrder.publicKey).verified, skipPaths: ['attestation.sig_hex'] }, ok);
   const cgOther = ml_dsa87.keygen(seed(142));
   ok(!pqclaimgate.verifyClaimGate(cgEnv, cgOther.publicKey).verified, 'pqclaimgate.verifyClaimGate: swapped order key -> FALSE (key binding)');
+
+  // ---- platform engines (this session): every field of the signed digest/decision/policy core must be bound ----
+  const hk = (a, b) => ({ ed: { secretKey: seed(a), publicKey: ed25519.getPublicKey(seed(a)) }, mldsa: ml_dsa87.keygen(seed(b)) });
+  const hpub = (k) => ({ ed: k.ed.publicKey, mldsa: k.mldsa.publicKey });
+
+  // 15) pqmonitor posture digest — digestCore {monitor,target,ledger_head,snapshot_count,seq,current,since,trend,at}
+  //     all bound by the hybrid sig; the embedded monitor_pub + slh_signer_pub_hex are informational (verify uses the pinned key).
+  const monKs = hk(150, 151), monIss = hk(152, 153);
+  const repA = pqshield.createShieldReport({ issuerKeys: monIss, target: 't', assets: [{ label: 'a', algorithm: 'RSA-2048' }], generatedAt: 1 });
+  const repB = pqshield.createShieldReport({ issuerKeys: monIss, target: 't', assets: [{ label: 'a', algorithm: 'RSA-2048' }, { label: 'b', algorithm: 'ECDH-P256', internet_facing: true }], generatedAt: 2 });
+  const monL = pqmonitor.createLedger(); pqmonitor.appendSnapshot(monL, repA, hpub(monIss), { at: 1 }); pqmonitor.appendSnapshot(monL, repB, hpub(monIss), { at: 2 });
+  const monDg = pqmonitor.signPostureDigest({ ledger: monL, monitorKeys: monKs, at: 2 });
+  runScenario({ label: 'pqmonitor.verifyPostureDigest', obj: monDg, verify: (o) => pqmonitor.verifyPostureDigest(o, hpub(monKs)).verified, skipPaths: ['ed_sig', 'mldsa_sig'], unbound: new Set(['v', 'monitor_pub.ed', 'monitor_pub.mldsa', 'slh_signer_pub_hex']) }, ok);
+  ok(!pqmonitor.verifyPostureDigest(monDg, hpub(hk(158, 159))).verified, 'pqmonitor.verifyPostureDigest: swapped monitor key -> FALSE (key binding)');
+
+  // 16) pqgate decision — decisionCore {gate,app,allow,reason,cert_id,version,cert_level,policy_id,at} bound by sig.
+  const gKs = hk(160, 161), gCIss = hk(162, 163), gPAuth = hk(164, 165);
+  const gFW = new Uint8Array(64).fill(0x44);
+  const gCert = pqadmit.issueAppCert({ issuerKeys: gCIss, app: 'a/b', version: '1.0.0', artifactBytes: gFW, certLevel: 'SOVEREIGN_GOLD', checks: { cbom_pass: true, cve_pass: true, opa_pass: true, pqc_pass: true } });
+  const gPol = pqgate.signPolicy({ authorityKeys: gPAuth, app: 'a/b', minCertLevel: 'SOVEREIGN_PLUS', at: 1 });
+  const gDec = pqgate.admit({ cert: gCert, certIssuer: hpub(gCIss), policy: gPol, policyAuthority: hpub(gPAuth), artifactBytes: gFW, gateKeys: gKs, now: 1 });
+  runScenario({ label: 'pqgate.verifyDecision', obj: gDec, verify: (o) => pqgate.verifyDecision(o, hpub(gKs)).verified, skipPaths: ['ed_sig', 'mldsa_sig'], unbound: new Set(['v', 'gate_pub.ed', 'gate_pub.mldsa', 'slh_signer_pub_hex']) }, ok);
+
+  // 17) pqgate policy — policyCore (rules + policy_id + at) is authority-signed; policy_id binds the rules.
+  runScenario({ label: 'pqgate.verifyPolicy', obj: gPol, verify: (o) => pqgate.verifyPolicy(o, hpub(gPAuth)).verified, skipPaths: ['ed_sig', 'mldsa_sig'], unbound: new Set(['v', 'authority_pub.ed', 'authority_pub.mldsa', 'slh_signer_pub_hex']) }, ok);
 
   console.log('tamper-binding: ' + pass + ' pass, ' + fail + ' fail');
   if (typeof process !== 'undefined' && process.exit) process.exit(fail ? 1 : 0);
