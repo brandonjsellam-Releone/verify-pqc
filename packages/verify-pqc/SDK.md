@@ -69,6 +69,7 @@ council-reviewed; the design + spec each had a downgrade caught and closed). Hon
 | `pqadmit` | **SovereignMarket admission** — signed app cert (CBOM/CVE/OPA/PQC + level) + verify-before-deploy: artifact-digest-bound, cert-level floor, monotonic anti-rollback, revocation deny-set | 23 |
 | `pqconsent` | **Self-sovereign consent receipt** (VaultHealth GDPR-Art.9): subject-signed purposes×categories, deny-by-default scope, subject-only revocation, strict ASCII-token canon. Evidence, not legal validity | 19 |
 | `pqmonitor` | **TRELYANShield SOC engine** — continuous posture monitoring: tamper-evident hash-chained ledger of pqshield snapshots (fail-dangerous ingest) + regression detection (RED-label deltas) + a hybrid-signed posture digest whose current grade & trend are RECOMPUTED from the ledger on verify; anti-rollback `minSeq` | 17 |
+| `pqgate` | **SovereignMarket admission engine** — CI/CD supply-chain gate over `pqadmit`: an authority-SIGNED policy (rules can't be silently weakened) → a recompute-verifiable hybrid-signed ALLOW/DENY decision → a tamper-evident admission log; fail-dangerous (won't act under an unverified policy) | 21 |
 
 Plus CLI + GitHub Action (`pqcbom-cli.mjs`, `pqcbom-action/` — SARIF→code-scanning, report-only default), the **Evidence
 Pack Express generator** (`pqevidence-cli.mjs` — point at any repo → scan → hybrid-signed pack + buyer-facing report +

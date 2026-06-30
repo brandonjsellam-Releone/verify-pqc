@@ -11,12 +11,12 @@ node test-all.mjs            # every module self-test + the four assurance harne
 node kat-conformance.mjs     # deterministic NIST-style KATs (ML-KEM-1024 / ML-DSA-87 / SLH-DSA-SHAKE-256s)
 node spine-vectors.mjs       # PINNED transparency-spine vectors (must reproduce the hex)
 node vectors-crosscheck.mjs  # 42,574-case differential vs an independent RFC-6962 reference
-node fuzz-robustness.mjs     # negative/fuzz sweep (54 verifiers × 72 adversarial input classes = 3,888 calls) — asserts 0 fail-open + verifier totality
+node fuzz-robustness.mjs     # negative/fuzz sweep (57 verifiers × 72 adversarial input classes = 4,104 calls) — asserts 0 fail-open + verifier totality
 node conformance-vectors.mjs # Wave-2 cores KAT (25): pinned deterministic ids / did:trelyan / commitments reproduce from fixed seeds + round-trip & negatives (hedged ML-DSA/SLH sigs not byte-pinned)
 node product-flows.mjs       # end-to-end product lifecycles through the real cores (Shield/Agent/Market/Consent) — 16 assertions
 node tamper-binding.mjs      # signature-coverage — flips every signed field across the signing surface, asserts each is bound (781 assertions)
-node domain-separation.mjs   # 0 bare sign/verify (167 sites), 54 distinct contexts, cross-context rejection
-node canon-determinism.mjs   # canon() byte-identical across 24 modules + deterministic/injective
+node domain-separation.mjs   # 0 bare sign/verify (175 sites), 58 distinct contexts, cross-context rejection
+node canon-determinism.mjs   # canon() byte-identical across 25 modules + deterministic/injective
 ```
 All four assurance harnesses (`fuzz-robustness`, `tamper-binding`, `domain-separation`, `canon-determinism`) plus the
 differential validator run inside `test-all.mjs` too. They already caught + fixed 5 real signed-vs-checked / protocol
