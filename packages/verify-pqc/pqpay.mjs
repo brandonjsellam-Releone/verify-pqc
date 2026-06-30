@@ -75,6 +75,10 @@ export function verifyAuthorization(auth, trustedPayer, opts = {}) {
     try { pqOk = ml_dsa87.verify(hexToBytes(auth.mldsa_sig), coreBytes, trustedPayer.mldsa, { context: PAY_CTX }); } catch { pqOk = false; }
     if (trustedPayer.slh) { try { slhOk = !!(auth.slh_sig && slh_dsa_sha2_256f.verify(hexToBytes(auth.slh_sig), coreBytes, trustedPayer.slh, { context: PAY_SLH_CTX })); } catch { slhOk = false; } }
     if (!edOk || !pqOk || !slhOk) return { verified: false, reason: 'hybrid signature invalid (or required leg missing)' };
+    // a declared expiry MUST be checkable: refuse to verify an auth that carries expires_at when no clock (opts.now) is
+    // supplied — silently skipping expiry on a PAYMENT would let an expired authorization pass (DeepSeek 1 Jul). Explicit
+    // opt-out (allowNoExpiryClock) only for a pure signature/well-formedness check that deliberately ignores time.
+    if (auth.expires_at != null && opts.now == null && opts.allowNoExpiryClock !== true) return { verified: false, reason: 'expires_at declared but no clock (opts.now) supplied — cannot verify freshness' };
     const expired = auth.expires_at != null && opts.now != null && Number(opts.now) > Number(auth.expires_at);
     const replayed = opts.seenNonces && typeof opts.seenNonces.has === 'function' && opts.seenNonces.has(String(auth.nonce));
     const overCap = opts.maxAmount != null && auth.amount > Number(opts.maxAmount);
@@ -96,10 +100,22 @@ export function verifyAuthorization(auth, trustedPayer, opts = {}) {
 // replay window. Nonces are normalised to strings (kills number/string type-confusion in the ledger).
 export function makeNonceLedger() {
   const seen = new Set();
-  return { has: (n) => seen.has(String(n)), add: (n) => seen.add(String(n)), get size() { return seen.size; } };
+  // `consume` is an ATOMIC test-and-set (returns false if the nonce was already seen) — it closes the has()/add() TOCTOU
+  // window (DeepSeek 1 Jul). In single-threaded JS the test+set is uninterruptible; a DISTRIBUTED ledger MUST back this
+  // with an atomic primitive (Redis SETNX, a unique-insert, a CAS) — exposing it on the interface makes that contract explicit.
+  return { has: (n) => seen.has(String(n)), add: (n) => seen.add(String(n)),
+    consume: (n) => { const k = String(n); if (seen.has(k)) return false; seen.add(k); return true; },
+    get size() { return seen.size; } };
 }
-// verify + atomically consume the nonce (the correct-usage path): rejects replays AND records the nonce ON SUCCESS only.
+// verify + consume the nonce exactly once (the correct-usage path). Prefers the ledger's ATOMIC consume() to eliminate the
+// check-then-set race; falls back to has()-during-verify + add()-on-success (safe in a single synchronous JS context).
 export function verifyAndConsume(auth, trustedPayer, ledger, opts = {}) {
+  if (ledger && typeof ledger.consume === 'function') {
+    const r = verifyAuthorization(auth, trustedPayer, { ...opts, allowUnmeteredCheck: true }); // all NON-replay checks first
+    if (!r.verified) return r;
+    if (!ledger.consume(String(auth.nonce))) return { ...r, verified: false, replayed: true, reason: 'replayed (atomic consume)' };
+    return { ...r, replayed: false };
+  }
   const r = verifyAuthorization(auth, trustedPayer, { ...opts, seenNonces: ledger });
   if (r.verified && ledger && typeof ledger.add === 'function') ledger.add(auth.nonce);  // commit-on-success
   return r;
@@ -152,6 +168,16 @@ function selfTest() {
   ok(verifyAndConsume(num, tPayer, ledger, { now: 1 }).verified === false, 'verifyAndConsume: re-use of the same nonce -> replay REJECTED');
   const led2 = makeNonceLedger(); verifyAndConsume(JSON.parse(JSON.stringify(num)), { ed: attacker.ed.publicKey, mldsa: attacker.mldsa.publicKey }, led2, { now: 1 });
   ok(led2.size === 0, 'commit-on-success: a FAILED authorization does NOT consume the nonce');
+
+  // expiry strictness (DeepSeek 1 Jul): an auth that DECLARES expires_at must not verify when no clock is supplied
+  ok(verifyAuthorization(auth, tPayer, { allowUnmeteredCheck: true }).verified === false, 'declared expires_at + no opts.now → refused (no silent expiry bypass)');
+  ok(verifyAuthorization(auth, tPayer, { allowUnmeteredCheck: true, allowNoExpiryClock: true }).verified === true, 'explicit allowNoExpiryClock → permits a deliberately time-less well-formedness check');
+  // atomic consume (closes the has/add TOCTOU window): test-and-set
+  const al = makeNonceLedger();
+  ok(al.consume('z') === true && al.consume('z') === false, 'atomic consume: first claim true, replay false (test-and-set)');
+  const al2 = makeNonceLedger();
+  const num2 = createAuthorization({ payerKeys: payer, id: 'pay-n2', payee: 'm', amount: 10, currency: 'USD', nonce: 'n2-atomic' });
+  ok(verifyAndConsume(num2, tPayer, al2, { now: 1 }).verified === true && verifyAndConsume(num2, tPayer, al2, { now: 1 }).verified === false, 'verifyAndConsume via atomic consume: first verifies, replay rejected');
 
   // TOTAL fail-closed
   let total = true; for (const bad of [null, undefined, {}, 42, { amount: 5 }, { ...auth, amount: 'lots' }]) { try { if (verifyAuthorization(bad, tPayer).verified !== false) total = false; } catch { total = false; } }
