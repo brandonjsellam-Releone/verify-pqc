@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const mods = ['pqef.mjs', 'polarseek.mjs', 'pqsign.mjs', 'pqtransport.mjs', 'pqanswer.mjs', 'pqcouncil.mjs', 'pqguard.mjs', 'pqinduct.mjs', 'pqmoa.mjs', 'pqclaimgate.mjs', 'pqverify.mjs', 'pqratchet.mjs', 'pqratchet-he.mjs', 'pqindex.mjs', 'pqassistant.mjs', 'pqcbom.mjs', 'pqcbom-server.mjs', 'pqgateway.mjs', 'fips-conformance.mjs', 'kat-conformance.mjs', 'pqtsa.mjs', 'pqgateway-session.mjs', 'pqkt.mjs', 'pqcbom-report.mjs', 'pqcbom-plan.mjs', 'pqverify-api.mjs', 'pqpki.mjs', 'pqvault.mjs', 'pqcompliance.mjs', 'pqx3dh.mjs', 'pqmarket.mjs', 'spine-vectors.mjs', 'vectors-crosscheck.mjs', 'witness-service.mjs', 'fuzz-robustness.mjs', 'tamper-binding.mjs', 'domain-separation.mjs', 'canon-determinism.mjs', 'assurance-properties.mjs', 'accuracy-benchmark.mjs', 'structural-corpus.mjs', 'pqseal.mjs', 'pqattest.mjs', 'pqredact.mjs', 'pqauditlog.mjs', 'pqanchor.mjs', 'pqtls.mjs', 'pqposture.mjs', 'pqvc.mjs', 'pqpay.mjs', 'pqfirmware.mjs', 'test-slh-pins.mjs'];   // test-slh-pins: the headline browser STH verifier (mldsa/slhdsa/verify) — array-pin rotation + foreign-key soundness + non-authoritative SLH leg
+const mods = ['pqef.mjs', 'polarseek.mjs', 'pqsign.mjs', 'pqtransport.mjs', 'pqanswer.mjs', 'pqcouncil.mjs', 'pqguard.mjs', 'pqinduct.mjs', 'pqmoa.mjs', 'pqclaimgate.mjs', 'pqverify.mjs', 'pqratchet.mjs', 'pqratchet-he.mjs', 'pqindex.mjs', 'pqassistant.mjs', 'pqcbom.mjs', 'pqcbom-server.mjs', 'pqgateway.mjs', 'fips-conformance.mjs', 'kat-conformance.mjs', 'pqtsa.mjs', 'pqgateway-session.mjs', 'pqkt.mjs', 'pqcbom-report.mjs', 'pqcbom-plan.mjs', 'pqverify-api.mjs', 'pqpki.mjs', 'pqvault.mjs', 'pqcompliance.mjs', 'pqx3dh.mjs', 'pqmarket.mjs', 'spine-vectors.mjs', 'vectors-crosscheck.mjs', 'witness-service.mjs', 'fuzz-robustness.mjs', 'tamper-binding.mjs', 'domain-separation.mjs', 'canon-determinism.mjs', 'assurance-properties.mjs', 'accuracy-benchmark.mjs', 'structural-corpus.mjs', 'pqseal.mjs', 'pqattest.mjs', 'pqredact.mjs', 'pqauditlog.mjs', 'pqanchor.mjs', 'pqtls.mjs', 'pqposture.mjs', 'pqvc.mjs', 'pqpay.mjs', 'pqfirmware.mjs', 'pqshield.mjs', 'test-slh-pins.mjs'];   // test-slh-pins: the headline browser STH verifier (mldsa/slhdsa/verify) — array-pin rotation + foreign-key soundness + non-authoritative SLH leg
 let failed = 0;
 for (const m of mods) {
   try {
@@ -27,7 +27,7 @@ try {
 
 // 0-DOWNGRADE RATCHET (constant max-apex law: 0 downgrade, only upgrade). Modules may be ADDED, never silently
 // removed — raise MIN_MODULES only upward when you add one. Dropping below the floor is a regression and fails CI.
-const MIN_MODULES = 52;
+const MIN_MODULES = 53;
 if (mods.length < MIN_MODULES) { failed++; console.error('✗ 0-downgrade ratchet: mods.length ' + mods.length + ' < floor ' + MIN_MODULES + ' (a module was removed — only-upgrade law violated; restore it or this is a downgrade)'); }
 
 console.log('\n=== PQ SDK: ' + (failed ? failed + ' module(s) FAILED' : 'ALL MODULES PASS') + ' ===');
