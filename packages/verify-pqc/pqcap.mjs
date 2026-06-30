@@ -58,7 +58,14 @@ function normCaveats(c) {
 // Evaluate the signed caveats against a concrete request's args. TOTAL: any failure → {ok:false, reason}.
 export function evalCaveats(caveats, args) {
   try {
-    const c = caveats || {}; const a = (args && typeof args === 'object' && !Array.isArray(args)) ? args : {};
+    const c = caveats || {};
+    const isPlainObj = args != null && typeof args === 'object' && !Array.isArray(args);
+    const hasConstraints = !!(c.arg_equals || c.arg_prefix || c.arg_max || c.arg_in || c.deny_unlisted === true || Array.isArray(c.args_allowed));
+    // FAIL-CLOSED on non-plain-object args under ANY constraint: the tool receives the ORIGINAL args, so silently
+    // coercing an array/primitive to {} would hide it from the caveat + deny_unlisted checks (DeepSeek 1 Jul). A token
+    // with NO constraints is "tool unconstrained" by design, so any args shape is permitted there.
+    if (hasConstraints && args != null && !isPlainObj) return { ok: false, reason: 'non-object args cannot be constrained (array/primitive under caveats)' };
+    const a = isPlainObj ? args : {};
     if (c.arg_equals) for (const [k, v] of Object.entries(c.arg_equals)) if (canon(a[k]) !== canon(v)) return { ok: false, reason: `arg_equals ${k}` };
     if (c.arg_prefix) for (const [k, p] of Object.entries(c.arg_prefix)) { if (typeof a[k] !== 'string' || !a[k].startsWith(String(p))) return { ok: false, reason: `arg_prefix ${k}` }; }
     // arg_max: STRICT number — reject strings/arrays/objects (Number() coercion of [50] / "50" / {valueOf} is a bypass)
@@ -130,6 +137,7 @@ export function verifyCapability(token, trustedIssuer, opts = {}) {
     let agentPub; try { agentPub = { ed: hexToBytes(token.agent_pub.ed), mldsa: hexToBytes(token.agent_pub.mldsa), ...(token.agent_pub.slh ? { slh: hexToBytes(token.agent_pub.slh) } : {}) }; } catch { return { verified: false, reason: 'bad agent_pub' }; }
     if (makeAgentId(agentPub) !== token.agent) return { verified: false, reason: 'agent_pub does not match signed agent id' };
     // expiry / not-yet-valid
+    if (token.expires_at != null && opts.now == null && opts.allowNoExpiryClock !== true) return { verified: false, reason: 'expires_at declared but no clock (opts.now) supplied — cannot verify freshness' };
     if (token.expires_at != null && opts.now != null && Number(opts.now) >= Number(token.expires_at)) return { verified: false, reason: 'expired' };
     if (token.issued_at != null && opts.now != null && Number(opts.now) < Number(token.issued_at)) return { verified: false, reason: 'not yet valid' };
     // audience binding
@@ -169,13 +177,27 @@ export function verifyCapability(token, trustedIssuer, opts = {}) {
 // in-memory use counter. PRODUCTION needs a DURABLE atomic store; an in-process counter resets on restart.
 export function makeUseLedger() {
   const m = new Map();
-  return { has: (n) => m.get(String(n)) || 0, add: (n) => m.set(String(n), (m.get(String(n)) || 0) + 1), get size() { return m.size; } };
+  // `consume(nonce, maxUses)` is an ATOMIC check-and-increment (returns false if the count already reached maxUses) —
+  // it closes the has()/add() TOCTOU window (DeepSeek 1 Jul). Single-threaded JS makes the read+write uninterruptible;
+  // a DISTRIBUTED ledger MUST back this with an atomic primitive (a conditional increment / Lua / CAS).
+  return { has: (n) => m.get(String(n)) || 0, add: (n) => m.set(String(n), (m.get(String(n)) || 0) + 1),
+    consume: (n, maxUses) => { const k = String(n); const used = m.get(k) || 0; if (maxUses != null && used >= Number(maxUses)) return false; m.set(k, used + 1); return true; },
+    get size() { return m.size; } };
 }
-// correct-usage path: verify + atomically consume one use ON SUCCESS only (commit-on-success).
+// correct-usage path: verify + consume one use exactly once ON SUCCESS only. Prefers the ledger's ATOMIC consume() to
+// eliminate the check-then-increment race; falls back to has()-during-verify + add()-on-success (safe in synchronous JS).
 export function verifyAndConsume(token, trustedIssuer, ledger, opts = {}) {
-  const r = verifyCapability(token, trustedIssuer, { ...opts, useLedger: ledger });
-  if (r.verified && token && token.max_uses != null && ledger && typeof ledger.add === 'function') ledger.add(token.nonce);
-  return r;
+  try { // TOTAL: reading token.max_uses to choose the path must not throw on adversarial input (e.g. a throwing getter)
+    if (token && token.max_uses != null && ledger && typeof ledger.consume === 'function') {
+      const r = verifyCapability(token, trustedIssuer, { ...opts, allowUnmeteredCheck: true }); // all NON-max_uses checks first
+      if (!r.verified) return r;
+      if (!ledger.consume(token.nonce, token.max_uses)) return { ...r, verified: false, reason: 'max_uses exhausted (atomic consume)' };
+      return r;
+    }
+    const r = verifyCapability(token, trustedIssuer, { ...opts, useLedger: ledger });
+    if (r.verified && token && token.max_uses != null && ledger && typeof ledger.add === 'function') ledger.add(token.nonce);
+    return r;
+  } catch { return { verified: false }; }
 }
 
 /* ---------- self-test: node pqcap.mjs ---------- */
@@ -240,6 +262,16 @@ function selfTest() {
   ok(verifyAndConsume(tokU, tIssuer, led, { request: useReq, now: 1, audience: 'orch-1' }).verified === false, 'use 3 -> max_uses exhausted -> FAILS');
   const led2 = makeUseLedger(); verifyAndConsume(tokU, { ed: attacker.ed.publicKey, mldsa: attacker.mldsa.publicKey }, led2, { request: useReq, now: 1, audience: 'orch-1' });
   ok(led2.size === 0, 'commit-on-success: a FAILED verify does NOT consume a use');
+
+  // DeepSeek 1 Jul hardenings:
+  // (1) non-object args under constraints fail closed — an array would coerce to {} and slip deny_unlisted
+  ok(verifyCapability(strict, tIssuer, { request: { tool: 'execCommand', args: ['ls', '--sudo'] } }).verified === false, 'non-object (array) args under caveats → REJECTED (no coercion bypass of deny_unlisted)');
+  // (2) a token declaring expires_at must not verify without a clock
+  ok(verifyCapability(tok, tIssuer, { request: goodReq, audience: 'orch-1' }).verified === false, 'declared expires_at + no opts.now → refused (no silent expiry bypass)');
+  ok(verifyCapability(tok, tIssuer, { request: goodReq, audience: 'orch-1', allowNoExpiryClock: true }).verified === true, 'explicit allowNoExpiryClock → permits a deliberately time-less check');
+  // (3) atomic consume (check-and-increment) closes the has/add TOCTOU
+  const ul = makeUseLedger();
+  ok(ul.consume('k', 2) === true && ul.consume('k', 2) === true && ul.consume('k', 2) === false, 'atomic consume: increments to max_uses then refuses (check-and-increment)');
 
   // unconstrained '*' tool + empty caveats
   const wild = issueCapability({ issuerKeys: principal, agent: agentPubOnly, tool: '*', caveats: {}, nonce: 'w-1' });
