@@ -40,6 +40,10 @@ validated; cross-check vs NIST ACVP is the auditor step). `SDK_VERSION 0.16.0-dr
 | A2 | N reads message metadata | ratchet header encryption (pqratchet-he) hides keys/counters | traffic timing/volume/IP not hidden (onion layer's job) |
 | I | Compromised/old issuer key used | revoke + monotonic seq; RP watches via detectUnexpectedRotation | window before revoke is logged + witnessed |
 | A1 | Evidence bundle smuggles secrets / type-confusion | typed, version-pinned schema allowlist; value-secret scan; reject-unknown-version | secret value-scan is heuristic |
+| P1 | Worker agent escalates beyond its delegated authority (widen tool / scope / uses) | pqdelegate: attenuation enforced 3 ways — caveat ACCUMULATION (request vs root + every link), tool/scope/max_uses NARROW-only, signed delegator chain + parent_ref binding; leaf holder-PoP | cross-request use-COUNTING is the gateway's durable-ledger job (declared, metered off-engine) |
+| P2 | The same payment authorization opens multiple flows (double-spend) | pqflow: FAIL-CLOSED single-use — openFlow consumes the auth nonce in a durable ledger; Σcaptures ≤ authorized enforced on recompute | the durable nonce ledger is the integrator's (an in-memory one resets on restart) |
+| P3 | A stale / truncated-but-authentic posture digest or admission decision is trusted | pqmonitor / pqgate: recompute-on-verify (re-derive state from the supplied ledger / cert+policy) + `freshness_checked`/`recomputed` flags + `requireFresh`/`requireRecompute`; anti-rollback `minSeq` | truncation resistance needs the consumer to keep an anti-rollback floor (minSeq) |
+| — | Wave-2 product cores (pqshield/cap/admit/consent/pay/vc/firmware) — per-adversary analysis | see `ADVERSARY_MODEL.md` (capability→property→evidence) + per-field binding in `tamper-binding.mjs` | — |
 
 ## Self-disclosed residuals requiring the AUDIT / DEPLOYMENT (not code)
 1. **Third-party cryptographic + side-channel audit** (constant-time, primitive cross-validation vs NIST ACVP).

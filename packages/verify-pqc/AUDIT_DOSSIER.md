@@ -80,7 +80,8 @@ pqtransport (SIGMA, UKS/reflection/downgrade); pqgateway (downgrade/replay/lying
 (transcript-bound attestation + client countersig); pqkt (CONIKS authority chaining, monotonic seq, post-revoke-rebind
 block, equivocation/rollback); pqpki (hybrid strip-resistance, path_len, root-pinning); pqratchet-he (metadata privacy);
 pqtsa (legacy re-stamp + multi-TSA threshold); pqef/pqcbom-report (typed allowlist, grade-recompute anti-forgery).
-Negative coverage: `fuzz-robustness.mjs` — 0 fail-open observed across 3,240 adversarial calls (45 verifiers × 72 input classes); verdict verifiers returned no throw across the corpus. Plus `tamper-binding.mjs` (signature coverage, 15 verifiers), `domain-separation.mjs` (0 bare / 25 distinct contexts), `canon-determinism.mjs` (canonicalization consistency).
+**Product / platform cores (Wave-2 + platform engines):** pqshield (A–F grade RECOMPUTED from the signed assets — no clean-grade-over-bad-crypto), pqcap (least-privilege caveats + deny-unlisted-args + holder-PoP + fail-closed max_uses), pqadmit (artifact-digest binding + cert-level floor + anti-rollback minVersion + revocation deny-set), pqconsent (deny-by-default scope, subject-only revocation), pqpay (fail-closed replay), pqvc (selective-disclosure commitment + holder-PoP), pqfirmware (binary-hash + anti-rollback verify-before-flash); and the 4 platform engines — pqmonitor (tamper-evident posture ledger + recompute-verified digest + anti-rollback minSeq), pqgate (authority-signed policy + recompute-verifiable allow/deny decision + tamper-evident admission log), pqflow (capture lifecycle enforcing Σcaptures ≤ authorized + fail-closed single-use auth), pqdelegate (attenuating delegation chains — caveat accumulation + tool/scope/max_uses narrow-only + signed delegator chain). See `ADVERSARY_MODEL.md` (capability→property→evidence) and `SECURITY_REVIEW.md` (the multi-model council findings + fixes per core).
+Negative coverage: `fuzz-robustness.mjs` — 0 fail-open observed across 4,248 adversarial calls (59 verifiers × 72 input classes); verdict verifiers returned no throw across the corpus. Plus `tamper-binding.mjs` (signature coverage, 1,011 assertions covering every signed core), `domain-separation.mjs` (0 bare / 63 distinct contexts), `canon-determinism.mjs` (canonicalization consistency across 27 modules).
 
 ## 7. Known limits / OUT of audit scope to fix (documented, not defects to "find")
 - NOT constant-time; timing/side-channel hardening is a primary audit deliverable.
@@ -90,5 +91,6 @@ Negative coverage: `fuzz-robustness.mjs` — 0 fail-open observed across 3,240 a
 
 ## 8. Test inventory
 `node test-all.mjs` runs every module self-test + the four assurance harnesses (run `node test-all.mjs` → ALL MODULES PASS),
-plus `node kat-conformance.mjs` (deterministic KATs), `node vectors-crosscheck.mjs` (42k+ differential), and the
-fuzz sweep. All green at 0.16.0-draft.
+plus `node kat-conformance.mjs` (deterministic KATs), `node conformance-vectors.mjs` + `node platform-conformance-vectors.mjs`
+(reproducible KAT — ids / commitments — for the Wave-2 + platform cores), `node product-flows.mjs` (end-to-end product
+lifecycles), `node vectors-crosscheck.mjs` (42k+ differential), and the fuzz sweep. All green at 0.16.0-draft.
