@@ -118,17 +118,23 @@ export function verifyDecision(decision, trustedGate, opts = {}) {
     try { pqOk = ml_dsa87.verify(hexToBytes(decision.mldsa_sig), coreBytes, trustedGate.mldsa, { context: DEC_CTX }); } catch { pqOk = false; }
     if (trustedGate.slh) { try { slhOk = !!(decision.slh_sig && slh_dsa_sha2_256f.verify(hexToBytes(decision.slh_sig), coreBytes, trustedGate.slh, { context: DEC_SLH_CTX })); } catch { slhOk = false; } }
     if (!edOk || !pqOk || !slhOk) return { verified: false, reason: 'decision signature invalid (or required leg missing)' };
+    // ANTI-ROLLBACK (council/DeepSeek 1 Jul): pin the EXPECTED current policy. Without this, verifyDecision proves the
+    // decision is authentic and was correctly evaluated under SOME authority-signed policy — but NOT that the policy is
+    // the CURRENT one. A consumer that knows its current policy_id (from its policy registry) MUST pass opts.trustedPolicyId
+    // to refuse a replayed old-decision + old-policy pair that revived a weaker floor (lower minVersion / empty revoked /
+    // require_artifact:false). Mirrors pqadmit minVersion + pqmonitor minSeq anti-rollback.
+    if (opts.trustedPolicyId != null && decision.policy_id !== String(opts.trustedPolicyId)) return { verified: false, reason: 'decision policy_id != pinned current policy (policy rollback)' };
     if (opts.cert && opts.policy && opts.certIssuer && opts.policyAuthority) {
       if (!verifyPolicy(opts.policy, opts.policyAuthority).verified) return { verified: false, reason: 'supplied policy not authentic' };
       if (opts.policy.policy_id !== decision.policy_id) return { verified: false, reason: 'decision policy_id != supplied policy (policy swap)' };
       const re = evaluateAdmission({ cert: opts.cert, certIssuer: opts.certIssuer, policy: opts.policy, artifactBytes: opts.artifactBytes, now: opts.now });
-      if (re.allow !== decision.allow || re.cert_id !== decision.cert_id) return { verified: false, reason: 'recomputed decision != signed decision (forged verdict)' };
+      if (re.allow !== decision.allow || re.cert_id !== decision.cert_id || re.app !== decision.app || re.version !== decision.version || re.cert_level !== decision.cert_level) return { verified: false, reason: 'recomputed decision != signed decision (forged verdict)' };
     }
     // recompute-signaling (council fix): a verdict without cert+policy is signature-authentic but NOT re-derived from
     // the certified rules. Surface that, and let strict callers force the re-evaluation.
     const didRecompute = !!(opts.cert && opts.policy && opts.certIssuer && opts.policyAuthority);
     if (opts.requireRecompute && !didRecompute) return { verified: false, reason: 'requireRecompute: supply cert + policy (+ pinned issuers) to re-derive the decision (a signature-only verdict is not recompute-checked)' };
-    return { verified: true, recomputed: didRecompute, allow: decision.allow, app: decision.app, cert_id: decision.cert_id, version: decision.version, policy_id: decision.policy_id };
+    return { verified: true, recomputed: didRecompute, policy_pinned: opts.trustedPolicyId != null, allow: decision.allow, app: decision.app, cert_id: decision.cert_id, version: decision.version, policy_id: decision.policy_id };
   } catch { return { verified: false }; }
 }
 
@@ -202,6 +208,15 @@ async function selfTest() {
   ok(admit({ cert, certIssuer: tCertIss, policy: polRollback, policyAuthority: tPolAuth, artifactBytes: fw, gateKeys: gate, now: 1 }).allow === false, 'version below the signed minVersion floor → DENY (rollback refused)');
   const polRevoked = signPolicy({ authorityKeys: polAuth, app: 'acme/api', minCertLevel: 'SOVEREIGN_PLUS', revoked: [cert.cert_id], at: 1 });
   ok(admit({ cert, certIssuer: tCertIss, policy: polRevoked, policyAuthority: tPolAuth, artifactBytes: fw, gateKeys: gate, now: 1 }).allow === false, 'cert in the signed revoked-set → DENY');
+
+  // POLICY-ROLLBACK pin (DeepSeek 1 Jul): a decision made under an OLD weaker policy is authentic, but replaying it can
+  // revive a weakened floor. opts.trustedPolicyId lets a consumer pin its CURRENT policy_id and refuse the rollback.
+  const polWeak = signPolicy({ authorityKeys: polAuth, app: 'acme/api', minCertLevel: 'SOVEREIGN_READY', minVersion: '1.0.0', at: 1 });
+  const decWeak = admit({ cert, certIssuer: tCertIss, policy: polWeak, policyAuthority: tPolAuth, artifactBytes: fw, gateKeys: gate, now: 1 });
+  ok(decWeak.allow === true && verifyDecision(decWeak, tGate, { cert, certIssuer: tCertIss, policy: polWeak, policyAuthority: tPolAuth, artifactBytes: fw, now: 1 }).verified === true, 'old weak-policy decision is authentic under its OWN policy (the residual when no pin is supplied)');
+  const polCurrent = signPolicy({ authorityKeys: polAuth, app: 'acme/api', minCertLevel: 'SOVEREIGN_PLUS', minVersion: '3.0.0', revoked: [cert.cert_id], at: 2 });
+  ok(verifyDecision(decWeak, tGate, { trustedPolicyId: polCurrent.policy_id }).verified === false, 'replayed old-policy decision vs the PINNED current policy_id → REJECTED (policy rollback caught)');
+  ok(verifyDecision(decWeak, tGate, { trustedPolicyId: polWeak.policy_id }).verified === true && verifyDecision(decWeak, tGate, { trustedPolicyId: polWeak.policy_id }).policy_pinned === true, 'pin matching the decision policy_id → verified + policy_pinned flag set');
 
   // fail-dangerous: admit refuses an unauthentic policy
   let refused = false; try { admit({ cert, certIssuer: tCertIss, policy: polT, policyAuthority: tPolAuth, artifactBytes: fw, gateKeys: gate, now: 1 }); } catch { refused = true; }
