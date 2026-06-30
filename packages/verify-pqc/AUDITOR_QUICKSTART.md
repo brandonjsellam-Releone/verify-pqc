@@ -13,6 +13,7 @@ node spine-vectors.mjs       # PINNED transparency-spine vectors (must reproduce
 node vectors-crosscheck.mjs  # 42,574-case differential vs an independent RFC-6962 reference
 node fuzz-robustness.mjs     # negative/fuzz sweep (59 verifiers × 72 adversarial input classes = 4,248 calls) — asserts 0 fail-open + verifier totality
 node conformance-vectors.mjs # Wave-2 cores KAT (25): pinned deterministic ids / did:trelyan / commitments reproduce from fixed seeds + round-trip & negatives (hedged ML-DSA/SLH sigs not byte-pinned)
+node platform-conformance-vectors.mjs # platform engines KAT (16): pqmonitor/pqgate/pqflow/pqdelegate deterministic ids + policy_id/cert_id/ledger-head/parent_ref + round-trip & attenuation negatives
 node product-flows.mjs       # end-to-end product lifecycles through the real cores (Shield/Agent/Market/Consent) — 16 assertions
 node tamper-binding.mjs      # signature-coverage — flips every signed field across the signing surface, asserts each is bound (781 assertions)
 node domain-separation.mjs   # 0 bare sign/verify (187 sites), 63 distinct contexts, cross-context rejection
