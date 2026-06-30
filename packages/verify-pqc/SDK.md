@@ -69,9 +69,11 @@ council-reviewed; the design + spec each had a downgrade caught and closed). Hon
 | `pqadmit` | **SovereignMarket admission** — signed app cert (CBOM/CVE/OPA/PQC + level) + verify-before-deploy: artifact-digest-bound, cert-level floor, monotonic anti-rollback, revocation deny-set | 23 |
 | `pqconsent` | **Self-sovereign consent receipt** (VaultHealth GDPR-Art.9): subject-signed purposes×categories, deny-by-default scope, subject-only revocation, strict ASCII-token canon. Evidence, not legal validity | 19 |
 
-Plus CLI + GitHub Action (`pqcbom-cli.mjs`, `pqcbom-action/` — SARIF→code-scanning, report-only default), a standalone
-Evidence-Pack verifier (`verify-pack.mjs`), a **60-second runnable demo** (`examples/demo/run-demo.mjs` — scans a sample
-repo → SARIF + CBOM + a hybrid-signed, fully-attested Evidence Pack, self-checked) and owner-gated hosted config (`deploy/`).
+Plus CLI + GitHub Action (`pqcbom-cli.mjs`, `pqcbom-action/` — SARIF→code-scanning, report-only default), the **Evidence
+Pack Express generator** (`pqevidence-cli.mjs` — point at any repo → scan → hybrid-signed pack + buyer-facing report +
+CBOM, self-verified; the paid deliverable productized), a standalone Evidence-Pack verifier (`verify-pack.mjs`), a
+**60-second runnable demo** (`examples/demo/run-demo.mjs` — scans a sample repo → SARIF + CBOM + a hybrid-signed,
+fully-attested Evidence Pack, self-checked) and owner-gated hosted config (`deploy/`).
 Plus the **Wave-2 product CLIs** (`pqfirmware-cli.mjs`, `pqvc-cli.mjs` — keygen / sign / verify, each with `--selftest`;
 `pqverify-cli.mjs` — verify ANY artifact type from the command line via the hosted-API surface, key-pinned),
 the in-browser **PQ Trust Sandbox** (website `/sandbox` — runs pqshield's scoring client-side), and Wave-2 assurance
