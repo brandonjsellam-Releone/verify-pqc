@@ -59,11 +59,18 @@ export function createLedger() { return { v: '1', entries: [] }; }
 export function appendSnapshot(ledger, report, trustedIssuer, { at = null } = {}) {
   const v = verifyShieldReport(report, trustedIssuer);
   if (!v.verified) throw new Error('refusing to record an UNVERIFIED report (fail-dangerous): ' + (v.reason || 'invalid'));
+  const snapshot = snapshotOf(report);
   const prev = ledger.entries[ledger.entries.length - 1];
-  if (prev && snapshotOf(report).target !== prev.snapshot.target) throw new Error('target mismatch: this ledger tracks "' + prev.snapshot.target + '"');
+  if (prev) {
+    if (snapshot.target !== prev.snapshot.target) throw new Error('target mismatch: this ledger tracks "' + prev.snapshot.target + '"');
+    // ANTI-REPLAY (council/DeepSeek 1 Jul): a report must be strictly NEWER than the last recorded one. The issuer
+    // signature alone does NOT prevent replay — a genuine OLD report replayed to the recorder would otherwise append
+    // as "latest" and hide an intervening regression. generated_at is signed by the issuer, so it is trustworthy here.
+    const pg = prev.snapshot.generated_at, ng = snapshot.generated_at;
+    if (pg != null && ng != null && !(Number(ng) > Number(pg))) throw new Error('stale/replayed report: generated_at (' + ng + ') must be strictly newer than the last recorded snapshot (' + pg + ')');
+  }
   const seq = ledger.entries.length;
   const prev_hash = prev ? prev.entry_hash : null;
-  const snapshot = snapshotOf(report);
   const entry = { seq, prev_hash, ts: at, snapshot };
   entry.entry_hash = h(canon({ seq, prev_hash, ts: at, snapshot }));
   ledger.entries.push(entry);
@@ -149,6 +156,8 @@ export function verifyPostureDigest(digest, trustedMonitor, opts = {}) {
       const recomputedTrend = e.length > 1 ? diffSnapshots(e[e.length - 2].snapshot, e[e.length - 1].snapshot) : null;
       if (canon(recomputedCurrent) !== canon(digest.current)) return { verified: false, reason: 'recomputed current posture != signed digest' };
       if (canon(recomputedTrend) !== canon(digest.trend)) return { verified: false, reason: 'recomputed trend != signed digest (forged trend)' };
+      const recomputedSince = e[0].snapshot.generated_at ?? e[0].ts;
+      if (canon(recomputedSince) !== canon(digest.since)) return { verified: false, reason: 'recomputed since != signed digest' };
     }
     // recompute-signaling (council fix): a verdict without the ledger is signature-authentic but NOT freshness/
     // completeness-checked (it can be a stale/truncated view). Surface that, and let strict callers require it.
@@ -183,6 +192,13 @@ async function selfTest() {
   // fail-dangerous: an unverified report (wrong issuer) is REFUSED
   let refused = false; try { appendSnapshot(L, rep(a0, 400), { ed: ed(9).publicKey, mldsa: ml_dsa87.keygen(new Uint8Array(32).fill(9)).publicKey }, { at: 400 }); } catch { refused = true; }
   ok(refused && L.entries.length === 3, 'fail-dangerous: an UNVERIFIED report is refused (ledger unchanged)');
+
+  // anti-replay: a genuine but OLD report (generated_at ≤ last) replayed to the recorder is refused — otherwise it
+  // would append as "latest" and hide the intervening regression (DeepSeek 1 Jul).
+  let replayOld = false; try { appendSnapshot(L, rep(a0, 100), tIssuer, { at: 500 }); } catch { replayOld = true; }
+  ok(replayOld && L.entries.length === 3, 'anti-replay: an OLD report (generated_at 100 < last 300) → refused (ledger unchanged)');
+  let replaySame = false; try { appendSnapshot(L, rep(a2, 300), tIssuer, { at: 500 }); } catch { replaySame = true; }
+  ok(replaySame && L.entries.length === 3, 'anti-replay: a report at the SAME generated_at as last → refused (must be strictly newer)');
 
   // trend detection
   const d01 = diffSnapshots(L.entries[0].snapshot, L.entries[1].snapshot);
