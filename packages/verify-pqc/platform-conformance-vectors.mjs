@@ -1,12 +1,13 @@
 /*!
- * platform-conformance-vectors — KAT / conformance vectors for the 4 platform engines (audit artifact, Sept+ audit).
+ * platform-conformance-vectors — KAT / conformance vectors for the 5 platform engines (audit artifact, Sept+ audit).
  *
  * Same discipline as conformance-vectors.mjs: ML-DSA/SLH signing is HEDGED, so signature BYTES are NOT pinned — what
  * IS pinned (and reproducible by an independent party from the fixed seeds + inputs below) are the DETERMINISTIC
- * input-derived values: ids (monitor/gate/principal/agent/merchant/payer), the policy_id + cert_id, the monitor
- * ledger head hash, and the delegation parent_ref. (The flow genesis entry_hash is NOT pinned — it binds the hedged
- * auth signature, so it varies per run; only its deterministic ids are pinned.) Signature integrity is covered by
- * round-trip verify + negatives. Self-test: node platform-conformance-vectors.mjs
+ * input-derived values: ids (monitor/gate/principal/agent/merchant/payer/consent-controller/subject), the policy_id +
+ * cert_id + receipt_id, the monitor ledger head hash, and the delegation parent_ref. (The pqflow + pqconsentflow genesis
+ * entry_hash is NOT pinned — it binds a hedged signature [the pqpay auth / the pqconsent grant], so it varies per run;
+ * only the deterministic ids are pinned.) Signature integrity is covered by round-trip verify + negatives.
+ * Self-test: node platform-conformance-vectors.mjs
  */
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
@@ -18,6 +19,8 @@ import * as F from './pqflow.mjs';
 import * as P from './pqpay.mjs';
 import * as D from './pqdelegate.mjs';
 import * as C from './pqcap.mjs';
+import * as CF from './pqconsentflow.mjs';
+import * as CO from './pqconsent.mjs';
 
 const ks = (e, m) => ({ ed: { secretKey: new Uint8Array(32).fill(e), publicKey: ed25519.getPublicKey(new Uint8Array(32).fill(e)) }, mldsa: ml_dsa87.keygen(new Uint8Array(32).fill(m)) });
 const pub = (k) => ({ ed: k.ed.publicKey, mldsa: k.mldsa.publicKey });
@@ -34,6 +37,9 @@ const KAT = {
   del_principal: 'cap:trelyan:principal:v1:9d741effdfe44752edb20616e573d20aee0cd1ebe47e25cbac8429061ef721c7',
   del_agentA: 'cap:trelyan:agent:v1:c5a3462efe8dc4d30a00a489423fe56fa06fd5345eb52fe70f40f97532cf9673',
   del_parent_ref: '149b30fef9ffc8410389eb81039213c065f39ab6085dd6eb6571e340b9493bd0',
+  cf_controller: 'controller:trelyan:1ca81e6d3b32c86c807c02eb791decb908831a3b88e75d9b5c7e70bad1db0e77',
+  cf_subject: 'consent:trelyan:subject:v1:9ed5bdb6c7e3f2558b80db6750eeb19389a4f7e94aec900ad741983ff4094268',
+  cf_receipt_id: '3f976066f48467a709595fa66a9bf222b0e08202e29b06d5aa7f2e57f38a62da',
 };
 
 function selfTest() {
@@ -77,6 +83,20 @@ function selfTest() {
   ok(dlg.parent_ref === KAT.del_parent_ref, 'pqdelegate parent_ref matches KAT');
   ok(D.verifyDelegationChain([root, dlg], pub(prin), { request: { tool: 'DatabaseQuery', args: { op: 'select', limit: 5 } }, now: 1, audience: 'orch' }).verified === true, 'pqdelegate chain round-trip verifies an in-bounds request');
   ok(D.verifyDelegationChain([root, dlg], pub(prin), { request: { tool: 'DatabaseQuery', args: { op: 'select', limit: 50 } }, now: 1, audience: 'orch' }).verified === false, 'pqdelegate negative: limit 50 > delegated 10 → rejected (attenuation)');
+
+  // pqconsentflow
+  const cfCtrl = ks(21, 22), cfSub = ks(23, 24);
+  const cfRcpt = CO.grantConsent({ subjectKeys: cfSub, controller: 'vaulthealth', purposes: ['ai_coaching'], categories: ['HEART_RATE'], legalBasis: 'GDPR-Art-9-2-a', nonce: 'kat-cf' });
+  ok(CF.makeControllerId(cfCtrl) === KAT.cf_controller && cfRcpt.subject === KAT.cf_subject && cfRcpt.receipt_id === KAT.cf_receipt_id, 'pqconsentflow controller + subject + receipt_id match KAT');
+  const cfFlow = CF.openConsentFlow({ receipt: cfRcpt, subjectPub: pub(cfSub), controllerKeys: cfCtrl, at: 1 });
+  CF.logAccess(cfFlow, { purpose: 'ai_coaching', category: 'HEART_RATE', controllerKeys: cfCtrl, nonce: 'kat-a1', at: 2 });
+  const cfV = CF.verifyConsentFlow(cfFlow, pub(cfSub), pub(cfCtrl));
+  ok(cfV.verified === true && cfV.compliant === true, 'pqconsentflow grant+access round-trip verifies + compliant (entry_hash NOT pinned — binds the hedged subject signature)');
+  { const w = CF.openConsentFlow({ receipt: cfRcpt, subjectPub: pub(cfSub), controllerKeys: cfCtrl, at: 1 });
+    CF.logAccess(w, { purpose: 'ai_coaching', category: 'HEART_RATE', controllerKeys: cfCtrl, nonce: 'kat-a2', at: 250 });
+    CF.withdraw(w, { revocation: CO.revokeConsent({ subjectKeys: cfSub, receiptId: cfRcpt.receipt_id, revokedAt: 200 }), subjectPub: pub(cfSub), controllerKeys: cfCtrl, at: 260 });
+    const vw = CF.verifyConsentFlow(w, pub(cfSub), pub(cfCtrl));
+    ok(vw.verified === true && vw.compliant === false && vw.violations.some((x) => x.basis === 'revoked-at'), 'pqconsentflow negative: access at≥ the subject revoked_at → chain VERIFIED but NOT compliant (access-after-withdrawal)'); }
 
   console.log('platform-conformance-vectors: ' + pass + ' pass, ' + fail + ' fail');
   if (typeof process !== 'undefined' && process.exit) process.exit(fail ? 1 : 0);
