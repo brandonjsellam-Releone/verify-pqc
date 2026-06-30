@@ -11,10 +11,12 @@ node test-all.mjs            # every module self-test + the four assurance harne
 node kat-conformance.mjs     # deterministic NIST-style KATs (ML-KEM-1024 / ML-DSA-87 / SLH-DSA-SHAKE-256s)
 node spine-vectors.mjs       # PINNED transparency-spine vectors (must reproduce the hex)
 node vectors-crosscheck.mjs  # 42,574-case differential vs an independent RFC-6962 reference
-node fuzz-robustness.mjs     # negative/fuzz sweep (45 verifiers × 72 adversarial input classes = 3,240 calls) — asserts 0 fail-open + verifier totality
+node fuzz-robustness.mjs     # negative/fuzz sweep (52 verifiers × 72 adversarial input classes = 3,744 calls) — asserts 0 fail-open + verifier totality
+node conformance-vectors.mjs # Wave-2 cores KAT (25): pinned deterministic ids / did:trelyan / commitments reproduce from fixed seeds + round-trip & negatives (hedged ML-DSA/SLH sigs not byte-pinned)
+node product-flows.mjs       # end-to-end product lifecycles through the real cores (Shield/Agent/Market/Consent) — 16 assertions
 node tamper-binding.mjs      # signature-coverage — flips every signed field across the signing surface, asserts each is bound (781 assertions)
-node domain-separation.mjs   # 0 bare sign/verify (104 sites), 25 distinct contexts, cross-context rejection
-node canon-determinism.mjs   # canon() byte-identical across 10 modules + deterministic/injective
+node domain-separation.mjs   # 0 bare sign/verify (163 sites), 52 distinct contexts, cross-context rejection
+node canon-determinism.mjs   # canon() byte-identical across 23 modules + deterministic/injective
 ```
 All four assurance harnesses (`fuzz-robustness`, `tamper-binding`, `domain-separation`, `canon-determinism`) plus the
 differential validator run inside `test-all.mjs` too. They already caught + fixed 5 real signed-vs-checked / protocol
@@ -37,7 +39,9 @@ side-channel/constant-time (the class the harnesses cannot cover).
 ## Suggested scope priority (per the council's diligence flag)
 Audit the **spine first** (pqsign Merkle/STH/inclusion/consistency) — everything else inherits its guarantees. Then
 the hybrid handshake (pqtransport), the KEM envelope (polarseek), and the signature-context domain separation. The
-29 modules are breadth; the spine + the 4 primitives are the depth that matters.
+50+ modules are breadth; the spine + the 4 primitives are the depth that matters. The Wave-2 product cores (pqshield /
+pqcap / pqadmit / pqconsent / pqvc / pqfirmware / pqpay) are independent signed objects — each TOTAL/fail-closed, with
+its capability→property→evidence row in `ADVERSARY_MODEL.md` and a KAT in `conformance-vectors.mjs`.
 
 ## What to focus on
 - Second-preimage / domain-separation on leaf (`0x00`) vs node (`0x01`) bytes; index/tree_size binding; consistency

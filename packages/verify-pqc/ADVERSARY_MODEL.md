@@ -30,10 +30,20 @@ Tabular capability → claimed property → evidence/mitigation, per the council
 | Lying gateway claims PQ over a classical session | Defeated (transferable w/ countersig) | Attestation bound to the real transcript hash; client countersignature (pqgateway-session) |
 | Forged "grade A" over insecure findings | Caught | `verifyEvidencePack` recomputes the grade from findings (pqcbom-report) |
 | Secret smuggled into an evidence bundle | Rejected | Typed version-pinned schema allowlist + leaf-value secret scan (pqef) |
-| Tampered ciphertext / proof / signature | Rejected (fail-closed) | AEAD auth tags; signature verify; fuzz sweep = 0 fail-open OBSERVED across 3,240 inputs (verifiers made total) |
-| Malformed/adversarial input to a verifier | No crash (fail-closed) | `fuzz-robustness.mjs`: 3,240 calls (45 verifiers × 72 input classes), no throw observed; `tamper-binding.mjs` field-coverage |
+| Tampered ciphertext / proof / signature | Rejected (fail-closed) | AEAD auth tags; signature verify; fuzz sweep = 0 fail-open OBSERVED across 3,744 inputs (verifiers made total) |
+| Malformed/adversarial input to a verifier | No crash (fail-closed) | `fuzz-robustness.mjs`: 3,744 calls (52 verifiers × 72 input classes), no throw observed; `tamper-binding.mjs` 781-field coverage |
+| Stolen agent capability token (no holder key) | Useless (holder-bound) | pqcap: holder proof-of-possession over a fresh challenge; agent_pub bound to the signed agent id |
+| Over-broad tool call via an extra/unconstrained arg | Refused (least-privilege) | pqcap: arg caveats + deny_unlisted/args_allowed whitelist; strict-number arg_max; fail-closed max_uses (durable ledger) |
+| Deploy a swapped, rolled-back, or revoked build | Blocked at admission | pqadmit: artifact-digest binding (deployed binary must hash to the cert) + monotonic minVersion floor + revocation deny-set |
+| Flash a swapped or rolled-back firmware | Refused before flash | pqfirmware: manifest binds the binary's hash + version strictly-newer (anti-rollback); device verify-before-flash |
+| Forged clean grade over a vulnerable estate | Caught (grade recomputed) | pqshield: the A–F grade is re-derived by the verifier from the signed assets; FAIL-DANGEROUS scoring (unknown→CRITICAL) |
+| Process beyond / without the subject's consent | Refused (deny-by-default) | pqconsent: per-purpose×category scope, subject-signed; only the subject revokes (deny-list propagation = residual) |
+| Replay a payment authorization (double-spend) | Refused (fail-closed) | pqpay: nonce normalized to string + verifyAuthorization fail-closed without a durable seen-nonce ledger; verifyAndConsume commit-on-success |
+| Auditor known-answer reproducibility | Deterministic values reproduce | `conformance-vectors.mjs`: 25 KAT (ids / did:trelyan / derived commitments) reproduce from fixed seeds; hedged ML-DSA/SLH sigs covered by round-trip + negatives |
 
 ## Residual risks (require owner action / out of code scope)
 Third-party crypto + **side-channel** audit (timing/EM — primary deliverable); a **multi-witness gossip network**
 (equivocation/freshness/completeness for pqkt + pqvault); accredited time source / eIDAS QTSP status (pqtsa);
-HSM/PKCS#11 key custody; name-constraints/EKU for untrusted PKI intermediates. See `THREAT_MODEL.md`, `SPINE_SPEC.md`.
+HSM/PKCS#11 key custody; name-constraints/EKU for untrusted PKI intermediates; **durable atomic nonce/use ledgers**
+(pqpay/pqcap anti-replay — an in-memory ledger resets on restart) + **revocation deny-list propagation** (pqadmit/pqconsent —
+a withheld revocation admits; mitigate with short expiry + an anchored online/transparency-log check). See `THREAT_MODEL.md`, `SPINE_SPEC.md`.
