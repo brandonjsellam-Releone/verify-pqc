@@ -150,7 +150,10 @@ export function verifyPostureDigest(digest, trustedMonitor, opts = {}) {
       if (canon(recomputedCurrent) !== canon(digest.current)) return { verified: false, reason: 'recomputed current posture != signed digest' };
       if (canon(recomputedTrend) !== canon(digest.trend)) return { verified: false, reason: 'recomputed trend != signed digest (forged trend)' };
     }
-    return { verified: true, target: digest.target, current: digest.current, trend: digest.trend, seq: digest.seq, snapshot_count: digest.snapshot_count, ledger_head: digest.ledger_head };
+    // recompute-signaling (council fix): a verdict without the ledger is signature-authentic but NOT freshness/
+    // completeness-checked (it can be a stale/truncated view). Surface that, and let strict callers require it.
+    if (opts.requireFresh && !opts.ledger) return { verified: false, reason: 'requireFresh: supply the ledger to recompute current+trend (a signature-only verdict is not freshness/completeness-checked)' };
+    return { verified: true, freshness_checked: !!opts.ledger, target: digest.target, current: digest.current, trend: digest.trend, seq: digest.seq, snapshot_count: digest.snapshot_count, ledger_head: digest.ledger_head };
   } catch { return { verified: false }; }
 }
 
@@ -201,6 +204,8 @@ async function selfTest() {
   const fg = JSON.parse(JSON.stringify(dg)); fg.current.grade = fg.current.grade === 'F' ? 'A' : 'F'; // forge to a DIFFERENT grade
   ok(verifyPostureDigest(fg, tMonitor).verified === false, 'forged current grade (sig) → FAILS even without the ledger');
   ok(verifyPostureDigest(dg, tMonitor, { ledger: L }).verified === true, 'digest + matching ledger → verifies (recompute matches)');
+  ok(verifyPostureDigest(dg, tMonitor).freshness_checked === false && verifyPostureDigest(dg, tMonitor, { ledger: L }).freshness_checked === true, 'freshness_checked flag reflects whether the ledger was recomputed (council fix: signature-only ≠ fresh)');
+  ok(verifyPostureDigest(dg, tMonitor, { requireFresh: true }).verified === false, 'requireFresh without the ledger → NOT verified (no signature-only trust of a possibly-stale/truncated view)');
   // forge the trend direction but keep the sig valid by re-signing? no — verifier recomputes from the ledger:
   const dgWrongLedger = signPostureDigest({ ledger: (() => { const M = createLedger(); appendSnapshot(M, rep(a0, 100), tIssuer, { at: 100 }); return M; })(), monitorKeys: monitor, at: 100 });
   ok(verifyPostureDigest(dgWrongLedger, tMonitor, { ledger: L }).verified === false, 'a (validly-signed) digest checked against a DIFFERENT ledger → FAILS (head/recompute mismatch)');

@@ -124,7 +124,11 @@ export function verifyDecision(decision, trustedGate, opts = {}) {
       const re = evaluateAdmission({ cert: opts.cert, certIssuer: opts.certIssuer, policy: opts.policy, artifactBytes: opts.artifactBytes, now: opts.now });
       if (re.allow !== decision.allow || re.cert_id !== decision.cert_id) return { verified: false, reason: 'recomputed decision != signed decision (forged verdict)' };
     }
-    return { verified: true, allow: decision.allow, app: decision.app, cert_id: decision.cert_id, version: decision.version, policy_id: decision.policy_id };
+    // recompute-signaling (council fix): a verdict without cert+policy is signature-authentic but NOT re-derived from
+    // the certified rules. Surface that, and let strict callers force the re-evaluation.
+    const didRecompute = !!(opts.cert && opts.policy && opts.certIssuer && opts.policyAuthority);
+    if (opts.requireRecompute && !didRecompute) return { verified: false, reason: 'requireRecompute: supply cert + policy (+ pinned issuers) to re-derive the decision (a signature-only verdict is not recompute-checked)' };
+    return { verified: true, recomputed: didRecompute, allow: decision.allow, app: decision.app, cert_id: decision.cert_id, version: decision.version, policy_id: decision.policy_id };
   } catch { return { verified: false }; }
 }
 
@@ -179,6 +183,8 @@ async function selfTest() {
   ok(dec.allow === true, 'compliant GOLD cert + bound artifact → ALLOW');
   ok(verifyDecision(dec, tGate).verified === true, 'signed decision verifies under the pinned gate');
   ok(verifyDecision(dec, tGate, { cert, certIssuer: tCertIss, policy, policyAuthority: tPolAuth, artifactBytes: fw, now: 1 }).verified === true, 'decision + cert + policy → recompute-verifies');
+  ok(verifyDecision(dec, tGate).recomputed === false && verifyDecision(dec, tGate, { cert, certIssuer: tCertIss, policy, policyAuthority: tPolAuth, artifactBytes: fw, now: 1 }).recomputed === true, 'recomputed flag reflects whether the decision was re-derived (council fix: signature-only ≠ recomputed)');
+  ok(verifyDecision(dec, tGate, { requireRecompute: true }).verified === false, 'requireRecompute without cert+policy → NOT verified (no signature-only trust)');
   ok(verifyDecision(dec, { ed: ed(9).publicKey, mldsa: ml_dsa87.keygen(new Uint8Array(32).fill(9)).publicKey }).verified === false, 'wrong pinned gate → FAILS');
 
   // forged allow: flip the bit → signature breaks

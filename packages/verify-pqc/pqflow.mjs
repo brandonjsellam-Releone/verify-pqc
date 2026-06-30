@@ -91,11 +91,16 @@ function verifyEntrySig(entry, merchantPub) {
 
 // open a flow on a VERIFIED pqpay authorization. payerPub = pinned payer { ed, mldsa[, slh] }. Pass seenNonces (a
 // durable {has,add} ledger) to CONSUME the auth nonce — preventing the same authorization from opening two flows.
-export function openFlow({ auth, payerPub, merchantKeys, at = null, now = null, seenNonces }) {
+export function openFlow({ auth, payerPub, merchantKeys, at = null, now = null, seenNonces, allowUnmeteredOpen = false }) {
   if (!merchantKeys || !merchantKeys.ed || !merchantKeys.mldsa) throw new Error('merchantKeys must be { ed, mldsa[, slh] }');
-  const v = verifyAuthorization(auth, payerPub, { now, seenNonces, allowUnmeteredCheck: !seenNonces });
-  if (!v.verified) throw new Error('cannot open a flow on an UNVERIFIED authorization (fail-dangerous): ' + (v.reason || 'invalid'));
-  if (seenNonces && typeof seenNonces.add === 'function') seenNonces.add(String(auth.nonce)); // consume → single-use auth
+  // FAIL-CLOSED single-use (council fix — OpenAI): without consuming the auth nonce in a durable ledger, the SAME
+  // pqpay authorization could open multiple flows, each locally satisfying Σcaptures≤authorized → global double-spend.
+  // Require a durable seenNonces ledger to consume the nonce, unless the caller explicitly opts into a dev/non-metered open.
+  const hasLedger = seenNonces && typeof seenNonces.has === 'function' && typeof seenNonces.add === 'function';
+  if (!hasLedger && !allowUnmeteredOpen) throw new Error('openFlow requires a durable seenNonces ledger to consume the auth nonce (single-use — blocks double-open/double-spend); pass allowUnmeteredOpen:true for a dev/non-metered open');
+  const v = verifyAuthorization(auth, payerPub, { now, seenNonces: hasLedger ? seenNonces : undefined, allowUnmeteredCheck: !hasLedger });
+  if (!v.verified) throw new Error('cannot open a flow on an UNVERIFIED / replayed authorization (fail-dangerous): ' + (v.reason || 'invalid'));
+  if (hasLedger) seenNonces.add(String(auth.nonce)); // consume → the same auth cannot open a second flow
   const merchant = makeMerchantId(merchantKeys);
   const core = transitionCore({ seq: 0, prev_hash: null, auth_id: auth.id, type: 'authorize', amount: auth.amount, nonce: auth.nonce, auth_sha256: h(canon(auth)), merchant, at });
   const genesis = { ...signTransition(core, merchantKeys), auth };
@@ -197,17 +202,25 @@ async function selfTest() {
 
   // void only before capture
   const auth2 = createAuthorization({ payerKeys: payer, id: 'pay-2', payee: 'merchant:acme', amount: 500, currency: 'USD', nonce: 'n-auth2' });
-  const flow2 = openFlow({ auth: auth2, payerPub: tPayer, merchantKeys: merchant, at: 1 });
+  const flow2 = openFlow({ auth: auth2, payerPub: tPayer, merchantKeys: merchant, at: 1, allowUnmeteredOpen: true });
   voidFlow(flow2, { nonce: 'vd', merchantKeys: merchant, at: 2 });
   ok(verifyFlow(flow2, tMerch, tPayer).state.status === 'voided', 'void an uncaptured auth → voided');
-  const flow3 = openFlow({ auth: createAuthorization({ payerKeys: payer, id: 'pay-3', payee: 'm', amount: 500, currency: 'USD', nonce: 'n3' }), payerPub: tPayer, merchantKeys: merchant });
+  const flow3 = openFlow({ auth: createAuthorization({ payerKeys: payer, id: 'pay-3', payee: 'm', amount: 500, currency: 'USD', nonce: 'n3' }), payerPub: tPayer, merchantKeys: merchant, allowUnmeteredOpen: true });
   capture(flow3, { amount: 100, nonce: 'c', merchantKeys: merchant });
   let voidAfter = false; try { voidFlow(flow3, { nonce: 'v', merchantKeys: merchant }); } catch { voidAfter = true; }
   ok(voidAfter, 'void after a capture REFUSED (refund instead)');
 
   // fail-dangerous open on a bad auth
-  let badOpen = false; try { openFlow({ auth, payerPub: ks(8, 9), merchantKeys: merchant }); } catch { badOpen = true; }
+  let badOpen = false; try { openFlow({ auth, payerPub: ks(8, 9), merchantKeys: merchant, allowUnmeteredOpen: true }); } catch { badOpen = true; }
   ok(badOpen, 'fail-dangerous: open on an auth that does not verify under the payer → REFUSED');
+  // council fix (OpenAI): the SAME auth cannot open two flows (global double-spend) — a durable ledger consumes its nonce
+  const ledX = makeNonceLedger();
+  const authX = createAuthorization({ payerKeys: payer, id: 'pay-x', payee: 'm', amount: 100, currency: 'USD', nonce: 'n-x' });
+  openFlow({ auth: authX, payerPub: tPayer, merchantKeys: merchant, seenNonces: ledX });
+  let dbl = false; try { openFlow({ auth: authX, payerPub: tPayer, merchantKeys: merchant, seenNonces: ledX }); } catch { dbl = true; }
+  ok(dbl, 'double-open REFUSED: the same auth cannot open a second flow when a durable ledger consumes its nonce (no double-spend)');
+  let noLedger = false; try { openFlow({ auth: authX, payerPub: tPayer, merchantKeys: merchant }); } catch { noLedger = true; }
+  ok(noLedger, 'openFlow fail-closed: refuses to open without a durable seenNonces ledger (or explicit allowUnmeteredOpen)');
 
   // tamper-evident + forgery
   const tam = JSON.parse(JSON.stringify(flow)); tam.transitions[1].amount = 9000;
@@ -223,7 +236,7 @@ async function selfTest() {
   const slh = slh_dsa_sha2_256f.keygen(new Uint8Array(96).fill(5));
   const merch3 = { ed: merchant.ed, mldsa: merchant.mldsa, slh };
   const tMerch3 = { ed: tMerch.ed, mldsa: tMerch.mldsa, slh: slh.publicKey };
-  const f3 = openFlow({ auth: createAuthorization({ payerKeys: payer, id: 'p4', payee: 'm', amount: 200, currency: 'USD', nonce: 'n4' }), payerPub: tPayer, merchantKeys: merch3 });
+  const f3 = openFlow({ auth: createAuthorization({ payerKeys: payer, id: 'p4', payee: 'm', amount: 200, currency: 'USD', nonce: 'n4' }), payerPub: tPayer, merchantKeys: merch3, allowUnmeteredOpen: true });
   capture(f3, { amount: 200, nonce: 'cc', merchantKeys: merch3 });
   ok(typeof f3.transitions[1].slh_sig === 'string' && verifyFlow(f3, tMerch3, tPayer).verified === true, '3-leg (Ed25519∧ML-DSA∧SLH) flow verifies');
   const f3s = JSON.parse(JSON.stringify(f3)); f3s.transitions[1].slh_sig = '00';
