@@ -25,6 +25,9 @@ const nodeHash = (l, r) => H(Uint8Array.of(1), l, r);
 // STH — recursively sorted keys, minimal separators). entryLeafHash is the ONE leaf fn the spine + all consumers use.
 function canon(v) { if (v === null || typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string') return JSON.stringify(v); if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']'; return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}'; }
 const entryLeafHash = (entry) => leafHash(utf8ToBytes(canon(entry)));
+// THE canonical signed-tree-head byte serializer — the ONE place the STH signed-bytes format lives, so sign + verify +
+// any co-signing/test path can't drift out of sync (council/DeepSeek: canon() like the leaves, not JSON.stringify).
+export const sthCoreBytes = (tree_size, root_hex, ts) => utf8ToBytes(canon({ tree_size, root: root_hex, ts }));
 
 function merkleRoot(leaves) {
   if (!leaves.length) return sha256(new Uint8Array());
@@ -134,7 +137,7 @@ export class PQTransparencyLog {
   signedTreeHead(logSecret, opts = {}) {
     const root = merkleRoot(this._leaves());
     const sth = { tree_size: this.entries.length, root_hex: bytesToHex(root), ts: opts.ts ?? Date.now() };
-    const core = utf8ToBytes(JSON.stringify({ tree_size: sth.tree_size, root: sth.root_hex, ts: sth.ts }));
+    const core = sthCoreBytes(sth.tree_size, sth.root_hex, sth.ts);
     sth.sig = bytesToHex(ml_dsa87.sign(core, logSecret, { context: STH_CTX }));
     return sth;
   }
@@ -146,7 +149,7 @@ export { leafHash, entryLeafHash, verifyInclusion, verifyInclusionRFC, verifyCon
 export function verifySTH(sth, logPub) {
   if (!sth || typeof sth !== 'object' || Array.isArray(sth)) return false; // TOTAL: fail-closed on malformed STH (fuzz-robustness)
   try {
-    const core = utf8ToBytes(JSON.stringify({ tree_size: sth.tree_size, root: sth.root_hex, ts: sth.ts }));
+    const core = sthCoreBytes(sth.tree_size, sth.root_hex, sth.ts);
     return ml_dsa87.verify(hexToBytes(sth.sig), core, logPub, { context: STH_CTX });
   } catch { return false; }
 }

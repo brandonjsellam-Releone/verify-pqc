@@ -32,7 +32,7 @@
 import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
-import { PQTransparencyLog, verifySTH, leafHash, entryLeafHash, verifyInclusionRFC, verifyConsistency } from './pqsign.mjs';
+import { PQTransparencyLog, verifySTH, leafHash, entryLeafHash, verifyInclusionRFC, verifyConsistency, sthCoreBytes } from './pqsign.mjs';
 
 const AUTH_CTX = utf8ToBytes('trelyan-pqkt-auth-v1');        // authorizes the change (signed by the authorizing key)
 const POSS_CTX = utf8ToBytes('trelyan-pqkt-possession-v1');  // proves possession of the NEW key (distinct context)
@@ -331,7 +331,7 @@ function selfTest() {
   ok(monitorUpdate(sth2, sth1, [], logKey.publicKey).accept === false, 'monitor rejects a SMALLER new STH (rollback)');
   ok(monitorUpdate({ ...sth1, root_hex: bytesToHex(sha256(utf8ToBytes('forged'))) }, sth2, cons.proof.map(bytesToHex), logKey.publicKey).accept === false, 'monitor rejects an inconsistent extension (rewrite caught)');
   const fork = { tree_size: sth2.tree_size, root_hex: bytesToHex(sha256(utf8ToBytes('other-view'))), ts: sth2.ts };
-  fork.sig = bytesToHex(ml_dsa87.sign(utf8ToBytes(JSON.stringify({ tree_size: fork.tree_size, root: fork.root_hex, ts: fork.ts })), logKey.secretKey, { context: utf8ToBytes('trelyan-pqsign-sth-v1') }));
+  fork.sig = bytesToHex(ml_dsa87.sign(sthCoreBytes(fork.tree_size, fork.root_hex, fork.ts), logKey.secretKey, { context: utf8ToBytes('trelyan-pqsign-sth-v1') }));
   ok(detectEquivocation(sth2, fork, logKey.publicKey).equivocation === true, 'EQUIVOCATION detected (same size, different root, both signed)');
 
   // 10. WITNESS co-signing closes split-view: honest witnesses co-sign the real STH and REFUSE the fork
@@ -365,7 +365,7 @@ function selfTest() {
   const w5 = makeWitness(new Uint8Array(32).fill(45));
   w5.cosign(sth1, logKey.publicKey);
   const forkBig = { tree_size: sth2.tree_size + 5, root_hex: bytesToHex(sha256(utf8ToBytes('forked-branch-root'))), ts: 9 };
-  forkBig.sig = bytesToHex(ml_dsa87.sign(utf8ToBytes(JSON.stringify({ tree_size: forkBig.tree_size, root: forkBig.root_hex, ts: forkBig.ts })), logKey.secretKey, { context: utf8ToBytes('trelyan-pqsign-sth-v1') }));
+  forkBig.sig = bytesToHex(ml_dsa87.sign(sthCoreBytes(forkBig.tree_size, forkBig.root_hex, forkBig.ts), logKey.secretKey, { context: utf8ToBytes('trelyan-pqsign-sth-v1') }));
   const forkRes = w5.cosign(forkBig, logKey.publicKey, []);
   ok(forkRes.ok === false && forkRes.fork === true, 'witness REFUSES a larger head that is NOT a consistent extension of its last-signed head (fork-following blocked)');
 

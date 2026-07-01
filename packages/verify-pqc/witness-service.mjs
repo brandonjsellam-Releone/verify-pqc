@@ -13,6 +13,7 @@
  * Self-test: node witness-service.mjs
  */
 import { Witness, gossipDetectEquivocation } from './pqkt.mjs';
+import { sthCoreBytes } from './pqsign.mjs';
 import { bytesToHex } from '@noble/hashes/utils.js';
 
 const dumpState = (w) => ({ seen: [...w.seen.entries()], last: w.last });
@@ -93,7 +94,7 @@ async function selfTest() {
   const restarted = new WitnessNode({ secretKey: wKey.secretKey, publicKey: wKey.publicKey, logPub: logKey.publicKey, store });
   ok(restarted.witness.last && restarted.witness.last.size === sth2.tree_size, 'restarted node reloaded durable state (last head survived)');
   const forkBig = { tree_size: sth2.tree_size + 3, root_hex: bytesToHex(sha256(utf8ToBytes('fork'))), ts: 3 };
-  forkBig.sig = bytesToHex(ml_dsa87.sign(utf8ToBytes(JSON.stringify({ tree_size: forkBig.tree_size, root: forkBig.root_hex, ts: forkBig.ts })), logKey.secretKey, { context: utf8ToBytes('trelyan-pqsign-sth-v1') }));
+  forkBig.sig = bytesToHex(ml_dsa87.sign(sthCoreBytes(forkBig.tree_size, forkBig.root_hex, forkBig.ts), logKey.secretKey, { context: utf8ToBytes('trelyan-pqsign-sth-v1') }));
   const rf = handle(restarted, 'POST', '/cosign', { sth: forkBig, consistencyProof: [] });
   ok(rf.status === 409 && rf.body.fork === true, 'restarted node REFUSES a fork (durable state honored the guarantee)');
 
@@ -101,7 +102,7 @@ async function selfTest() {
   const w2key = ml_dsa87.keygen(new Uint8Array(32).fill(62));
   const w2 = new WitnessNode({ secretKey: w2key.secretKey, publicKey: w2key.publicKey, logPub: logKey.publicKey, store: memStore() });
   const forkAtS2 = { tree_size: sth2.tree_size, root_hex: bytesToHex(sha256(utf8ToBytes('other-view'))), ts: 2 };
-  forkAtS2.sig = bytesToHex(ml_dsa87.sign(utf8ToBytes(JSON.stringify({ tree_size: forkAtS2.tree_size, root: forkAtS2.root_hex, ts: forkAtS2.ts })), logKey.secretKey, { context: utf8ToBytes('trelyan-pqsign-sth-v1') }));
+  forkAtS2.sig = bytesToHex(ml_dsa87.sign(sthCoreBytes(forkAtS2.tree_size, forkAtS2.root_hex, forkAtS2.ts), logKey.secretKey, { context: utf8ToBytes('trelyan-pqsign-sth-v1') }));
   const realCosig = JSON.parse(JSON.stringify(r2.body)); // node already co-signed sth2 (the real view)
   const fakeCosig = w2.cosign(forkAtS2).cosig; // w2 (fresh) co-signs the fork view
   const pool = new GossipPool(logKey.publicKey, [wKey.publicKey, w2.witness.publicKey]);
