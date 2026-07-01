@@ -116,6 +116,25 @@ export function channelOpen(key, sealed) {
   const nonce = nonceFromSeq(sealed.seq), aad = nonce.slice(4);
   return gcm(key, nonce, aad).decrypt(hexToBytes(sealed.ct));
 }
+// MISUSE-RESISTANT channel (council/DeepSeek): the low-level channelSeal takes a caller-chosen seq — a caller that reuses
+// a seq within a direction would reuse an AES-GCM nonce (catastrophic). openChannel removes that footgun: an INTERNAL
+// monotonic send counter (the caller never picks the nonce) + a strictly-increasing receive guard (rejects replay/reorder).
+// role: 'initiator' sends on i2r / receives on r2i; 'responder' is the mirror. For an in-order transport.
+export function openChannel(session, role) {
+  if (!session || !session.i2r || !session.r2i || (role !== 'initiator' && role !== 'responder')) throw new Error("openChannel(session, 'initiator'|'responder')");
+  const sendKey = role === 'initiator' ? session.i2r : session.r2i;
+  const recvKey = role === 'initiator' ? session.r2i : session.i2r;
+  let sendSeq = 0, recvHigh = -1;
+  return {
+    send: (plaintext) => channelSeal(sendKey, plaintext, sendSeq++),
+    recv: (sealed) => {
+      if (!sealed || typeof sealed.seq !== 'number' || !Number.isInteger(sealed.seq) || sealed.seq <= recvHigh) throw new Error('replay/reorder rejected: seq must strictly increase');
+      const pt = channelOpen(recvKey, sealed); // AEAD auth failure throws
+      recvHigh = sealed.seq;
+      return pt;
+    },
+  };
+}
 
 /* ---------- self-test: node pqtransport.mjs ---------- */
 function selfTest() {
@@ -138,6 +157,13 @@ function selfTest() {
   ok(new TextDecoder().decode(channelOpen(d.session.i2r, s0)) === 'msg-0 over a hybrid-PQ tunnel' && new TextDecoder().decode(channelOpen(d.session.i2r, s1)) === 'msg-1', 'AEAD counter-nonce channel I->R round-trips (seq 0,1)');
   let wrongDir = false; try { channelOpen(d.session.r2i, s0); } catch { wrongDir = true; }
   ok(wrongDir, 'wrong-direction key cannot open the message');
+
+  // MISUSE-RESISTANT channel: internal send counter (no caller-chosen seq -> AES-GCM nonce reuse impossible) + replay reject
+  const chI = openChannel(c.session, 'initiator'), chR = openChannel(d.session, 'responder');
+  const m0 = chI.send('hello'), m1 = chI.send('world');
+  ok(new TextDecoder().decode(chR.recv(m0)) === 'hello' && new TextDecoder().decode(chR.recv(m1)) === 'world', 'stateful channel: internal send counter round-trips (no caller-chosen seq / no nonce reuse)');
+  let replayRej = false; try { chR.recv(m0); } catch { replayRej = true; }
+  ok(replayRej, 'stateful channel: replay (seq <= last-received) -> REJECTED (nonce-reuse + replay resistant)');
 
   // UKS / MITM identity: attacker answers with its own identity -> pin fails AND sig binds attacker id
   const M = generateIdentity(new Uint8Array(32).fill(9));
