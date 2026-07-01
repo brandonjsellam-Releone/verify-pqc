@@ -82,9 +82,12 @@ export function resolveIssuerKey(events, issuer_id, opts = {}) {
   // ORDER INDEPENDENCE (4th sweep, state-ordering): reconstruct the true sequence from the SIGNED monotonic seq —
   // NEVER trust the log's array/append order. Otherwise a malicious log places a signed revoke (seq=2) BEFORE the
   // rotation (seq=1) it follows, the revoke fails the exact-next-seq check + is dropped -> REVOKE-ROLLBACK (a revoked
-  // issuer key resolves ACTIVE). seq is signed inside the event core, so an attacker cannot forge the sort key.
+  // issuer key resolves ACTIVE). seq is signed inside the event core, so an attacker cannot forge the sort key —
+  // BUT (workflow-audit HIGH) they can POISON it: a sacrificial junk leaf with a NON-INTEGER seq makes `a.seq - b.seq`
+  // return NaN, and V8's sort then leaves the legitimately-signed events out of monotonic order -> revoke-rollback.
+  // So drop non-integer-seq leaves BEFORE sorting (they can never be a valid signed event anyway; seq is a counter).
   let ev;
-  try { ev = events.filter((e) => e && e.kind === 'pqkt-key-event' && e.issuer_id === issuer_id).sort((a, b) => (a.seq - b.seq)); } catch { return null; }
+  try { ev = events.filter((e) => e && e.kind === 'pqkt-key-event' && e.issuer_id === issuer_id && Number.isInteger(e.seq)).sort((a, b) => (a.seq - b.seq)); } catch { return null; }
   let state = 'unseen'; let cur = null; const rejected = []; const timeline = []; let effTs = -Infinity; let allFiniteTs = true;
   // effTs is the NON-DECREASING issuance time (5th sweep: max(prev, e.ts) — a rotation/revoke can never predate its
   // bootstrap). allFiniteTs gates the atTime path (6th sweep: a null/non-finite ts makes point-in-time ILL-DEFINED).
@@ -295,6 +298,12 @@ function selfTest() {
   ok(resolveIssuerKey([e0, e1, e2], 'issuer:R', { expectedBootstrap: rPin }) === null, 'honest order [bind,rot,revoke] -> REVOKED');
   ok(resolveIssuerKey([e0, e2, e1], 'issuer:R', { expectedBootstrap: rPin }) === null, 'REORDERED [bind,revoke,rot] -> STILL REVOKED (sort-by-signed-seq defeats the rollback)');
   ok(resolveIssuerKey([e2, e1, e0], 'issuer:R', { expectedBootstrap: rPin }) === null, 'fully shuffled -> STILL REVOKED');
+  // 7c. SEQ-POISONING regression (workflow-audit HIGH): a sacrificial junk leaf with a NON-INTEGER seq must not poison
+  // the sort comparator (a.seq-b.seq -> NaN mis-orders the signed events -> revoke stranded -> rollback). It is dropped.
+  const junk = { kind: 'pqkt-key-event', op: 'bind', issuer_id: 'issuer:R', seq: 'x', pubkey_hex: '00', prev_key_hex: null, auth_sig: '00', possession_sig: null, ts: 5 };
+  const perms = [[e0, e1, e2], [e0, e2, e1], [e2, e1, e0], [e1, e0, e2], [e2, e0, e1], [e1, e2, e0]];
+  ok(perms.every((ord) => resolveIssuerKey([junk, ...ord], 'issuer:R', { expectedBootstrap: rPin }) === null), 'seq-poison junk leaf (seq="x") across ALL orderings -> STILL REVOKED (non-integer seq dropped, 0 leak)');
+  ok(resolveIssuerKey([e1, junk, e2, junk, e0], 'issuer:R', { expectedBootstrap: rPin }) === null, 'multiple seq-poison leaves interleaved -> STILL REVOKED');
   // 7c. atTime point-in-time (4th + 5th sweep): the timeline uses a NON-DECREASING effective ts, so (a) a revoke is
   // never stranded/dropped by atTime (4th-sweep bug) and (b) a rotation can't predate its bootstrap (5th-sweep sibling).
   const Sk = ml_dsa87.keygen(new Uint8Array(32).fill(79)), Sk2 = ml_dsa87.keygen(new Uint8Array(32).fill(80));

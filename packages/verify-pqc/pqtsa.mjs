@@ -81,7 +81,12 @@ export function verifyTimestampThreshold(tst, trustedTsaPubs, minSigners = 1) {
 // verifies the legacy sig at stamp time (Ed25519 inline; other algs via the caller's `legacy_verified`), then
 // PQ-timestamps the bundle so its existence + validity-at-T is provable post-quantum.
 export function restampLegacy({ content, content_sha256, legacy_alg, legacy_sig, legacy_pub, legacy_verified }, tsaSk, tsaPub, opts = {}) {
-  const cHash = content_sha256 || (content ? sha(content) : null);
+  // BIND the ATTESTED hash to the bytes we actually verify. If `content` is supplied, the attested content_sha256 MUST be
+  // sha(content) — otherwise (workflow-audit HIGH) an attacker submits content=docA + Alice's real sig over docA + a
+  // content_sha256 of an UNRELATED docB, and the token would falsely certify Alice signed docB. Refuse the decoupling.
+  const contentHash = content ? sha(content) : null;
+  if (contentHash && content_sha256 && content_sha256 !== contentHash) throw new Error('content_sha256 != sha(content): refusing to attest a hash decoupled from the verified content');
+  const cHash = contentHash || content_sha256 || null;
   let verified = !!legacy_verified;
   if (legacy_alg === 'Ed25519' && legacy_sig && legacy_pub && content) {
     try { verified = ed25519.verify(legacy_sig, content, legacy_pub); } catch { verified = false; }
@@ -144,6 +149,12 @@ function selfTest() {
   const badSig = legSig.slice(); badSig[0] ^= 1;
   const rtBad = restampLegacy({ content: doc, legacy_alg: 'Ed25519', legacy_sig: badSig, legacy_pub: legPub }, tsa.secretKey, tsa.publicKey, { ts: 1002 });
   ok(rtBad.legacy_verified_at_stamp === false, 'an invalid legacy signature is stamped as legacy_verified=false (honest)');
+  // decoupling regression (workflow-audit HIGH): a content_sha256 that differs from sha(the verified content) must be
+  // REFUSED — else the token would certify that Alice's signature (over `doc`) covers an UNRELATED document.
+  let decoupleRejected = false;
+  try { restampLegacy({ content: doc, content_sha256: 'de'.repeat(32), legacy_alg: 'Ed25519', legacy_sig: legSig, legacy_pub: legPub }, tsa.secretKey, tsa.publicKey, { ts: 1003 }); } catch { decoupleRejected = true; }
+  ok(decoupleRejected, 'content_sha256 decoupled from the verified content -> REFUSED (no false attestation of a doc never signed)');
+  ok(restampLegacy({ content: doc, content_sha256: sha(doc), legacy_alg: 'Ed25519', legacy_sig: legSig, legacy_pub: legPub }, tsa.secretKey, tsa.publicKey, { ts: 1004 }).legacy_verified_at_stamp === true, 'matching content_sha256 === sha(content) -> accepted');
 
   // 3. anchor the TST in the transparency log -> third-party verifiable inclusion
   const log = new PQTransparencyLog();

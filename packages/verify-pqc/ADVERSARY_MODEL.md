@@ -25,7 +25,8 @@ Tabular capability → claimed property → evidence/mitigation, per the council
 | Malicious log equivocates (split view) | Detectable ONLY with witnesses | Single log can't self-detect; needs gossip/`witness-service.mjs` (residual) |
 | Malicious log serves a stale "current" state | Rollback resistance CONDITIONAL | Latest-leaf + FRESH STH required; freshness needs gossip/witnesses (residual) |
 | Log operator mints a key it doesn't control (KT) | Prevented | CONIKS authority chaining: events signed by the issuer's current key; operator can't (pqkt) |
-| Post-revoke rebind / replay (KT) | Prevented | Monotonic seq + UNSEEN→ACTIVE→REVOKED state machine (pqkt) |
+| Post-revoke rebind / replay (KT) | Prevented | Monotonic seq + UNSEEN→ACTIVE→REVOKED state machine (pqkt); events sorted by the SIGNED seq with non-integer-seq leaves DROPPED first (a sacrificial junk leaf can't NaN-poison the sort to strand a revoke) |
+| Re-stamp a legacy sig over content it never covered (TSA) | Refused | pqtsa restampLegacy binds the attested content_sha256 to sha(the bytes actually verified) — a decoupled hash is rejected (no false legal-validity proof) |
 | Stale-CRL replay (PKI) | Detected | CRL `this_update`/`next_update` + `crl_number` anti-rollback (pqpki) |
 | Lying gateway claims PQ over a classical session | Defeated (transferable w/ countersig) | Attestation bound to the real transcript hash; client countersignature (pqgateway-session) |
 | Forged "grade A" over insecure findings | Caught | `verifyEvidencePack` recomputes the grade from findings (pqcbom-report) |
