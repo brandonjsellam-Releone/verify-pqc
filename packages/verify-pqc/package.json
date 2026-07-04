@@ -1,19 +1,67 @@
 {
   "name": "@trelyan/verify-pqc",
-  "version": "0.3.0",
-  "description": "Dependency-free toolkit to inspect Falcon-1024 signatures and verify post-quantum inscriptions on Algorand (AVM falcon_verify). Optional ML-DSA-87 STH verification. Node + browser.",
+  "version": "0.4.1",
+  "description": "Post-quantum verification toolkit: dependency-free Falcon-1024 signature inspection + Algorand (AVM falcon_verify) inscription verification, ML-DSA-87 STH verification, and CLIs — pqcbom (CycloneDX 1.6 CBOM scanner, A-F readiness grade) and pqevidence (sign/verify Evidence Packs). Node + browser (core lib is dependency-free; CLIs use the optional @noble packages, installed by default).",
   "license": "MIT",
+  "author": "TRELYAN Inc.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/brandonjsellam-Releone/verify-pqc.git"
+  },
+  "homepage": "https://github.com/brandonjsellam-Releone/verify-pqc#readme",
+  "bugs": {
+    "url": "https://github.com/brandonjsellam-Releone/verify-pqc/issues"
+  },
   "main": "index.js",
   "browser": "index.js",
   "type": "commonjs",
-  "files": ["index.js", "mldsa.mjs", "slhdsa.mjs", "verify.mjs", "throndar-sth-key.mjs", "throndar-slh-key.mjs", "README.md", "LICENSE", "COMMERCIAL.md"],
+  "bin": {
+    "pqcbom": "./pqcbom-cli.mjs",
+    "pqevidence": "./pqevidence-cli.mjs"
+  },
+  "files": [
+    "index.js",
+    "mldsa.mjs",
+    "slhdsa.mjs",
+    "verify.mjs",
+    "throndar-sth-key.mjs",
+    "throndar-slh-key.mjs",
+    "pqcbom-cli.mjs",
+    "pqevidence-cli.mjs",
+    "pqcbom.mjs",
+    "pqcbom-report.mjs",
+    "pqcbom-server.mjs",
+    "pqcbom-plan.mjs",
+    "README.md",
+    "LICENSE",
+    "COMMERCIAL.md"
+  ],
   "exports": {
     ".": "./index.js",
     "./mldsa": "./mldsa.mjs",
     "./slhdsa": "./slhdsa.mjs",
     "./verify": "./verify.mjs"
   },
-  "keywords": ["post-quantum", "pqc", "falcon", "falcon-1024", "fn-dsa", "ml-dsa", "ml-dsa-87", "dilithium", "slh-dsa", "slh-dsa-256f", "sphincs", "fips-204", "fips-205", "algorand", "falcon_verify", "signature", "verification", "trelyan"],
+  "keywords": [
+    "post-quantum",
+    "pqc",
+    "falcon",
+    "falcon-1024",
+    "fn-dsa",
+    "ml-dsa",
+    "ml-dsa-87",
+    "dilithium",
+    "slh-dsa",
+    "slh-dsa-256f",
+    "sphincs",
+    "fips-204",
+    "fips-205",
+    "algorand",
+    "falcon_verify",
+    "signature",
+    "verification",
+    "trelyan"
+  ],
   "scripts": {
     "test": "node test.js",
     "test:kat": "node test-kat.mjs"
@@ -24,5 +72,7 @@
     "@noble/ciphers": "^2.2.0",
     "@noble/curves": "^2.2.0"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  }
 }
