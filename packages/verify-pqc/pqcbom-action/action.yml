@@ -1,5 +1,5 @@
 name: 'TRELYAN Post-Quantum Readiness Scorecard'
-description: 'Scan your repo for quantum-vulnerable cryptography, emit a CycloneDX CBOM + an A–F Post-Quantum Readiness grade, and optionally fail the build on banned crypto (CNSA 2.0 / NIS2 / CRA readiness).'
+description: 'Scan your repo for quantum-vulnerable crypto: A–F readiness grade + CycloneDX CBOM, and fail the build on broken crypto.'
 author: 'TRELYAN'
 branding:
   icon: 'shield'
