@@ -2,7 +2,7 @@
  * pqcbom — Cryptographic Bill of Materials scanner + quantum-readiness grader (reference, DRAFT, standalone).
  *
  * THE revenue + viral product (unanimous council): scan code/config for cryptography, classify quantum risk,
- * emit a CycloneDX-style CBOM + an A–F "Quantum-Safe Scorecard". Free tier = the shareable badge (viral funnel,
+ * emit a CycloneDX-style CBOM + an A–F "Post-Quantum Readiness Scorecard". Free tier = the shareable badge (viral funnel,
  * SSL-Labs/HIBP model); paid tier = full CBOM + migration roadmap + auditor evidence (CNSA 2.0 / NIS2 / CRA / DORA).
  *
  * It is the on-ramp to the whole TRELYAN suite: scan -> find quantum-vulnerable crypto -> migrate to our PQC
@@ -56,12 +56,13 @@ const RULES = [
   { re: /\b(Ed25519|Ed448)\b/i, algo: 'Ed25519/Ed448', family: 'signature', risk: 'classical-hybrid-ok', rec: 'OK only inside a HYBRID with ML-DSA-87' },
   // quantum-weakened (Grover halves the security level)
   { re: /\bAES-?(128|192)\b/i, algo: 'AES-128/192', family: 'cipher', risk: 'quantum-weakened', rec: 'use AES-256 (Grover halves the key strength)' },
-  { re: /\bSHA-?256\b|\bSHA3-?256\b|\bSHA-?384\b|\bSHA3-?384\b/i, algo: 'SHA-256/384', family: 'hash', risk: 'quantum-weakened', rec: 'use SHA-512 / SHA3-512 for >=256-bit quantum security' }, // +SHA3-384 (council)
+  { re: /\bSHA-?256\b|\bSHA3-?256\b/i, algo: 'SHA-256', family: 'hash', risk: 'quantum-weakened', rec: 'SHA-256 collision resistance drops to ~2^85 under quantum attack (BHT); use SHA-384/512 for >=128-bit quantum collision resistance' }, // SHA-384 split out to quantum-resistant (Gemini/CNSA-2.0 correction): SHA-256 is the borderline case, SHA-384 is not
   // quantum-safe
+  { re: /\bSHA-?384\b|\bSHA3-?384\b|\bSHA-?384(CryptoServiceProvider|Managed)\b/i, algo: 'SHA-384', family: 'hash', risk: 'quantum-safe', rec: 'OK — SHA-384 retains ~2^128 quantum collision resistance (CNSA 2.0-approved for the PQ era)' },
   { re: /\b(ML-KEM|ml_kem|Kyber|HQC|BIKE)\b/i, algo: 'ML-KEM/Kyber', family: 'kem', risk: 'quantum-safe', rec: 'OK — NIST FIPS 203' },
   { re: /\b(ML-DSA|ml_dsa|Dilithium)\b/i, algo: 'ML-DSA/Dilithium', family: 'signature', risk: 'quantum-safe', rec: 'OK — NIST FIPS 204' },
   { re: /\b(SLH-DSA|slh_dsa|SPHINCS)\b/i, algo: 'SLH-DSA/SPHINCS+', family: 'signature', risk: 'quantum-safe', rec: 'OK — NIST FIPS 205' },
-  { re: /\b(Falcon|FN-DSA)\b/i, algo: 'Falcon/FN-DSA', family: 'signature', risk: 'quantum-safe', rec: 'OK — draft FIPS 206 (diversity/on-chain leg)' },
+  { re: /\b(Falcon|FN-DSA)\b/i, algo: 'Falcon/FN-DSA', family: 'signature', risk: 'quantum-safe', rec: 'OK — FIPS 206 in development (diversity/on-chain leg)' },
   { re: /\bAES-?256\b/i, algo: 'AES-256', family: 'cipher', risk: 'quantum-safe', rec: 'OK — 256-bit (128-bit quantum)' },
   { re: /\b(SHA-?512|SHA3-?512|SHAKE-?256)\b/i, algo: 'SHA-512/SHA3-512', family: 'hash', risk: 'quantum-safe', rec: 'OK' },
   { re: /\bChaCha20(-?Poly1305)?\b/i, algo: 'ChaCha20-Poly1305', family: 'cipher', risk: 'quantum-safe', rec: 'OK — 256-bit stream AEAD' },
@@ -121,7 +122,7 @@ const RULES = [
   // .NET provider classes (algorithm fused into the class name; bare-token \b guards miss the glued suffix)
   { re: /\bMD5(CryptoServiceProvider|Managed)\b/i, algo: 'MD5', family: 'hash', risk: 'broken-classical', rec: 'REMOVE — collision-broken; use SHA-512 / SHA3-512' },
   { re: /\bSHA-?1(CryptoServiceProvider|Managed)\b/i, algo: 'SHA-1', family: 'hash', risk: 'broken-classical', rec: 'REMOVE — collision-broken; use SHA-512 / SHA3-512' },
-  { re: /\bSHA-?(256|384)(CryptoServiceProvider|Managed)\b/i, algo: 'SHA-256/384', family: 'hash', risk: 'quantum-weakened', rec: 'use SHA-512 / SHA3-512 for >=256-bit quantum security' },
+  { re: /\bSHA-?256(CryptoServiceProvider|Managed)\b/i, algo: 'SHA-256', family: 'hash', risk: 'quantum-weakened', rec: 'SHA-256 collision resistance drops to ~2^85 under quantum attack (BHT); use SHA-384/512' },
   { re: /\b(RSACryptoServiceProvider|RSACng|GetRSA(Private|Public)Key)\b/i, algo: 'RSA', family: 'pubkey', risk: 'quantum-broken', rec: 'migrate KEM->ML-KEM-1024, sig->ML-DSA-87 (hybrid during transition)' },
   { re: /\bDSA(CryptoServiceProvider|Cng)\b/i, algo: 'DSA', family: 'signature', risk: 'quantum-broken', rec: 'migrate to ML-DSA-87 / SLH-DSA' },
   { re: /\bDESCryptoServiceProvider\b/i, algo: '3DES/DES', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM' }, // TripleDESCryptoServiceProvider already caught by the Triple-?DES rule
@@ -327,7 +328,7 @@ export function scanFiles(files, opts = {}) {
   return { summary, grade, findings: findings.sort((a, b) => RISK_ORDER.indexOf(a.risk) - RISK_ORDER.indexOf(b.risk)) };
 }
 
-// A–F Quantum-Safe Scorecard (the viral badge) + a 0–100 score
+// A–F Post-Quantum Readiness Scorecard (the viral badge) + a 0–100 score
 export function gradeOf(s) {
   let score = 100;
   score -= 40 * Math.min(s.broken_classical, 2);
@@ -340,8 +341,8 @@ export function gradeOf(s) {
   else if (s.quantum_broken > 0) letter = s.quantum_safe >= s.quantum_broken ? 'C' : 'D';
   else if (s.quantum_weakened > 0) letter = 'B';
   else letter = 'A';
-  const labels = { A: 'Quantum-safe', B: 'Quantum-weakened (Grover)', C: 'Migrating (hybrid present)', D: 'Quantum-vulnerable — migrate', F: 'Critical — broken crypto in use' };
-  return { letter, score, label: labels[letter], badge: 'Quantum-Safe: ' + letter };
+  const labels = { A: 'Post-Quantum Readiness', B: 'Quantum-weakened (Grover)', C: 'Migrating (hybrid present)', D: 'Quantum-vulnerable — migrate', F: 'Critical — broken crypto in use' };
+  return { letter, score, label: labels[letter], badge: 'PQ Readiness: ' + letter };
 }
 
 // CycloneDX-1.6-style CBOM (cryptography components) — the machine-readable evidence artifact
@@ -512,7 +513,9 @@ function selfTest() {
   ok(algos('HostKey ssh-dss').has('SSH RSA/DSA/ECDSA key'), 'ssh-dss is caught');
   ok(algos('DHE-RSA').has('finite-field DH'), 'DHE (ephemeral DH) is caught');
   ok(algos('RSASSA-PSS').has('RSA'), 'RSASSA is caught as RSA');
-  ok(algos('hash = SHA3-384').has('SHA-256/384'), 'SHA3-384 is caught (quantum-weakened)');
+  ok(algos('hash = SHA3-384').has('SHA-384'), 'SHA3-384 is caught');
+  { const r = scanFiles([{ name: 'h.js', text: 'SHA-256; SHA-384; SHA-512' }]); const risk = (a) => r.findings.find((f) => f.algo === a)?.risk;
+    ok(risk('SHA-256') === 'quantum-weakened' && risk('SHA-384') === 'quantum-safe' && risk('SHA-512/SHA3-512') === 'quantum-safe', 'SHA-256 is quantum-weakened but SHA-384/512 are quantum-resistant (CNSA-2.0 correction — TRELYAN PQEF itself uses SHA-384)'); }
   ok(algos('curve secp384r1').has('EC curve') && algos('P-224 curve').has('EC curve'), 'secp384r1 and P-224 EC curves are caught');
   ok(algos('ECDHE-ECDSA').has('ECDH'), 'ECDHE is caught');
 

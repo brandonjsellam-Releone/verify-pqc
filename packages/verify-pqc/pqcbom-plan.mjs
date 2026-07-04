@@ -29,7 +29,7 @@ const PHASE_DEFS = [
   { id: 4, name: 'Upgrade quantum-weakened symmetric & hash', when: '6-18 months (P2)',
     match: (f) => f.risk === 'quantum-weakened',
     why: 'Grover roughly halves the effective security level of symmetric primitives and hashes.',
-    action: 'Move AES-128/192 -> AES-256-GCM; SHA-256/384 -> SHA-512 / SHA3-512.' },
+    action: 'Move AES-128/192 -> AES-256-GCM; SHA-256 -> SHA-384/512.' },
   { id: 5, name: 'Confirm hybrid legs & managed crypto', when: 'Ongoing (P3)',
     match: (f) => f.risk === 'classical-hybrid-ok',
     why: 'Classical curves (X25519/Ed25519) are safe ONLY inside a hybrid; managed KMS/HSM safety depends on the provider PQ roadmap.',

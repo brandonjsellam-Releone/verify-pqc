@@ -1,5 +1,5 @@
-name: 'TRELYAN Quantum-Safe Scorecard'
-description: 'Scan your repo for quantum-vulnerable cryptography, emit a CycloneDX CBOM + an A–F Quantum-Safe grade, and optionally fail the build on banned crypto (CNSA 2.0 / NIS2 / CRA readiness).'
+name: 'TRELYAN Post-Quantum Readiness Scorecard'
+description: 'Scan your repo for quantum-vulnerable cryptography, emit a CycloneDX CBOM + an A–F Post-Quantum Readiness grade, and optionally fail the build on banned crypto (CNSA 2.0 / NIS2 / CRA readiness).'
 author: 'TRELYAN'
 branding:
   icon: 'shield'
@@ -19,9 +19,9 @@ inputs:
     default: ''
 outputs:
   grade:
-    description: 'Quantum-Safe grade (A–F)'
+    description: 'Post-Quantum Readiness grade (A–F)'
   score:
-    description: 'Quantum-Safe score (0–100)'
+    description: 'Post-Quantum Readiness score (0–100)'
   sarif-file:
     description: 'Path to the SARIF 2.1.0 report (upload via github/codeql-action/upload-sarif to populate the Security tab)'
   cbom-file:
