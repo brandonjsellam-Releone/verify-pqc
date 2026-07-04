@@ -46,7 +46,7 @@ const RULES = [
   { re: /\b(3DES|Triple-?DES|DESede(?!d)|DES-(EDE3?|CBC|ECB|OFB|CFB)|DES(?![\w-]))/i, algo: '3DES/DES', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM' }, // bare DES + DESede + DES modes; DES(?![\w-]) so "DES-less"/"description" are NOT matched; DESede(?!d) so the "DESeded" build flavour is NOT matched (adversary FP) while DESedeKeySpec still is
   // quantum-broken (Shor): public-key
   { re: /\bRSA(SSA|ES)?\b|RSA-?(512|768|1024|2048|3072|4096)|RSA_(public|private)_(en|de)crypt|RSA_PKCS1|PKCS#?1\b/i, algo: 'RSA', family: 'pubkey', risk: 'quantum-broken', rec: 'migrate KEM->ML-KEM-1024, sig->ML-DSA-87 (hybrid during transition)' }, // PKCS#?1\b so PKCS#11 (HSM) is NOT matched; +512/768 weak sizes + RSA_public/private_encrypt + RSA_PKCS1 underscore forms (adversary FN)
-  { re: /(?<![\w-])DSA(?![\w-])/i, algo: 'DSA', family: 'signature', risk: 'quantum-broken', rec: 'migrate to ML-DSA-87 / SLH-DSA' }, // not preceded/followed by word-char or '-' so ML-DSA/SLH-DSA/ECDSA are NOT matched
+  { re: /(?<![\w-])DSA(?![\w-])(?!\s+\()/i, algo: 'DSA', family: 'signature', risk: 'quantum-broken', rec: 'migrate to ML-DSA-87 / SLH-DSA' }, // not preceded/followed by word-char or '-' so ML-DSA/SLH-DSA/ECDSA are NOT matched; (?!\s+\() so an acronym being DEFINED — "DSA (Digital Services Act)" / "DSA (Democratic..." — is NOT matched (adversary FP; DORA/NIS2 audience), while a call "DSA(key)" (no space) and prose "DSA signing" still are
   { re: /\bECDSA\b/i, algo: 'ECDSA', family: 'signature', risk: 'quantum-broken', rec: 'migrate to ML-DSA-87 (keep ECDSA only as a HYBRID leg)' },
   { re: /\bECDHE?\b|\bECIES\b/i, algo: 'ECDH', family: 'kem', risk: 'quantum-broken', rec: 'migrate to ML-KEM-1024 (+ X25519 in HYBRID)' }, // +ECDHE (council)
   { re: /\b(secp(224|256|384|521)(r1|k1)|prime256v1|P-(224|256|384|521)|brainpool)\b/i, algo: 'EC curve', family: 'pubkey', risk: 'quantum-broken', rec: 'EC curve is Shor-broken; move to ML-KEM/ML-DSA (hybrid)' }, // +secp384r1/521r1/224r1, P-224 (council)
@@ -156,7 +156,7 @@ const RULES = [
   { re: /(?<![\d.])1\.3\.36\.3\.3\.2\.8\.1\.1\.\d+(?![\d.])/, algo: 'EC curve (brainpool OID)', family: 'pubkey', risk: 'quantum-broken', rec: 'brainpool curve by OID — Shor-broken EC' },
   // regional / national legacy families (anchored to crypto context to avoid common-word FP)
   { re: /\bGOST[-_ ]?(R[-_ ]?)?34[._]?1[01]\b|\bGOST[-_ ]?(3410|2012)(?!\d)/i, algo: 'GOST R 34.10/34.11 (legacy)', family: 'signature', risk: 'quantum-broken', rec: 'GOST R 34.10 (EC/DLP sig, Shor-broken) / 34.11 (Streebog) — non-NIST; migrate to ML-DSA-87 / SHA-512' }, // (?!\d) so gost2012_256 matches ('_' not a digit)
-  { re: /\bGOST[-_ ]?(28147|89|3412)\b|\b(Kuznyechik|Streebog|Magma)\b/i, algo: 'GOST cipher/hash (legacy)', family: 'cipher', risk: 'broken-classical', rec: 'GOST 28147/Magma (64-bit) / Kuznyechik / Streebog — non-NIST legacy; migrate to AES-256 / SHA-512 + PQC' },
+  { re: /\bGOST[-_ ]?(28147|89|3412)\b|\b(Kuznyechik|Streebog)\b|\bmagma[-_/.](cbc|ecb|cfb|ofb|ctr|gcm|cipher|new)|\b(cipher|algorithm|algo|gost)[-_/:= ]{1,3}magma\b/i, algo: 'GOST cipher/hash (legacy)', family: 'cipher', risk: 'broken-classical', rec: 'GOST 28147/Magma (64-bit) / Kuznyechik / Streebog — non-NIST legacy; migrate to AES-256 / SHA-512 + PQC' }, // "Magma" anchored to crypto context (SEPARATOR+mode/.new, or a cipher/gost keyword) so the very common project name — Meta Magma mobile core, Magma CAS, magma DB — is NOT flagged (adversary FP, grade-F impact); real magma-cbc / magma.NewCipher / gost magma still caught
   { re: /\bSM3?with[-_]?SM2\b|\bSM2[-_](sign|sig|with|enc|cipher)/i, algo: 'SM2 (GM EC)', family: 'signature', risk: 'quantum-broken', rec: 'SM2 — GM/T elliptic-curve, Shor-broken; migrate to ML-DSA-87' },
   { re: /\bSM4[-_/](CBC|ECB|GCM|CTR|OFB|CFB)\b/i, algo: 'SM4 (GM cipher)', family: 'cipher', risk: 'quantum-weakened', rec: 'SM4 — 128-bit GM block cipher; Grover-weakened; prefer AES-256-GCM' },
   { re: /\bSEED[-/](CBC|ECB|CFB|OFB|GCM)\b/i, algo: 'SEED (legacy cipher)', family: 'cipher', risk: 'quantum-weakened', rec: 'SEED — 128-bit Korean legacy block cipher; prefer AES-256-GCM' },
@@ -179,7 +179,7 @@ const LIB_RULES = [
   { re: /\b(liboqs|oqs|pqcrypto|pqclean|open-quantum-safe)\b/i, algo: 'lib:liboqs/pqcrypto', risk: 'quantum-safe', rec: 'OK — post-quantum library present' },
   { re: /@noble\/post-quantum/i, algo: 'lib:@noble/post-quantum', risk: 'quantum-safe', rec: 'OK — PQ primitives (FIPS 203/204/205)' },
   { re: /\b(libsodium|sodium-native|tweetnacl)\b/i, algo: 'lib:libsodium/nacl', risk: 'classical-hybrid-ok', rec: 'modern classical crypto (X25519/Ed25519/ChaCha20) — pair with PQ' },
-  { re: /\b(rustls|ring)\b/i, algo: 'lib:rustls/ring', risk: 'classical-hybrid-ok', rec: 'Rust TLS/crypto — verify TLS 1.3 + plan a PQ KEM' },
+  { re: /\brustls\b|(?<![\w-])ring(?![\w-])/i, manifests: /Cargo\.(toml|lock)$/i, algo: 'lib:rustls/ring', risk: 'classical-hybrid-ok', rec: 'Rust TLS/crypto — verify TLS 1.3 + plan a PQ KEM' }, // Rust-only crates: gate to Cargo manifests + require the exact `ring` token so the npm `ring-buffer`/`ring-*` packages (NOT the Rust crypto crate) do not false-positive (adversary FP)
   // --- v0.3: more crypto libraries (manifest-context keeps false positives low) ---
   { re: /\b(wolfssl|wolfcrypt|mbedtls|mbed[-_]?crypto|boringssl)\b/i, algo: 'lib:wolfSSL/mbedTLS/BoringSSL', risk: 'classical-hybrid-ok', rec: 'embedded TLS/crypto — verify TLS 1.3 + the provider PQ KEM support/roadmap' },
   { re: /\bcircl\b/i, algo: 'lib:CIRCL', risk: 'quantum-safe', rec: 'OK — Cloudflare CIRCL (ML-KEM/ML-DSA present); verify the PQ algos are actually used' },
@@ -190,6 +190,7 @@ const LIB_RULES = [
 function scanManifest(filename, text) {
   const found = new Map();
   for (const r of LIB_RULES) {
+    if (r.manifests && !r.manifests.test(filename)) continue; // rule scoped to a manifest kind (e.g. Rust `ring`/`rustls` -> Cargo only)
     if (!r.re.test(String(text))) continue;
     found.set(r.algo, { file: filename, context: 'dependency', confidence: 'likely', algo: r.algo, family: 'library', risk: r.risk, rec: r.rec, count: 1, code_count: 1, comment_count: 0, lines: [] });
   }
@@ -581,6 +582,19 @@ function selfTest() {
   ok(algos('gost28147.NewCipher(key)').has('GOST cipher/hash (legacy)') && algos('newkey gost2012_256').has('GOST R 34.10/34.11 (legacy)'), 'v0.8 FN: GOST 28147 cipher + GOST 2012 sig');
   ok(algos('hashlib.sha224(x)').has('SHA-224') && algos('kdf = PBKDF1(pw, salt)').has('PBKDF1 (weak KDF)') && algos('getParameterSpec("secp160r1")').has('EC curve (legacy)'), 'v0.8 FN: SHA-224 / PBKDF1 / secp160r1');
   ok(algos('RC2.new(key, RC2.MODE_ECB)').has('RC2') && algos('mcrypt_encrypt(MCRYPT_RC2, k)').has('RC2'), 'v0.8 FN: RC2.new / MCRYPT_RC2');
+
+  // --- v0.9: empirical FP corpus (popular OSS project names / target-audience acronyms that collided) ---
+  // Magma is a very common project name (Meta Magma mobile core, Magma CAS, magma DB) — bare "Magma" must NOT flag GOST (was grade-F)
+  ok(scanManifest('package.json', '{"dependencies":{"magma":"^1.2.0"}}').filter((f) => /GOST/.test(f.algo)).length === 0, 'v0.9 FP: "magma" dependency is NOT GOST (popular project name)');
+  ok(scanText('r.md', 'We deploy on Magma, the mobile core; magma-cooled reactors.').filter((f) => /GOST/.test(f.algo)).length === 0, 'v0.9 FP: "Magma" project/word is NOT GOST');
+  ok(algos('cipher = magma-cbc').has('GOST cipher/hash (legacy)') && algos('gost magma').has('GOST cipher/hash (legacy)') && algos('magma.NewCipher(k)').has('GOST cipher/hash (legacy)'), 'v0.9: real GOST Magma (magma-cbc / gost magma / magma.new) still caught');
+  // Rust `ring`/`rustls` are Cargo-only — the npm `ring-buffer` / `ring-*` packages must NOT trip the crypto-lib rule
+  ok(scanManifest('package.json', '{"dependencies":{"ring-buffer":"^1.0.0","clustering":"^2.0.0"}}').filter((f) => /ring/.test(f.algo)).length === 0, 'v0.9 FP: npm ring-buffer is NOT the Rust `ring` crate (gated to Cargo + exact token)');
+  ok(scanManifest('Cargo.toml', 'ring = "0.17"\nrustls = "0.23"').some((f) => f.algo === 'lib:rustls/ring'), 'v0.9: real Cargo ring/rustls dependency still caught');
+  ok(scanManifest('Cargo.toml', 'ring-channel = "0.12"').filter((f) => /ring/.test(f.algo)).length === 0, 'v0.9 FP: even in Cargo, ring-channel (hyphenated) is not the ring crate');
+  // "DSA" as a defined acronym — Digital Services Act (DORA/NIS2 audience) / Democratic Socialists — must NOT flag DSA
+  ok(scanText('policy.md', 'Compliance under the DSA (Digital Services Act) and the DSA (Democratic Socialists).').filter((f) => f.algo === 'DSA').length === 0, 'v0.9 FP: "DSA (Digital Services Act)" acronym-definition is not the DSA algorithm');
+  ok(algos('legacy DSA signing').has('DSA') && algos('KeyPairGenerator.getInstance("DSA")').has('DSA') && algos('DSA(key)').has('DSA'), 'v0.9: real DSA (prose "DSA signing" / getInstance("DSA") / DSA(key) call) still caught');
 
   // --- suppression: inline `pqcbom-ignore` + allowlist (adoption escape hatch) ---
   const inlIgnore = scanFiles([{ name: 'a.js', text: 'const k = RSA.gen(2048); // pqcbom-ignore: accepted legacy' }]);

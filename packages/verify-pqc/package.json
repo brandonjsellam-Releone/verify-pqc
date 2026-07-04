@@ -1,6 +1,6 @@
 {
   "name": "@trelyan/verify-pqc",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Post-quantum verification toolkit: dependency-free Falcon-1024 signature inspection + Algorand (AVM falcon_verify) inscription verification, ML-DSA-87 STH verification, and CLIs — pqcbom (CycloneDX 1.6 CBOM scanner, A-F readiness grade) and pqevidence (sign/verify Evidence Packs). Node + browser (core lib is dependency-free; CLIs use the optional @noble packages, installed by default).",
   "license": "MIT",
   "author": "TRELYAN Inc.",
