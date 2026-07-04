@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: brandonjsellam-Releone/verify-pqc/packages/verify-pqc/pqcbom-action@main
+      - uses: brandonjsellam-Releone/pq-readiness-scorecard@v1
         with:
           path: .
           fail-on: broken-classical    # fail the build on classically-broken crypto
