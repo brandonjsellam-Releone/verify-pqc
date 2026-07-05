@@ -47,6 +47,11 @@
  * JOSE set (triple FP-safe gate; JWE/COSE/JWKS/config look-alikes rejected). (2) HARVEST-NOW-DECRYPT-LATER flag —
  * key-establishment findings (KEM/DH/ECDH/X25519 key agreement + RSA-OAEP/static-RSA key transport) tagged hndl/
  * urgency='harvest-now' (orthogonal to the grade) and lifted to migration phase 2; RSA SIGNATURES stay forge-later.
+ * v0.12 (binary keystores): the directory walker reads the HEADER of .p12/.pfx/.jks/.jceks/.keystore/.ppk files and,
+ * DOUBLE-GATED (extension AND magic bytes: JKS 0xFEEDFEED, JCEKS 0xCECECECE, PKCS#12 30 82..02 01 03, PuTTY text
+ * header), flags "key material present — verify the inner algorithm" as classical-hybrid-ok (never overclaims
+ * quantum-broken on an unparsed file). ext-matched-but-no-magic files surface as summary.keystores_unverified. Plus
+ * text PEM private-key headers (OpenSSH/PGP). Binary layer is walker/Node-only (the browser paste-scan never sees it).
  * Self-test: node pqcbom.mjs
  */
 const RULES = [
@@ -84,6 +89,10 @@ const RULES = [
   { re: /\b(ES256K?|ES384|ES512)\b/, algo: 'JWT ECDSA (ES)', family: 'signature', risk: 'quantum-broken', rec: 'ECDSA-signed JWT — plan ML-DSA-87 (hybrid)' },
   { re: /\bssh-rsa\b|\bssh-dss\b|\becdsa-sha2-/i, algo: 'SSH RSA/DSA/ECDSA key', family: 'signature', risk: 'quantum-broken', rec: 'SSH key Shor-broken; add sntrup761x25519 KEX + plan PQ' }, // +ssh-dss (council)
   { re: /\bssh-ed25519\b/i, algo: 'SSH Ed25519 key', family: 'signature', risk: 'classical-hybrid-ok', rec: 'OK as the classical leg; pair with PQ KEX (sntrup761x25519)' },
+  // v0.12: private-key PEM headers (exact, case-sensitive => FP-safe). These carry key material but no algorithm text —
+  // classed 'verify' (classical-hybrid-ok): could be Ed25519 (hybrid-ok) or RSA/ECDSA (quantum-broken); we don't parse it.
+  { re: /-----BEGIN OPENSSH PRIVATE KEY-----/, algo: 'OpenSSH private key', family: 'keymgmt', risk: 'classical-hybrid-ok', rec: 'OpenSSH private key — could be Ed25519 (hybrid-ok) or RSA/ECDSA (quantum-broken); verify the key type (ssh-keygen -lf) and plan PQ' },
+  { re: /-----BEGIN PGP PRIVATE KEY BLOCK-----/, algo: 'PGP private key', family: 'keymgmt', risk: 'classical-hybrid-ok', rec: 'PGP/GPG private key block — typically RSA/ECC (quantum-broken); verify + plan migration' },
   { re: /\bsntrup761(x25519)?\b/i, algo: 'sntrup761 (SSH PQ KEX)', family: 'kem', risk: 'quantum-safe', rec: 'OK — PQ-hybrid SSH key exchange' },
   { re: /\b(AWS[-\s]?KMS|Azure[-\s]?Key[-\s]?Vault|(GCP|Google[-\s]?Cloud)[-\s]?KMS|CloudHSM|PKCS#?11|\bHSM\b)\b/i, algo: 'managed KMS/HSM', family: 'keymgmt', risk: 'classical-hybrid-ok', rec: 'managed crypto — verify the provider PQ roadmap + key-type support' },
   { re: /\b(Classic[-\s]?McEliece|FrodoKEM|NTRU(-?HPS|-?HRSS)?|NTRU[-\s]?Prime)\b/i, algo: 'Classic McEliece / Frodo / NTRU', family: 'kem', risk: 'quantum-safe', rec: 'OK — PQ KEM (NIST round/alternate)' },
@@ -318,6 +327,35 @@ function commentRegions(line, startInBlock) {
 }
 const inComment = (idx, regions) => regions.some(([s, e]) => idx >= s && idx < e);
 
+// ---- v0.12: BINARY KEYSTORE detection (walker/Node only; the in-browser paste-scan never sees binary files, so the
+// funnel copy divergence is deliberate). A keystore carries key material with NO algorithm text, so every text/OID/blob
+// layer misses it. DOUBLE-GATED for FP-safety: the file EXTENSION must match AND the magic bytes must match — neither
+// alone fires. Only a small HEADER is read (never the whole file), and the ASN.1 is NEVER parsed, so we cannot know the
+// inner key algorithm — the finding says exactly that and is classed 'classical-hybrid-ok' (verify), NEVER asserting
+// quantum-broken on a file we did not parse (claim hygiene: under-flag beats overclaim). Grade impact is the same mild
+// -1 as any other classical-hybrid-ok finding, so it uses the existing risk class and cannot break Evidence-Pack grade
+// recomputation. ----
+const KEYSTORE_EXT = /\.(p12|pfx|jks|jceks|keystore|bks|ppk)$/i;
+function detectKeystore(filename, headBuf) {
+  if (!headBuf || headBuf.length < 8) return null;
+  const ext = (String(filename).match(/\.([a-z0-9]+)$/i) || [, ''])[1].toLowerCase();
+  const b = headBuf, ascii = headBuf.slice(0, 24).toString('latin1');
+  const finding = (kind) => ({ file: filename, context: 'binary', confidence: 'likely', algo: 'keystore (' + kind + ')', family: 'keymgmt', risk: 'classical-hybrid-ok', rec: 'binary ' + kind + ' keystore — key material present; this scanner does NOT parse it, so verify the inner key algorithm (typically RSA/ECC = quantum-broken unless already migrated) and plan a PQ hybrid', count: 1, code_count: 1, comment_count: 0, lines: [] });
+  if (/^(jks|jceks|keystore|bks)$/.test(ext)) {
+    if (b[0] === 0xFE && b[1] === 0xED && b[2] === 0xFE && b[3] === 0xED) return finding('JKS');     // JKS magic 0xFEEDFEED
+    if (b[0] === 0xCE && b[1] === 0xCE && b[2] === 0xCE && b[3] === 0xCE) return finding('JCEKS');   // JCEKS magic 0xCECECECE
+    return null; // extension matched but no keystore magic — surfaced as keystores_unverified by the walker
+  }
+  if (/^(p12|pfx)$/.test(ext)) {
+    // PKCS#12 PFX = DER SEQUENCE (30 82 LL LL) whose first element is version INTEGER 3 (02 01 03) at offset 4 — this
+    // distinguishes a real PFX from a plain X.509 cert (which is 30 82 LL LL 30 … a TBSCertificate SEQUENCE, not an INTEGER).
+    if (b[0] === 0x30 && b[1] === 0x82 && b[4] === 0x02 && b[5] === 0x01 && b[6] === 0x03) return finding('PKCS#12');
+    return null;
+  }
+  if (ext === 'ppk') { if (ascii.startsWith('PuTTY-User-Key-File-')) return finding('PuTTY'); return null; }
+  return null;
+}
+
 // inline suppression marker: a line containing `pqcbom-ignore` (e.g. `key = RSA.gen() // pqcbom-ignore: accepted, legacy`)
 // suppresses findings on THAT line — counted (summary.suppressed), never graded. Adoption needs an escape hatch.
 const IGNORE_MARK = /pqcbom-ignore/i;
@@ -393,6 +431,10 @@ export function riskTally(findings, gradeContext = 'total') {
 export function scanFiles(files, opts = {}) {
   const per = files.map((f) => scanText(f.name, f.text));
   let findings = per.flat();
+  // v0.12: pre-built findings from a binary layer the text scan can't produce (keystore headers from scanDirectory).
+  // Concatenated BEFORE the allowlist filter so `.pqcbomignore` / ignoreAlgos apply to them too, and BEFORE riskTally so
+  // the grade stays a pure function of ALL findings (Evidence-Pack verification recomputes identically).
+  if (Array.isArray(opts.extraFindings) && opts.extraFindings.length) findings = findings.concat(opts.extraFindings);
   let suppressed = per.reduce((n, a) => n + (a.suppressed || 0), 0); // inline `pqcbom-ignore` hits
   // allowlist: opts.ignoreAlgos (or a .pqcbomignore file via scanDirectory) — accept findings by exact algo label OR
   // risk class (case-insensitive). Accepted findings are DROPPED from grading + listing, counted in summary.suppressed.
@@ -506,8 +548,11 @@ function globToRe(pattern) {
 
 // directory walker for the CLI / dogfood (node only)
 export async function scanDirectory(dir, opts = {}) {
-  const { readdirSync, readFileSync, lstatSync } = await import('fs');
+  const { readdirSync, readFileSync, lstatSync, openSync, readSync, closeSync } = await import('fs');
   const { join, extname, relative } = await import('path');
+  // v0.12: read only the first N bytes of a (possibly large) binary keystore — bounded, never loads the whole file.
+  const readHeader = (p, n = 64) => { let fd; try { fd = openSync(p, 'r'); const b = Buffer.alloc(n); const got = readSync(fd, b, 0, n, 0); return b.subarray(0, got); } catch { return null; } finally { if (fd !== undefined) { try { closeSync(fd); } catch { /* ignore */ } } } };
+  const keystoreFindings = []; let keystoresUnverified = 0;
   // v0.10: pqcbom's OWN OUTPUT ARTIFACTS are never re-scanned — a scan report names every algorithm it found, so
   // re-ingesting it double-counts the repo's findings on every subsequent run (a feedback loop: scan -> report ->
   // worse grade -> report...). Exact tool-output basenames only; counted in summary.skipped_outputs, never silent.
@@ -555,15 +600,19 @@ export async function scanDirectory(dir, opts = {}) {
       if (isExcluded(p)) { excludedPaths += 1; continue; }    // v0.10 path exclude (prunes whole dirs; counted)
       if (st.isDirectory()) { walk(p); continue; }
       if (OUTPUT_ARTIFACT.test(name)) { skippedOutputs += 1; continue; } // v0.10 never re-eat our own reports
+      // v0.12: binary keystores are read as bytes (header only), double-gated (ext + magic), never text-scanned
+      if (KEYSTORE_EXT.test(name)) { const ks = detectKeystore(p, readHeader(p)); if (ks) keystoreFindings.push(ks); else keystoresUnverified += 1; continue; }
       if (!(exts.includes(extname(name)) || MANIFEST.test(name) || CONFIG_FILE.test(name)) || st.size >= 2_000_000) continue;
       try { files.push({ name: p, text: readFileSync(p, 'utf8') }); } catch (e) { skipped.push(p); }
     }
   };
   walk(dir);
-  const res = scanFiles(files, { ...opts, ignoreAlgos }); // pass gradeContext through (a CI gate grades CODE, not comment mentions)
+  const res = scanFiles(files, { ...opts, ignoreAlgos, extraFindings: keystoreFindings }); // gradeContext + binary keystore findings
+  res.summary.files_scanned += keystoreFindings.length; // keystores we examined (header-read) count as scanned files
   if (skipped.length) res.summary.skipped_paths = skipped.length;   // surfaced, never silent
   if (excludedPaths) res.summary.excluded_paths = excludedPaths;    // paths dropped by the opt-in exclude list
   if (skippedOutputs) res.summary.skipped_outputs = skippedOutputs; // our own prior scan artifacts (always skipped)
+  if (keystoresUnverified) res.summary.keystores_unverified = keystoresUnverified; // ext matched but no magic (renamed/corrupt) — never a finding, surfaced
   return res;
 }
 
@@ -784,6 +833,44 @@ async function selfTest() {
     ok(jf && jf.count === 3 && jf.lines.join() === '1,3,3', 'v0.11.1: JWT occurrences ACCUMULATE (3 tokens -> count 3) with real line attribution (SARIF no longer points at line 1)');
     const ign = scanFiles([{ name: 'i.js', text: 'x = "' + tok + '"; // pqcbom-ignore: fixture' }]);
     ok(!ign.findings.some((f) => f.algo === 'JWT RSA (RS/PS)') && ign.summary.suppressed >= 1, 'v0.11.1: pqcbom-ignore marker now suppresses JWT findings too'); }
+
+  // --- v0.12: binary KEYSTORE detection (double-gated: extension + magic). Text PEM private-key headers too. ---
+  ok(scanText('id_ed25519', '-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEA\n-----END OPENSSH PRIVATE KEY-----').some((f) => f.algo === 'OpenSSH private key' && f.risk === 'classical-hybrid-ok'), 'v0.12: OpenSSH private-key PEM header -> classical-hybrid-ok (verify — could be Ed25519 or RSA/ECDSA)');
+  ok(scanText('key.asc', '-----BEGIN PGP PRIVATE KEY BLOCK-----\nlQ==\n-----END PGP PRIVATE KEY BLOCK-----').some((f) => f.algo === 'PGP private key'), 'v0.12: PGP private-key block detected');
+  ok(scanText('cert.pem', '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----').every((f) => !/private key/.test(f.algo)), 'v0.12 FP: a public CERTIFICATE PEM is not a private-key finding');
+  {
+    const { mkdtempSync, writeFileSync, rmSync } = await import('fs');
+    const { tmpdir } = await import('os');
+    const { join } = await import('path');
+    const root = mkdtempSync(join(tmpdir(), 'pqcbom-ks-'));
+    try {
+      writeFileSync(join(root, 'app.js'), 'const x = 1;'); // a benign real file so files_scanned has a baseline
+      writeFileSync(join(root, 'store.jks'), Buffer.from([0xFE, 0xED, 0xFE, 0xED, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01]));
+      writeFileSync(join(root, 'store.jceks'), Buffer.from([0xCE, 0xCE, 0xCE, 0xCE, 0x00, 0x00, 0x00, 0x01, 0, 0, 0, 0]));
+      writeFileSync(join(root, 'keys.p12'), Buffer.from([0x30, 0x82, 0x0A, 0x00, 0x02, 0x01, 0x03, 0x30, 0x82, 0x09, 0, 0]));
+      writeFileSync(join(root, 'putty.ppk'), 'PuTTY-User-Key-File-2: ssh-ed25519\nEncryption: none\n');
+      // FP traps
+      writeFileSync(join(root, 'realcert.p12'), Buffer.from([0x30, 0x82, 0x03, 0x00, 0x30, 0x82, 0x02, 0x00, 0, 0, 0, 0])); // a DER X.509 cert renamed .p12 (30 82 .. 30, not 02 01 03)
+      writeFileSync(join(root, 'notes.jks'), 'this is just a text file someone named .jks by mistake');
+      writeFileSync(join(root, 'random.bin'), Buffer.from([0xFE, 0xED, 0xFE, 0xED, 0, 0, 0, 0])); // right magic, wrong extension (.bin not a keystore ext)
+      const r = await scanDirectory(root);
+      const ks = (kind) => r.findings.find((f) => f.algo === 'keystore (' + kind + ')');
+      ok(ks('JKS') && ks('JKS').risk === 'classical-hybrid-ok' && ks('JKS').family === 'keymgmt' && ks('JKS').hndl !== true, 'v0.12: .jks (magic FEEDFEED) -> keystore finding, classical-hybrid-ok, NOT hndl');
+      ok(ks('JCEKS') && ks('PKCS#12') && ks('PuTTY'), 'v0.12: .jceks / .p12 (30 82 .. 02 01 03) / .ppk all detected by magic');
+      ok(!r.findings.some((f) => /keystore/.test(f.algo) && /realcert/.test(f.file)), 'v0.12 FP: a DER cert renamed .p12 (30 82 .. 30) is NOT a PKCS#12 keystore');
+      ok(r.summary.keystores_unverified === 2, 'v0.12: 2 ext-matched-but-no-magic files (realcert.p12 + notes.jks) surfaced as keystores_unverified (never a finding)');
+      ok(!r.findings.some((f) => /random\.bin/.test(f.file)), 'v0.12 FP: FEEDFEED magic in a .bin (non-keystore ext) does NOT fire — the extension gate holds');
+      ok(r.summary.files_scanned >= 5, 'v0.12: examined keystores count toward files_scanned (app.js + 4 real keystores)');
+      // keystore-only dir still GRADES (not a false "0 files"): finding present, grade not F (nothing proven broken)
+      const onlyKs = mkdtempSync(join(tmpdir(), 'pqcbom-ks2-'));
+      try {
+        writeFileSync(join(onlyKs, 'a.jks'), Buffer.from([0xFE, 0xED, 0xFE, 0xED, 0, 0, 0, 1, 0, 0, 0, 0]));
+        const r2 = await scanDirectory(onlyKs);
+        ok(r2.summary.files_scanned === 1 && r2.findings.some((f) => /keystore/.test(f.algo)) && r2.grade.letter !== 'F', 'v0.12: a keystore-only repo grades (files_scanned=1, finding present, not a false 0-files or an overclaimed F)');
+        ok(r2.summary.classical_hybrid_ok >= 1, 'v0.12: the keystore finding is counted in the classical-hybrid-ok tally (so Evidence-Pack grade recompute stays consistent)');
+      } finally { rmSync(onlyKs, { recursive: true, force: true }); }
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  }
 
   // --- suppression: inline `pqcbom-ignore` + allowlist (adoption escape hatch) ---
   const inlIgnore = scanFiles([{ name: 'a.js', text: 'const k = RSA.gen(2048); // pqcbom-ignore: accepted legacy' }]);
