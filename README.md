@@ -44,7 +44,11 @@ npx -p @trelyan/verify-pqc pqevidence pack . --keys signer.keys.json   # signed 
 - **Broken PQ candidates:** SIKE/SIDH (Castryck–Decru 2022) and GeMSS — so a project that *thinks* it migrated isn't
   left trusting something already broken.
 
-Reads inline code, declared crypto libraries, numeric OIDs (certs/ASN.1), and base64/PEM key blobs.
+Reads inline code, declared crypto libraries, numeric OIDs (certs/ASN.1), base64/PEM key blobs, and **hardcoded
+JWT/JOSE token headers** (decodes the base64url header only — never the payload — and classifies the `alg`).
+Key-establishment findings (KEM/DH/ECDH + RSA *key transport*) carry a **harvest-now-decrypt-later** urgency flag —
+recorded ciphertext is decryptable once a CRQC exists, so those migrate first; signatures are forge-later. Skip test
+fixtures with `--exclude` / `.pqcbomignore` path lines (excluded paths are counted in the output, never silent).
 
 **Honest posture:** lexical scan — findings are **leads to verify, not a complete inventory**, and **not a
 certification**. Algorithm names denote the public standards they're based on, not a CMVP/FIPS-140 validation. A scan

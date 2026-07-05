@@ -18,10 +18,14 @@ const PHASE_DEFS = [
     match: (f) => f.risk === 'broken-classical',
     why: 'Broken regardless of quantum (MD5/SHA-1/RC4/3DES/Blowfish, deprecated TLS, and broken-PQ candidates like SIKE/SIDH) — exploitable today.',
     action: 'Remove/replace immediately: hashes -> SHA-512/SHA3-512; ciphers -> AES-256-GCM; require TLS 1.2+ (1.3 preferred); never use a broken-PQ candidate.' },
-  { id: 2, name: 'Migrate quantum-broken key establishment (KEM/DH)', when: '0-6 months (P1, most urgent)',
-    match: (f) => f.risk === 'quantum-broken' && f.family === 'kem',
-    why: 'Harvest-now, decrypt-later: ciphertext recorded today becomes decryptable once a CRQC exists — the most time-urgent PQ move.',
-    action: 'Adopt ML-KEM-1024 (FIPS 203) in a HYBRID X25519+ML-KEM construction during the transition.' },
+  { id: 2, name: 'Migrate quantum-broken key establishment (KEM/DH) + RSA key transport', when: '0-6 months (P1, most urgent)',
+    // v0.11.1 (refuter fix): phase 2 takes only QUANTUM-BROKEN harvest-now findings (KEM/DH/ECDH key agreement + RSA
+    // key transport). classical-hybrid-ok hndl findings (X25519 legs) route to phase 5 "confirm hybrid" — a repo already
+    // running the recommended X25519+ML-KEM hybrid must NOT be told its most-urgent action is a 0-6-month migration.
+    // RSA SIGNATURES stay in phase 3 (forge-later): they carry a different algo label and are never hndl.
+    match: (f) => f.risk === 'quantum-broken' && (f.hndl === true || f.family === 'kem'),
+    why: 'Harvest-now, decrypt-later: ciphertext recorded today becomes decryptable once a CRQC exists — the most time-urgent PQ move. Includes RSA used to WRAP a key (RSA-OAEP / static-RSA TLS), not RSA signatures.',
+    action: 'Adopt ML-KEM-1024 (FIPS 203) in a HYBRID X25519+ML-KEM construction during the transition; replace RSA key transport with ML-KEM.' },
   { id: 3, name: 'Migrate quantum-broken public keys & signatures', when: '6-18 months (P1)',
     match: (f) => f.risk === 'quantum-broken',
     why: 'Signature forgery needs a CRQC at verification time (less immediate than KEM), but long-lived roots / code-signing / certs must migrate early.',
@@ -32,8 +36,8 @@ const PHASE_DEFS = [
     action: 'Move AES-128/192 -> AES-256-GCM; SHA-256 -> SHA-384/512.' },
   { id: 5, name: 'Confirm hybrid legs & managed crypto', when: 'Ongoing (P3)',
     match: (f) => f.risk === 'classical-hybrid-ok',
-    why: 'Classical curves (X25519/Ed25519) are safe ONLY inside a hybrid; managed KMS/HSM safety depends on the provider PQ roadmap.',
-    action: 'Pair each classical leg with a PQ KEM/sig; confirm your KMS/HSM/library PQ support + a key-rotation plan.' },
+    why: 'Classical curves (X25519/Ed25519) are safe ONLY inside a hybrid; managed KMS/HSM safety depends on the provider PQ roadmap. Classical KEY-AGREEMENT legs (X25519) are harvest-now relevant if NOT actually paired with a PQ KEM — verify the composition.',
+    action: 'Pair each classical leg with a PQ KEM/sig (verify X25519 traffic is genuinely hybrid with ML-KEM); confirm your KMS/HSM/library PQ support + a key-rotation plan.' },
 ];
 
 function effortTier(occ, distinct) {
@@ -119,6 +123,32 @@ function selfTest() {
   ok(clean.phases.length === 0 && /maintain posture/.test(clean.summary.first_action), 'all-safe scan -> no phases, maintain-posture summary');
   ok(renderMigrationPlan(clean).includes('No quantum-vulnerable'), 'render of an empty plan is the honest no-op message');
   ok(/Phase 1/.test(renderMigrationPlan(plan)) && /KEM/.test(renderMigrationPlan(plan)), 'markdown render lists the phases');
+
+  // v0.11: harvest-now-decrypt-later — an hndl-flagged RSA KEY-TRANSPORT finding lifts to phase 2, while an RSA
+  // SIGNATURE finding (not hndl) stays in phase 3 (forge-later). This is the disambiguation the scanner now surfaces.
+  const hndlReport = { grade: { letter: 'F' }, findings: [
+    { algo: 'RSA', risk: 'quantum-broken', family: 'pubkey', count: 1, rec: 'RSA key transport', hndl: true },
+    { algo: 'RSA/EC ASN.1 identifier (fused)', risk: 'quantum-broken', family: 'pubkey', count: 1, rec: 'SHA256withRSA signature' },
+  ] };
+  const hp = buildMigrationPlan(hndlReport);
+  ok(hp.phases.find((p) => p.phase === 2) && hp.phases.find((p) => p.phase === 2).algorithms.includes('RSA'), 'v0.11: hndl RSA key-transport finding -> phase 2 (harvest-now)');
+  ok(hp.phases.find((p) => p.phase === 3) && hp.phases.find((p) => p.phase === 3).algorithms.includes('RSA/EC ASN.1 identifier (fused)'), 'v0.11: non-hndl RSA signature finding stays in phase 3 (forge-later)');
+  // v0.11.1 (refuter): a repo already on the recommended X25519+ML-KEM hybrid must NOT be told "phase 2, most urgent" —
+  // classical-hybrid-ok hndl legs route to phase 5 (confirm the hybrid), and the plan's first action reflects that.
+  const hybridReport = { grade: { letter: 'A' }, findings: [
+    { algo: 'X25519/X448', risk: 'classical-hybrid-ok', family: 'kem', count: 2, rec: 'hybrid leg', hndl: true, urgency: 'harvest-now' },
+    { algo: 'ML-KEM/Kyber', risk: 'quantum-safe', family: 'kem', count: 2, rec: 'OK' },
+  ] };
+  const hb = buildMigrationPlan(hybridReport);
+  ok(!hb.phases.some((p) => p.phase === 2), 'v0.11.1: hndl+classical-hybrid-ok (X25519 leg) does NOT open phase 2');
+  ok(hb.phases.length === 1 && hb.phases[0].phase === 5 && /verify|hybrid/i.test(hb.phases[0].action), 'v0.11.1: X25519 hybrid leg routes to phase 5 (confirm hybrid composition)');
+  ok(!/Phase 2/.test(hb.summary.first_action), 'v0.11.1: grade-A hybrid scan first_action is not "Phase 2 most urgent"');
+  // and a scanner-shaped mixed finding set: transport label phase 2, generic RSA (signature) phase 3
+  const mixed = buildMigrationPlan({ grade: { letter: 'D' }, findings: [
+    { algo: 'RSA (key transport)', risk: 'quantum-broken', family: 'pubkey', count: 1, rec: 'OAEP', hndl: true, urgency: 'harvest-now' },
+    { algo: 'RSA', risk: 'quantum-broken', family: 'pubkey', count: 2, rec: 'sig' },
+  ] });
+  ok(mixed.phases.find((p) => p.phase === 2)?.algorithms.join() === 'RSA (key transport)' && mixed.phases.find((p) => p.phase === 3)?.algorithms.join() === 'RSA', 'v0.11.1: mixed file — transport label in phase 2, generic RSA (signatures) in phase 3, no contamination');
 
   console.log('pqcbom-plan self-test: ' + pass + ' pass, ' + fail + ' fail');
   if (typeof process !== 'undefined' && process.exit) process.exit(fail ? 1 : 0);

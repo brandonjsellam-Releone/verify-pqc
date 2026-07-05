@@ -16,7 +16,13 @@ npx -p @trelyan/verify-pqc pqcbom .        # A–F grade + cbom.cdx.json (Cyclon
 
 Detects RSA/ECDSA/ECDH/DH (Shor-broken), AES-128/192 + SHA-256 (Grover-weakened), MD5/SHA-1/RC4/3DES/legacy-TLS
 (classically broken), and the NIST PQC standards ML-KEM/ML-DSA/SLH-DSA (FIPS 203/204/205) as resistant — and it
-flags already-broken PQ candidates (SIKE/SIDH, GeMSS). **Lexical scan — findings are leads to verify, not a complete
+flags already-broken PQ candidates (SIKE/SIDH, GeMSS). It also **decodes hardcoded JWT/JOSE token headers**
+(base64url segment 1 only — the payload is never decoded) and classifies the `alg` (RS/PS/ES → Shor-broken,
+HS → Grover-weakened, `none` → critical unsigned), and tags **harvest-now-decrypt-later urgency** on
+key-establishment findings (KEM/DH/ECDH and RSA *key transport* like RSA-OAEP / static-RSA TLS — recorded
+ciphertext is decryptable once a CRQC exists, so migrate those FIRST; signatures are forge-later). Need to skip
+test fixtures? `--exclude test-fixtures/,examples/` or `.pqcbomignore` lines containing `/` — excluded paths are
+counted in the output, never silently dropped. **Lexical scan — findings are leads to verify, not a complete
 inventory, and not a certification.** A scan that examines zero files refuses to grade rather than reporting "A".
 Prefer a browser, nothing uploaded? → https://throndar.ai/cbom · CI GitHub Action + a signed Evidence Pack →
 https://throndar.ai/evidence

@@ -70,6 +70,9 @@ if (jsonOnly) { console.log(JSON.stringify(toCycloneDX(report), null, 2)); }
 else {
   console.log(`\n  Post-Quantum Readiness Scorecard: ${report.grade.letter}  (${report.grade.score}/100) — ${report.grade.label}`);
   console.log(`  ${report.summary.files_scanned} files · broken-classical ${report.summary.broken_classical} · quantum-broken ${report.summary.quantum_broken} · weakened ${report.summary.quantum_weakened} · hybrid-ok ${report.summary.classical_hybrid_ok} · resistant ${report.summary.quantum_safe}`);
+  // v0.11: harvest-now-decrypt-later — the migration-priority signal a CISO acts on first
+  const hndl = report.findings.filter((f) => f.hndl);
+  if (hndl.length) console.log(`  ⏳ harvest-now-decrypt-later: ${hndl.reduce((n, f) => n + (f.count || 1), 0)} key-establishment occurrence(s) across ${[...new Set(hndl.map((f) => f.algo))].join(', ')} — migrate these FIRST`);
   const nar = []; // transparency: a narrowed scan must SAY it was narrowed
   if (report.summary.excluded_paths) nar.push(`${report.summary.excluded_paths} path(s) excluded by policy (--exclude / .pqcbomignore)`);
   if (report.summary.skipped_outputs) nar.push(`${report.summary.skipped_outputs} pqcbom output artifact(s) skipped (never re-scanned)`);

@@ -42,6 +42,11 @@
  * (cbom.cdx.json/badge/SARIF/report/evidence-pack — kills the report->grade feedback loop; summary.skipped_outputs) +
  * PATH EXCLUDES (opts.excludePaths / CLI --exclude / .pqcbomignore lines with '/' or 'path:' prefix; glob *, **, ?;
  * summary.excluded_paths — a narrowed scan SAYS it was narrowed, never silent).
+ * v0.11 (deeper + smarter, workflow-designed + adversarially corpus'd): (1) JWT/JOSE token-header decode — decode a
+ * hardcoded token's base64url HEADER (segment 1 ONLY; payload NEVER decoded) + classify by "alg" in a fixed closed
+ * JOSE set (triple FP-safe gate; JWE/COSE/JWKS/config look-alikes rejected). (2) HARVEST-NOW-DECRYPT-LATER flag —
+ * key-establishment findings (KEM/DH/ECDH/X25519 key agreement + RSA-OAEP/static-RSA key transport) tagged hndl/
+ * urgency='harvest-now' (orthogonal to the grade) and lifted to migration phase 2; RSA SIGNATURES stay forge-later.
  * Self-test: node pqcbom.mjs
  */
 const RULES = [
@@ -51,7 +56,7 @@ const RULES = [
   { re: /\bRC4\b/i, algo: 'RC4', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM / ChaCha20-Poly1305' },
   { re: /\b(3DES|Triple-?DES|DESede(?!d)|DES-(EDE3?|CBC|ECB|OFB|CFB)|DES(?![\w-]))/i, algo: '3DES/DES', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM' }, // bare DES + DESede + DES modes; DES(?![\w-]) so "DES-less"/"description" are NOT matched; DESede(?!d) so the "DESeded" build flavour is NOT matched (adversary FP) while DESedeKeySpec still is
   // quantum-broken (Shor): public-key
-  { re: /\bRSA(SSA|ES)?\b|RSA-?(512|768|1024|2048|3072|4096)|RSA_(public|private)_(en|de)crypt|RSA_PKCS1|PKCS#?1\b/i, algo: 'RSA', family: 'pubkey', risk: 'quantum-broken', rec: 'migrate KEM->ML-KEM-1024, sig->ML-DSA-87 (hybrid during transition)' }, // PKCS#?1\b so PKCS#11 (HSM) is NOT matched; +512/768 weak sizes + RSA_public/private_encrypt + RSA_PKCS1 underscore forms (adversary FN)
+  { re: /\bRSA(SSA|ES)?\b(?!-?(OAEP|PKCS1)|\/(ECB|None)\/)|RSA-?(512|768|1024|2048|3072|4096)|RSA_(public|private)_(en|de)crypt|RSA_PKCS1|PKCS#?1\b/i, algo: 'RSA', family: 'pubkey', risk: 'quantum-broken', rec: 'migrate KEM->ML-KEM-1024, sig->ML-DSA-87 (hybrid during transition)' }, // PKCS#?1\b so PKCS#11 (HSM) is NOT matched; +512/768 weak sizes + RSA_public/private_encrypt + RSA_PKCS1 underscore forms (adversary FN); v0.11.1: lookahead yields RSAES-OAEP/PKCS1 + RSA/ECB|None/ transforms to the dedicated 'RSA (key transport)' rule so ONE physical token = ONE occurrence (refuter-confirmed double-count flipped C->D)
   { re: /(?<![\w-])DSA(?![\w-])(?!\s+\()/i, algo: 'DSA', family: 'signature', risk: 'quantum-broken', rec: 'migrate to ML-DSA-87 / SLH-DSA' }, // not preceded/followed by word-char or '-' so ML-DSA/SLH-DSA/ECDSA are NOT matched; (?!\s+\() so an acronym being DEFINED — "DSA (Digital Services Act)" / "DSA (Democratic..." — is NOT matched (adversary FP; DORA/NIS2 audience), while a call "DSA(key)" (no space) and prose "DSA signing" still are
   { re: /\bECDSA\b/i, algo: 'ECDSA', family: 'signature', risk: 'quantum-broken', rec: 'migrate to ML-DSA-87 (keep ECDSA only as a HYBRID leg)' },
   { re: /\bECDHE?\b|\bECIES\b/i, algo: 'ECDH', family: 'kem', risk: 'quantum-broken', rec: 'migrate to ML-KEM-1024 (+ X25519 in HYBRID)' }, // +ECDHE (council)
@@ -136,8 +141,19 @@ const RULES = [
   // require WITH (the TLS-1.2 cipher-suite shape) so benign filenames/identifiers like TLS_DRAFT_RSA_NOTES do NOT fire (adversary FP)
   { re: /\bTLS_[A-Z0-9_]*WITH[A-Z0-9_]*RC4[A-Z0-9_]*\b/, algo: 'RC4', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM / ChaCha20-Poly1305' },
   { re: /\bTLS_[A-Z0-9_]*WITH[A-Z0-9_]*(3DES|DES_EDE|DES40|DES_CBC)[A-Z0-9_]*\b/, algo: '3DES/DES', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM' },
-  { re: /\bTLS_[A-Z0-9_]*RSA[A-Z0-9_]*WITH[A-Z0-9_]*\b/, algo: 'RSA', family: 'pubkey', risk: 'quantum-broken', rec: 'RSA in a TLS cipher-suite — Shor-broken; plan ML-KEM/ML-DSA (hybrid)' },
+  { re: /\bTLS_(?!RSA(_EXPORT|_PSK)?_WITH_)[A-Z0-9_]*RSA[A-Z0-9_]*WITH[A-Z0-9_]*\b/, algo: 'RSA', family: 'pubkey', risk: 'quantum-broken', rec: 'RSA in a TLS cipher-suite — Shor-broken; plan ML-KEM/ML-DSA (hybrid)' }, // v0.11.1: (?!RSA(_EXPORT|_PSK)?_WITH_) yields the STATIC-RSA suites to the key-transport rule below (one token = one occurrence); ECDHE_RSA/DHE_RSA (forward-secret; RSA = signature) stay here WITHOUT hndl
   { re: /\bTLS_ECDHE?_[A-Z0-9_]*WITH[A-Z0-9_]*\b/, algo: 'ECDH', family: 'kem', risk: 'quantum-broken', rec: 'ECDHE in a TLS cipher-suite — Shor-broken; migrate to ML-KEM-1024 (+ X25519 hybrid)' },
+  { re: /\bTLS_DHE?_[A-Z0-9_]*WITH[A-Z0-9_]*\b/, algo: 'finite-field DH', family: 'kem', risk: 'quantum-broken', rec: 'DHE/DH in a TLS cipher-suite — finite-field key agreement, Shor-broken (and harvest-now); migrate to ML-KEM-1024' }, // v0.11.1 refuter FN: the DHE kem leg of TLS_DHE_RSA_WITH_* was invisible (\bDHE\b cannot match inside the glued constant); TLS_ECDHE does NOT match here (\bTLS_DHE anchors right after TLS_)
+  // --- v0.11: RSA KEY-TRANSPORT disambiguation (harvest-now-decrypt-later). RSA used to WRAP a symmetric key (OAEP/PKCS1
+  //     encryption, static-RSA TLS) means recorded ciphertext is decryptable once a CRQC exists — HIGHER urgency than an
+  //     RSA SIGNATURE (forge-later). v0.11.1 (refuter-driven): DISTINCT label 'RSA (key transport)' so the finding never
+  //     merges with generic-RSA signature occurrences (the hndl flag stays occurrence-accurate), and the generic rules
+  //     carry lookaheads yielding these exact tokens here — ONE physical token = ONE occurrence, grade truly unchanged.
+  //     Signature transforms (SHA256withRSA / RSASSA-PSS) deliberately do NOT match these. ---
+  { re: /\bRSA\/(ECB|None)\/(OAEP|PKCS1)/i, algo: 'RSA (key transport)', family: 'pubkey', risk: 'quantum-broken', hndl: true, rec: 'RSA key transport (RSA/ECB/OAEP|PKCS1 transform) wraps a symmetric key — harvest-now-decrypt-later; migrate to ML-KEM-1024 (hybrid) FIRST' },
+  { re: /\bRSAES-?(OAEP|PKCS1)/i, algo: 'RSA (key transport)', family: 'pubkey', risk: 'quantum-broken', hndl: true, rec: 'RSAES-OAEP/PKCS1 is the RSA ENCRYPTION scheme (key transport) — harvest-now; migrate to ML-KEM-1024 (hybrid). (RSASSA = signatures, not this.)' },
+  { re: /\b(rsautl|pkeyutl)\s+-encrypt\b/i, algo: 'RSA (key transport)', family: 'pubkey', risk: 'quantum-broken', hndl: true, rec: 'openssl rsautl/pkeyutl -encrypt wraps a key with RSA — harvest-now key transport; migrate to ML-KEM-1024 (hybrid)' },
+  { re: /\bTLS_RSA(_EXPORT|_PSK)?_WITH_[A-Z0-9_]+\b/, algo: 'RSA (key transport)', family: 'pubkey', risk: 'quantum-broken', hndl: true, rec: 'static-RSA TLS suite (TLS_RSA[_EXPORT|_PSK]_WITH_*) — RSA key transport, NO forward secrecy; recorded sessions are harvest-now decryptable; require ECDHE + plan ML-KEM-1024' }, // v0.11.1: +_EXPORT/_PSK variants (refuter FN); TLS_ECDHE_RSA_WITH is forward-secret (RSA there is a signature) and is handled by the generic rule WITHOUT hndl
   { re: /\balgorithm\s*[:=]\s*["']none["']/i, algo: 'JWT alg=none', family: 'token', risk: 'broken-classical', rec: 'CRITICAL — unsigned JWT; never accept alg:none' }, // \b before 'algorithm' excludes compression_algorithm etc.
   { re: /\bPBE[-_]?With\w*MD5/i, algo: 'MD5', family: 'hash', risk: 'broken-classical', rec: 'PBEWithMD5* (PBKDF1/MD5) — REMOVE; use PBKDF2/scrypt/Argon2 with SHA-256+' }, // JCA PBE name
   { re: /\bPBE[-_]?With\w*DES\b/i, algo: '3DES/DES', family: 'cipher', risk: 'broken-classical', rec: 'PBEWith*AndDES — DES-based PBE; REMOVE; use AES-256-GCM' }, // JCA PBE name
@@ -233,6 +249,51 @@ function scanEncodedBlobs(filename, text) {
   return [...found.values()];
 }
 
+// ---- v0.11: JWT/JOSE token-header decode — a hardcoded JWT hides its signing algorithm inside base64url, so the inline
+// RS256/ES256 rules (which only catch the BARE alg string) miss it. This decodes the token HEADER (segment 1 ONLY — the
+// payload is NEVER decoded, so no PII/secret ever enters a finding) and classifies by "alg". TRIPLE FP-safe gate:
+// (a) full three-segment header.payload.sig token shape; (b) segment 1 decodes to a JSON OBJECT; (c) its `alg` is a
+// STRING in a FIXED closed JOSE set. This zeroes the look-alikes an offensive review broke the naive gate with:
+// {alg:'blake3'} / {alg:'kmeans'} configs, JWE/COSE {alg:'A256GCM'|'dir'|'RSA-OAEP'} headers, and JWKS entries. ----
+const JOSE_KIND = {
+  RS256: 'rsa', RS384: 'rsa', RS512: 'rsa', PS256: 'rsa', PS384: 'rsa', PS512: 'rsa',
+  ES256: 'ecdsa', ES256K: 'ecdsa', ES384: 'ecdsa', ES512: 'ecdsa',
+  HS256: 'hmac', HS384: 'hmac', HS512: 'hmac', EdDSA: 'eddsa', none: 'none',
+};
+const JOSE_CLASS = {
+  rsa:   { algo: 'JWT RSA (RS/PS)', family: 'signature', risk: 'quantum-broken', rec: 'RSA-signed JWT (alg header decoded) — Shor-broken; verify the token is in use and plan ML-DSA-87 (hybrid)' },
+  ecdsa: { algo: 'JWT ECDSA (ES)',  family: 'signature', risk: 'quantum-broken', rec: 'ECDSA-signed JWT (alg header decoded) — Shor-broken; plan ML-DSA-87 (hybrid)' },
+  hmac:  { algo: 'JWT HMAC (HS)',   family: 'mac',       risk: 'quantum-weakened', rec: 'HMAC-SHA2 JWT (alg header decoded) — symmetric; Grover halves key strength (prefer HS512 + a strong rotated key); not PQ-broken' },
+  eddsa: { algo: 'JWT EdDSA',       family: 'signature', risk: 'classical-hybrid-ok', rec: 'Ed25519-signed JWT (alg header decoded) — OK only as the classical leg of a HYBRID with ML-DSA-87' },
+  none:  { algo: 'JWT alg=none',    family: 'token',     risk: 'broken-classical', rec: 'CRITICAL — unsigned JWT (alg:none header decoded); never accept alg:none' },
+};
+function b64urlToJsonObj(seg) {
+  try {
+    let b = seg.replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '=';
+    const s = (typeof Buffer !== 'undefined') ? Buffer.from(b, 'base64').toString('utf8')
+      : decodeURIComponent(atob(b).split('').map((c) => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join(''));
+    const o = JSON.parse(s);
+    return (o && typeof o === 'object' && !Array.isArray(o)) ? o : null; // must be a plain JSON object (arrays/scalars rejected)
+  } catch { return null; }
+}
+// header.payload.sig — seg1/seg2 >=8 base64url chars; seg3 MAY be empty (canonical alg:none ends in a trailing dot).
+// Trailing (?![A-Za-z0-9_-]) — NOT \b: \b cannot anchor after a literal '.', so an empty-sig none token would be missed.
+// v0.11.1 (refuter-driven): JWT scanning runs INSIDE scanText's per-line loop (tokens cannot span lines), so it inherits
+// comment-awareness (a doc-example token no longer fails a gradeContext:'code' CI gate), the pqcbom-ignore marker, real
+// line attribution for SARIF, and per-occurrence count accumulation — exactly like the inline rules.
+const JWT_RE = /(?<![A-Za-z0-9_.-])([A-Za-z0-9_-]{8,})\.([A-Za-z0-9_-]{8,})\.([A-Za-z0-9_-]*)(?![A-Za-z0-9_-])/g;
+function classifyJwtLine(line) {
+  const out = []; JWT_RE.lastIndex = 0;
+  for (let m; (m = JWT_RE.exec(line)); ) {
+    const hdr = b64urlToJsonObj(m[1]);                 // gate (a) structure implicit in the regex; (b) JSON object
+    if (!hdr || typeof hdr.alg !== 'string') continue; // alg must be a STRING
+    const kind = JOSE_KIND[hdr.alg];                   // gate (c) alg in the fixed closed JOSE set
+    if (!kind) continue;
+    out.push({ cls: JOSE_CLASS[kind], idx: m.index });
+  }
+  return out;
+}
+
 // comment detection (heuristic, SAFE-by-design): we scan the FULL line so real code is NEVER hidden (a false
 // NEGATIVE is worse than a false positive in a security scanner); we only TAG each match code vs comment by its
 // position. Handles /* */ block comments + line comments (# and // guarded against ://). Strings are not yet
@@ -263,6 +324,7 @@ const IGNORE_MARK = /pqcbom-ignore/i;
 export function scanText(filename, text) {
   const lines = String(text).split(/\r?\n/);
   const found = new Map(); // algo -> { ..., count, code_count, comment_count, lines:[] }
+  const jwtFound = new Map(); // v0.11.1: decoded JWT-header findings (kept separate so 'context: encoded' is preserved)
   let inBlock = false, suppressed = 0;
   for (let i = 0; i < lines.length; i++) {
     const { regions, endInBlock } = commentRegions(lines[i], inBlock); inBlock = endInBlock;
@@ -275,7 +337,17 @@ export function scanText(filename, text) {
       const f = found.get(r.algo) || { algo: r.algo, family: r.family, risk: r.risk, rec: r.rec, count: 0, code_count: 0, comment_count: 0, lines: [] };
       f.count += 1; if (ctx === 'code') f.code_count += 1; else f.comment_count += 1;
       if (f.lines.length < 5) f.lines.push(i + 1);
+      if (r.hndl) f.hndl = true; // hndl rules have their own DISTINCT algo label (v0.11.1), so this never contaminates a generic finding
       found.set(r.algo, f);
+    }
+    // v0.11.1: JWT/JOSE header decode per line — same comment/ignore/line semantics as the inline rules
+    for (const { cls, idx } of classifyJwtLine(lines[i])) {
+      if (ignoreLine) { suppressed += 1; continue; }
+      const ctx = inComment(idx, regions) ? 'comment' : 'code';
+      const f = jwtFound.get(cls.algo) || { algo: cls.algo, family: cls.family, risk: cls.risk, rec: cls.rec, count: 0, code_count: 0, comment_count: 0, lines: [] };
+      f.count += 1; if (ctx === 'code') f.code_count += 1; else f.comment_count += 1;
+      if (f.lines.length < 5) f.lines.push(i + 1);
+      jwtFound.set(cls.algo, f);
     }
   }
   // CONFIDENCE (the triage the assessment promises, now tool-derived from the detection SOURCE — honest: the tool can't
@@ -286,7 +358,18 @@ export function scanText(filename, text) {
   const inline = [...found.values()].map((f) => ({ file: filename, context: f.code_count > 0 ? 'code' : 'comment', confidence: f.code_count > 0 ? 'lead-to-verify' : 'informational', ...f }));
   // manifest files ALSO get the higher-signal dependency-library layer (beyond inline grep)
   const enc = scanEncodedBlobs(filename, text); // v0.5: decode base64/PEM key/cert blobs -> algorithm by DER OID
-  const out = (MANIFEST.test(filename) ? inline.concat(scanManifest(filename, text)) : inline).concat(enc);
+  // v0.11.1: JWT findings collected line-aware above; confidence follows the same code-vs-comment rule as inline findings
+  const jwt = [...jwtFound.values()].map((f) => ({ file: filename, context: 'encoded', confidence: f.code_count > 0 ? 'lead-to-verify' : 'informational', ...f }));
+  const out = (MANIFEST.test(filename) ? inline.concat(scanManifest(filename, text)) : inline).concat(enc).concat(jwt);
+  // v0.11 PART A: HARVEST-NOW-DECRYPT-LATER flag. Any KEY-ESTABLISHMENT finding (family 'kem') that is quantum-broken or
+  // a classical hybrid leg is harvest-now urgent (recorded ciphertext is decryptable once a CRQC exists) — an orthogonal
+  // prioritization signal that does NOT change the risk class or the grade. Reads the already-correct family field
+  // (ECDH/DH/X25519/ECMQV/ECIES all live in family:'kem'), so it adds ZERO new detection/FP surface. RSA key-transport
+  // findings already carry hndl from their rules (PART B). Quantum-SAFE KEMs (ML-KEM) are excluded — they are the fix.
+  for (const f of out) {
+    if (f.family === 'kem' && (f.risk === 'quantum-broken' || f.risk === 'classical-hybrid-ok')) f.hndl = true;
+    if (f.hndl) f.urgency = 'harvest-now';
+  }
   out.suppressed = suppressed; // per-file inline-suppressed occurrence count (array property; read in scanFiles)
   return out;
 }
@@ -355,14 +438,15 @@ export function gradeOf(s) {
 // CycloneDX-1.6-style CBOM (cryptography components) — the machine-readable evidence artifact
 export function toCycloneDX(report) {
   const byAlgo = new Map();
-  for (const f of report.findings) { const e = byAlgo.get(f.algo) || { ...f, occurrences: [] }; e.occurrences.push({ file: f.file, lines: f.lines }); byAlgo.set(f.algo, e); }
+  for (const f of report.findings) { const e = byAlgo.get(f.algo) || { ...f, occurrences: [] }; e.occurrences.push({ file: f.file, lines: f.lines }); if (f.hndl) e.hndl = true; byAlgo.set(f.algo, e); }
   return {
     bomFormat: 'CycloneDX', specVersion: '1.6', version: 1,
     metadata: { tools: [{ vendor: 'TRELYAN', name: 'pqcbom', version: '0.2.0-draft' }], properties: [{ name: 'trelyan:quantum-grade', value: report.grade.letter }, { name: 'trelyan:quantum-score', value: String(report.grade.score) }] },
     components: [...byAlgo.values()].map((e) => ({
       type: 'cryptographic-asset', name: e.algo,
       cryptoProperties: { assetType: 'algorithm', algorithmProperties: { primitive: e.family }, nistQuantumSecurityLevel: e.risk === 'quantum-safe' ? 5 : 0 },
-      properties: [{ name: 'trelyan:quantumRisk', value: e.risk }, { name: 'trelyan:recommendation', value: e.rec }, { name: 'trelyan:occurrences', value: JSON.stringify(e.occurrences) }],
+      properties: [{ name: 'trelyan:quantumRisk', value: e.risk }, { name: 'trelyan:recommendation', value: e.rec }, { name: 'trelyan:occurrences', value: JSON.stringify(e.occurrences) },
+        ...(e.hndl ? [{ name: 'trelyan:hndl', value: 'true' }, { name: 'trelyan:urgency', value: 'harvest-now' }] : [])],
     })),
   };
 }
@@ -374,6 +458,8 @@ const SARIF_SEV = { 'broken-classical': '9.0', 'quantum-broken': '8.0', 'quantum
 export function toSARIF(report, opts = {}) {
   const base = opts.baseDir ? opts.baseDir.replace(/\\/g, '/').replace(/\/+$/, '') + '/' : null;
   const rel = (file) => { let u = String(file || 'input').replace(/\\/g, '/'); if (base && u.startsWith(base)) u = u.slice(base.length); return u; };
+  // v0.11.1: the harvest-now tag on a RULE must not depend on which file was walked first — OR hndl per algo up front
+  const hndlAlgos = new Set(report.findings.filter((f) => f.hndl).map((f) => f.algo));
   const ruleIndex = new Map(); const rules = [];
   for (const f of report.findings) {
     if (ruleIndex.has(f.algo)) continue;
@@ -384,7 +470,7 @@ export function toSARIF(report, opts = {}) {
       shortDescription: { text: f.algo + ' — ' + f.risk },
       fullDescription: { text: String(f.rec || '') },
       defaultConfiguration: { level: SARIF_LEVEL[f.risk] || 'note' },
-      properties: { 'security-severity': SARIF_SEV[f.risk] || '0.0', tags: ['cryptography', 'post-quantum', f.risk] },
+      properties: { 'security-severity': SARIF_SEV[f.risk] || '0.0', tags: ['cryptography', 'post-quantum', f.risk, ...(hndlAlgos.has(f.algo) ? ['harvest-now'] : [])] },
       helpUri: 'https://trelyan.foundation/pqc',
     });
   }
@@ -633,6 +719,71 @@ async function selfTest() {
   // "DSA" as a defined acronym — Digital Services Act (DORA/NIS2 audience) / Democratic Socialists — must NOT flag DSA
   ok(scanText('policy.md', 'Compliance under the DSA (Digital Services Act) and the DSA (Democratic Socialists).').filter((f) => f.algo === 'DSA').length === 0, 'v0.9 FP: "DSA (Digital Services Act)" acronym-definition is not the DSA algorithm');
   ok(algos('legacy DSA signing').has('DSA') && algos('KeyPairGenerator.getInstance("DSA")').has('DSA') && algos('DSA(key)').has('DSA'), 'v0.9: real DSA (prose "DSA signing" / getInstance("DSA") / DSA(key) call) still caught');
+
+  // --- v0.11a: JWT/JOSE token-header decode (adversarial corpus). Decode segment-1 header, classify by "alg" in the
+  //     fixed closed JOSE set. Tokens below are real (header decodes); payload never inspected. ---
+  const SIG = 'SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c', PAY = 'eyJzdWIiOiIxMjM0NTY3ODkwIn0';
+  const jtok = (hdrB64, sig = SIG) => hdrB64 + '.' + PAY + '.' + sig;
+  const jfind = (tok, algo) => scanText('t.js', 'const t = "' + tok + '";').find((f) => f.algo === algo && f.context === 'encoded');
+  ok(jfind(jtok('eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9'), 'JWT RSA (RS/PS)')?.risk === 'quantum-broken', 'v0.11a: RS256 token header -> JWT RSA quantum-broken');
+  ok(jfind(jtok('eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9'), 'JWT ECDSA (ES)')?.risk === 'quantum-broken', 'v0.11a: ES256 token header -> JWT ECDSA quantum-broken');
+  ok(jfind(jtok('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'), 'JWT HMAC (HS)')?.risk === 'quantum-weakened', 'v0.11a: HS256 token header -> JWT HMAC quantum-WEAKENED (symmetric, not broken — claim hygiene)');
+  ok(jfind(jtok('eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9'), 'JWT EdDSA')?.risk === 'classical-hybrid-ok', 'v0.11a: EdDSA token header -> classical-hybrid-ok (never quantum-safe)');
+  // canonical alg:none = header.payload. with an EMPTY signature (trailing dot) — the corpus-caught miss the trailing (?![..]) fixes
+  ok(scanText('t.js', 'bad = "' + 'eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0' + '.' + PAY + '.";').some((f) => f.algo === 'JWT alg=none' && f.risk === 'broken-classical'), 'v0.11a: canonical alg:none token (empty sig, trailing dot) -> JWT alg=none broken-classical');
+  // FP traps: JWT-shaped base64url whose header is valid JSON but alg is NOT a JOSE signature alg -> NO decode finding
+  ok(scanText('c.js', 'x="' + jtok('eyJhbGciOiJibGFrZTMiLCJsZXZlbCI6MjJ9') + '";').filter((f) => f.context === 'encoded' && /^JWT/.test(f.algo)).length === 0, 'v0.11a FP: {alg:"blake3"} config token is NOT a JOSE JWT');
+  ok(scanText('c.js', 'x="' + jtok('eyJhbGciOiJBMjU2R0NNIiwiZW5jIjoiQTI1NkdDTSJ9') + '";').filter((f) => f.context === 'encoded' && /^JWT/.test(f.algo)).length === 0, 'v0.11a FP: JWE {alg:"A256GCM"} content-encryption header is NOT a JWS signature');
+  ok(scanText('c.txt', 'COMMIT=a1b2c3d4e5f6.7890abcd1234.def0ffff').filter((f) => f.context === 'encoded').length === 0, 'v0.11a FP: dotted git/build identifier (segment-1 not JSON) -> no decode finding');
+  ok(scanText('jwks.json', '{"keys":[{"kty":"RSA","alg":"RS256","use":"sig"}]}').filter((f) => f.context === 'encoded' && /^JWT/.test(f.algo)).length === 0, 'v0.11a FP: a JWKS entry (no header.payload.sig token) is not decoded (the bare RS256 string is a separate inline finding)');
+
+  // --- v0.11b: HARVEST-NOW-DECRYPT-LATER (hndl) flag + RSA key-transport disambiguation (adversarial corpus) ---
+  const hndl = (s, algo) => scanText('t.txt', s).find((f) => f.algo === algo)?.hndl === true;
+  ok(hndl('tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256', 'ECDH'), 'v0.11b: ECDHE key agreement is hndl:true (harvest-now)');
+  ok(hndl("crypto.diffieHellman({ curve: 'X25519' })", 'X25519/X448'), 'v0.11b: X25519 key agreement (classical-hybrid-ok kem) is hndl:true (harvest-now)');
+  ok(hndl('Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding")', 'RSA (key transport)'), 'v0.11b: RSA/ECB/OAEP -> distinct "RSA (key transport)" finding, hndl:true');
+  ok(hndl('CipherSuites=(TLS_RSA_WITH_AES_128_CBC_SHA)', 'RSA (key transport)'), 'v0.11b: static-RSA TLS suite -> "RSA (key transport)", hndl:true (no forward secrecy)');
+  ok(hndl('openssl rsautl -encrypt -inkey pub.pem -pubin -in k.bin', 'RSA (key transport)'), 'v0.11b: openssl rsautl -encrypt -> "RSA (key transport)", hndl:true');
+  // NON-hndl invariants: RSA SIGNATURES and RSA keygen stay forge-later (not harvest-now)
+  ok(scanText('t.txt', 'Signature.getInstance("SHA256withRSA")').find((f) => f.family === 'pubkey')?.hndl !== true, 'v0.11b: RSA signature (SHA256withRSA) is NOT hndl (forge-later)');
+  ok(scanText('t.txt', 'openssl genrsa -out server.key 2048').find((f) => f.algo === 'RSA')?.hndl !== true, 'v0.11b: RSA key GENERATION (genrsa) is NOT hndl');
+  ok(scanText('t.txt', "const t = jwt.sign(p, k, { algorithm: 'RS256' })").find((f) => f.algo === 'JWT RSA (RS/PS)')?.hndl !== true, 'v0.11b: an RSA-signed JWT is NOT hndl (signature, not key transport)');
+  ok(scanText('t.go', 'kem := mlkem.NewKeyPair() // ML-KEM-1024').find((f) => f.algo === 'ML-KEM/Kyber')?.hndl !== true, 'v0.11b: a quantum-SAFE KEM (ML-KEM) is NOT hndl (it is the fix, not the problem)');
+  // TLS_ECDHE_RSA: the ECDH leg is hndl (phase 2), the RSA leg (a signature here) is NOT hndl
+  ok(hndl('tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256', 'ECDH') && scanText('t.txt', 'tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256').find((f) => f.algo === 'RSA')?.hndl !== true, 'v0.11b: TLS_ECDHE_RSA -> ECDH hndl but the forward-secret RSA leg is NOT hndl');
+  // grade is UNCHANGED by the hndl flag (orthogonal signal)
+  ok(scanFiles([{ name: 'a.txt', text: 'TLS_RSA_WITH_AES_128_CBC_SHA' }]).grade.letter === scanFiles([{ name: 'a.txt', text: 'RSA-2048' }]).grade.letter, 'v0.11b: hndl is orthogonal — it does not change the A-F grade');
+
+  // --- v0.11.1: refuter-confirmed fixes, regression-locked ---
+  // (1) DOUBLE-COUNT (was critical): one physical key-transport token = ONE occurrence, and grade/score match v0.10
+  { const r = scanFiles([{ name: 'x.js', text: 'TLS_RSA_WITH_AES_128_CBC_SHA' }]);
+    ok(r.summary.quantum_broken === 1, 'v0.11.1: one static-RSA suite token counts ONE quantum-broken occurrence (was 2 — flipped C to D)');
+    ok(scanFiles([{ name: 'x.js', text: 'x = TLS_RSA_WITH_AES_128_CBC_SHA' }]).grade.score === scanFiles([{ name: 'x.js', text: 'x = RSA-2048' }]).grade.score, 'v0.11.1: SCORE parity with a plain RSA token (letter-only comparison masked the double-count)'); }
+  ok(scanFiles([{ name: 'c.js', text: 'kem = ML-KEM-1024;\nsuite = TLS_RSA_WITH_AES_128_CBC_SHA;' }]).grade.letter === 'C', 'v0.11.1: ML-KEM + one static-RSA suite grades C (qs>=qb), not D');
+  { const r1 = scanText('a.java', 'Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding")');
+    ok(r1.filter((f) => /RSA/.test(f.algo)).reduce((n, f) => n + f.count, 0) === 1 && r1.some((f) => f.algo === 'RSA (key transport)'), 'v0.11.1: RSA/ECB/OAEP = ONE occurrence, owned by the transport label');
+    const r2 = scanText('b.txt', 'scheme = RSAES-OAEP');
+    ok(r2.filter((f) => /RSA/.test(f.algo)).reduce((n, f) => n + f.count, 0) === 1 && r2.some((f) => f.algo === 'RSA (key transport)'), 'v0.11.1: RSAES-OAEP = ONE occurrence (generic RSAES lookahead yields it)');
+    ok(scanText('c.txt', 'sig = RSAES').some((f) => f.algo === 'RSA') && !scanText('c.txt', 'sig = RSAES').some((f) => f.algo === 'RSA (key transport)'), 'v0.11.1: bare RSAES (no scheme suffix) stays a generic RSA finding'); }
+  // (2) MERGE CONTAMINATION (was critical): mixed signature + transport file keeps them SEPARATE
+  { const mixed = scanText('mixed.java', 'sig = Signature.getInstance("RSASSA-PSS");\nwrap = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding");');
+    const gen = mixed.find((f) => f.algo === 'RSA'), kt = mixed.find((f) => f.algo === 'RSA (key transport)');
+    ok(gen && gen.hndl !== true && kt && kt.hndl === true, 'v0.11.1: mixed file — RSASSA-PSS stays non-hndl "RSA"; OAEP is a separate hndl "RSA (key transport)" (no contamination)'); }
+  { const both = scanText('t.go', 'a := tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256\nb := tls.TLS_RSA_WITH_AES_128_CBC_SHA');
+    ok(both.find((f) => f.algo === 'RSA')?.hndl !== true && both.find((f) => f.algo === 'RSA (key transport)')?.hndl === true, 'v0.11.1: ECDHE_RSA (sig leg) + static-RSA in one file — only the transport finding is hndl'); }
+  // (3) TLS_DHE kem leg was invisible; TLS_RSA_EXPORT/_PSK missed hndl
+  ok(scanText('d.go', 'TLS_DHE_RSA_WITH_AES_256_CBC_SHA').find((f) => f.algo === 'finite-field DH')?.hndl === true, 'v0.11.1: TLS_DHE_RSA suite -> finite-field DH kem finding, hndl (was a silent FN)');
+  ok(!scanText('d2.go', 'TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256').some((f) => f.algo === 'finite-field DH'), 'v0.11.1: TLS_ECDHE does NOT trip the new TLS_DHE rule');
+  ok(hndl('TLS_RSA_PSK_WITH_AES_128_CBC_SHA', 'RSA (key transport)') && hndl('TLS_RSA_EXPORT_WITH_RC4_40_MD5', 'RSA (key transport)'), 'v0.11.1: TLS_RSA_PSK/_EXPORT static-RSA variants carry hndl');
+  // (4) JWT layer: comment-aware + accumulating + line-attributed (parity with inline rules)
+  { const tok = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.' + PAY + '.' + SIG;
+    const commented = scanFiles([{ name: 'doc.js', text: '// example: ' + tok + '\nexport const x = 1;' }], { gradeContext: 'code' });
+    ok(commented.grade.letter === 'A' && commented.summary.comment_mentions >= 1, 'v0.11.1: a JWT in a // comment is informational under gradeContext:code (doc examples no longer fail CI gates)');
+    const three = scanText('m.js', 'a="' + tok + '";\nplain();\nb="' + tok + '"; c="' + tok + '";');
+    const jf = three.find((f) => f.algo === 'JWT RSA (RS/PS)');
+    ok(jf && jf.count === 3 && jf.lines.join() === '1,3,3', 'v0.11.1: JWT occurrences ACCUMULATE (3 tokens -> count 3) with real line attribution (SARIF no longer points at line 1)');
+    const ign = scanFiles([{ name: 'i.js', text: 'x = "' + tok + '"; // pqcbom-ignore: fixture' }]);
+    ok(!ign.findings.some((f) => f.algo === 'JWT RSA (RS/PS)') && ign.summary.suppressed >= 1, 'v0.11.1: pqcbom-ignore marker now suppresses JWT findings too'); }
 
   // --- suppression: inline `pqcbom-ignore` + allowlist (adoption escape hatch) ---
   const inlIgnore = scanFiles([{ name: 'a.js', text: 'const k = RSA.gen(2048); // pqcbom-ignore: accepted legacy' }]);
