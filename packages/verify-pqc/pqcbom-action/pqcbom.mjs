@@ -314,16 +314,30 @@ function findLineCommentIdx(line, from = 0) {
   for (let i = line.indexOf('//', from); i !== -1; i = line.indexOf('//', i + 1)) { if (i === 0 || line[i - 1] !== ':') { cands.push(i); break; } }
   return cands.length ? Math.min(...cands) : -1;
 }
-function commentRegions(line, startInBlock) {
-  const regions = []; let i = 0, inBlock = startInBlock, regionStart = startInBlock ? 0 : -1;
+// v0.13: `open` = the delimiter that closes the currently-open multi-line region (or null). Handles /* */ block
+// comments and, in Python mode (.py/.pyi), triple-quoted strings (""" and ''') — so an algorithm named ONLY in a
+// docstring is 'informational' (dropped from gradeContext:'code'). Fixes the confirmed FP where a security-conscious
+// file that DOCUMENTS removing MD5/SHA-1 would fail a CI gate on the docstring alone (real-world: Flask sessions.py).
+const CBLOCK = [['/*', '*/']];
+const PYBLOCK = [['/*', '*/'], ['"""', '"""'], ["'''", "'''"]];
+function commentRegions(line, open, pyMode) {
+  const regions = []; let i = 0, cur = open, regionStart = open ? 0 : -1;
+  const OPENERS = pyMode ? PYBLOCK : CBLOCK;
   while (i < line.length) {
-    if (inBlock) { const e = line.indexOf('*/', i); if (e === -1) { regions.push([regionStart, line.length]); return { regions, endInBlock: true }; } regions.push([regionStart, e + 2]); i = e + 2; inBlock = false; }
-    else { const b = line.indexOf('/*', i); const lc = findLineCommentIdx(line, i);
-      if (b !== -1 && (lc === -1 || b < lc)) { inBlock = true; regionStart = b; i = b + 2; }
-      else if (lc !== -1) { regions.push([lc, line.length]); return { regions, endInBlock: false }; }
-      else break; }
+    if (cur) {
+      const e = line.indexOf(cur, i);
+      if (e === -1) { regions.push([regionStart, line.length]); return { regions, endOpen: cur }; }
+      regions.push([regionStart, e + cur.length]); i = e + cur.length; cur = null;
+    } else {
+      let bO = -1, bClose = null, bLen = 0;
+      for (const [o, c] of OPENERS) { const idx = line.indexOf(o, i); if (idx !== -1 && (bO === -1 || idx < bO)) { bO = idx; bClose = c; bLen = o.length; } }
+      const lc = findLineCommentIdx(line, i);
+      if (bO !== -1 && (lc === -1 || bO < lc)) { cur = bClose; regionStart = bO; i = bO + bLen; }
+      else if (lc !== -1) { regions.push([lc, line.length]); return { regions, endOpen: null }; }
+      else break;
+    }
   }
-  return { regions, endInBlock: inBlock };
+  return { regions, endOpen: cur };
 }
 const inComment = (idx, regions) => regions.some(([s, e]) => idx >= s && idx < e);
 
@@ -369,9 +383,10 @@ export function scanText(filename, text) {
   const lines = String(text).split(/\r?\n/);
   const found = new Map(); // algo -> { ..., count, code_count, comment_count, lines:[] }
   const jwtFound = new Map(); // v0.11.1: decoded JWT-header findings (kept separate so 'context: encoded' is preserved)
-  let inBlock = false, suppressed = 0;
+  const pyMode = /\.pyi?$/i.test(String(filename)); // v0.13: treat Python triple-quoted docstrings as comment-context
+  let open = null, suppressed = 0;
   for (let i = 0; i < lines.length; i++) {
-    const { regions, endInBlock } = commentRegions(lines[i], inBlock); inBlock = endInBlock;
+    const { regions, endOpen } = commentRegions(lines[i], open, pyMode); open = endOpen;
     const ignoreLine = IGNORE_MARK.test(lines[i]);
     for (const r of RULES) {
       const idx = lines[i].search(r.re); // full-line scan -> code is never hidden
@@ -886,6 +901,22 @@ async function selfTest() {
         ok(r2.summary.classical_hybrid_ok >= 1, 'v0.12: the keystore finding is counted in the classical-hybrid-ok tally (so Evidence-Pack grade recompute stays consistent)');
       } finally { rmSync(onlyKs, { recursive: true, force: true }); }
     } finally { rmSync(root, { recursive: true, force: true }); }
+  }
+
+  // --- v0.13: Python docstring awareness (real-world: Flask sessions.py graded on a "don't use sha1" docstring). Algo
+  //     names in a .py/.pyi triple-quoted string are comment-context (informational under gradeContext:'code'); real
+  //     code usage is unaffected; non-Python files are untouched. ---
+  {
+    const doc = 'def h(x):\n    """We used to use MD5 and SHA-1 here but removed them; do NOT reintroduce RC4 or DES."""\n    return sha256(x)\n';
+    const rc = scanFiles([{ name: 'safe.py', text: doc }], { gradeContext: 'code' });
+    ok(rc.summary.broken_classical === 0 && rc.summary.comment_mentions >= 4, 'v0.13: algos named only in a Python docstring are informational under gradeContext:code (0 broken, comment_mentions>=4)');
+    ok(scanFiles([{ name: 'u.py', text: 'import hashlib\nreturn hashlib.md5(x)' }], { gradeContext: 'code' }).grade.letter === 'F', 'v0.13: real hashlib.md5() USAGE in .py code is still graded F (docstring awareness does not hide live code)');
+    const same = scanText('m.py', 'x = """doc mentions RC4"""; key = DES\n');
+    ok(same.find((f) => /DES/.test(f.algo))?.context === 'code' && same.find((f) => f.algo === 'RC4')?.context === 'comment', 'v0.13: on one line, """RC4""" is comment-context but the DES code after it is code-context');
+    ok(scanText('a.js', 'const s = md5(x); // note').find((f) => f.algo === 'MD5')?.context === 'code', 'v0.13: non-Python files are unaffected (triple-quote handling is .py/.pyi only)');
+    // single-quote triple docstring + multi-line spanning
+    const multi = scanFiles([{ name: 'q.py', text: "cfg = '''\nlegacy: RC4, DES, MD5\n'''\nuse(AES_256)" }], { gradeContext: 'code' });
+    ok(multi.summary.broken_classical === 0, "v0.13: a multi-line ''' docstring block keeps its algo names out of the code grade");
   }
 
   // --- suppression: inline `pqcbom-ignore` + allowlist (adoption escape hatch) ---
