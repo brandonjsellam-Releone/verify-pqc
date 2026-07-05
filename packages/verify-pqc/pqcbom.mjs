@@ -347,9 +347,15 @@ function detectKeystore(filename, headBuf) {
     return null; // extension matched but no keystore magic — surfaced as keystores_unverified by the walker
   }
   if (/^(p12|pfx)$/.test(ext)) {
-    // PKCS#12 PFX = DER SEQUENCE (30 82 LL LL) whose first element is version INTEGER 3 (02 01 03) at offset 4 — this
-    // distinguishes a real PFX from a plain X.509 cert (which is 30 82 LL LL 30 … a TBSCertificate SEQUENCE, not an INTEGER).
-    if (b[0] === 0x30 && b[1] === 0x82 && b[4] === 0x02 && b[5] === 0x01 && b[6] === 0x03) return finding('PKCS#12');
+    // PKCS#12 PFX = DER SEQUENCE (0x30) whose FIRST element is the version INTEGER 3 (02 01 03) — this distinguishes a
+    // real PFX from a plain X.509 cert (30 .. 30 … = a TBSCertificate SEQUENCE, not an INTEGER). v0.12.1 (refute-caught
+    // FN): the outer SEQUENCE length is DER long-form, and its length-of-length varies with file size — 0x81 (1 byte,
+    // <256B), 0x82 (2 bytes, <64KB), 0x83 (3 bytes), 0x84 (4 bytes). Most real .p12 carry a cert chain so they exceed
+    // 64KB and use 0x83/0x84 — the old 0x82-only check missed them. Compute the version-INTEGER offset from b[1].
+    if (b[0] === 0x30) {
+      const versOff = { 0x81: 3, 0x82: 4, 0x83: 5, 0x84: 6 }[b[1]];
+      if (versOff && b[versOff] === 0x02 && b[versOff + 1] === 0x01 && b[versOff + 2] === 0x03) return finding('PKCS#12');
+    }
     return null;
   }
   if (ext === 'ppk') { if (ascii.startsWith('PuTTY-User-Key-File-')) return finding('PuTTY'); return null; }
@@ -860,6 +866,16 @@ async function selfTest() {
       ok(!r.findings.some((f) => /keystore/.test(f.algo) && /realcert/.test(f.file)), 'v0.12 FP: a DER cert renamed .p12 (30 82 .. 30) is NOT a PKCS#12 keystore');
       ok(r.summary.keystores_unverified === 2, 'v0.12: 2 ext-matched-but-no-magic files (realcert.p12 + notes.jks) surfaced as keystores_unverified (never a finding)');
       ok(!r.findings.some((f) => /random\.bin/.test(f.file)), 'v0.12 FP: FEEDFEED magic in a .bin (non-keystore ext) does NOT fire — the extension gate holds');
+      // v0.12.1 (refute-caught FN): real .p12 files carry a cert chain so they exceed 64KB and use DER long-form length
+      // 0x83/0x84 (not the 0x82 the first cut assumed) — the version-INTEGER offset must track the length-of-length.
+      writeFileSync(join(root, 'big.p12'), Buffer.from([0x30, 0x83, 0x01, 0x86, 0xA0, 0x02, 0x01, 0x03, 0x30, 0x82, 0, 0]));   // 3-byte len
+      writeFileSync(join(root, 'huge.pfx'), Buffer.from([0x30, 0x84, 0x00, 0x1E, 0x84, 0x80, 0x02, 0x01, 0x03, 0x30, 0, 0])); // 4-byte len
+      writeFileSync(join(root, 'tiny.p12'), Buffer.from([0x30, 0x81, 0xC8, 0x02, 0x01, 0x03, 0x30, 0x81, 0, 0, 0, 0]));        // 1-byte len
+      const rlen = await scanDirectory(root);
+      const p12s = rlen.findings.filter((f) => f.algo === 'keystore (PKCS#12)').map((f) => String(f.file).replace(/\\/g, '/').split('/').pop());
+      ok(['big.p12', 'huge.pfx', 'tiny.p12'].every((n) => p12s.includes(n)), 'v0.12.1: PKCS#12 with DER long-form length 0x81/0x83/0x84 (files ≠64KB) are detected, not just the 0x82 case');
+      writeFileSync(join(root, 'ver0.p12'), Buffer.from([0x30, 0x82, 0x0A, 0x00, 0x02, 0x01, 0x00, 0x30, 0, 0, 0, 0]));        // SEQ+INTEGER but version 0
+      ok(!(await scanDirectory(root)).findings.some((f) => /ver0\.p12/.test(f.file) && /keystore/.test(f.algo)), 'v0.12.1 FP: a DER SEQUENCE whose version INTEGER is 0 (not 3) is NOT a PFX');
       ok(r.summary.files_scanned >= 5, 'v0.12: examined keystores count toward files_scanned (app.js + 4 real keystores)');
       // keystore-only dir still GRADES (not a false "0 files"): finding present, grade not F (nothing proven broken)
       const onlyKs = mkdtempSync(join(tmpdir(), 'pqcbom-ks2-'));
