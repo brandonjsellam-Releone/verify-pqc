@@ -36,6 +36,12 @@
  * (des_ede3_cbc, MCRYPT_3DES, TDES, aes_128_ctr, arcfour128, MD-5, HmacSHA1, RSA512, md5WithRSAEncryption), weak
  * sizes/KDFs (RSA-512/768, openssl genrsa/dhparam, PBKDF1, SHA-224, secp160r1), and regional/legacy families (GOST /
  * Magma / Kuznyechik / Streebog, SM2 / SM4, SEED, Skipjack, IDEA, RC2 — all CONTEXT-ANCHORED so common words stay safe).
+ * v0.9 (empirical FP corpus): project-name/acronym collisions fixed — bare "Magma" (Meta mobile-core/CAS/DB) no longer
+ * GOST; Rust ring/rustls gated to Cargo manifests (npm ring-* safe); "DSA (Digital Services Act)" acronym-definition no
+ * longer the DSA algorithm. v0.10 (owner dogfood): scanDirectory never re-scans pqcbom's OWN output artifacts
+ * (cbom.cdx.json/badge/SARIF/report/evidence-pack — kills the report->grade feedback loop; summary.skipped_outputs) +
+ * PATH EXCLUDES (opts.excludePaths / CLI --exclude / .pqcbomignore lines with '/' or 'path:' prefix; glob *, **, ?;
+ * summary.excluded_paths — a narrowed scan SAYS it was narrowed, never silent).
  * Self-test: node pqcbom.mjs
  */
 const RULES = [
@@ -46,7 +52,7 @@ const RULES = [
   { re: /\b(3DES|Triple-?DES|DESede(?!d)|DES-(EDE3?|CBC|ECB|OFB|CFB)|DES(?![\w-]))/i, algo: '3DES/DES', family: 'cipher', risk: 'broken-classical', rec: 'REMOVE; use AES-256-GCM' }, // bare DES + DESede + DES modes; DES(?![\w-]) so "DES-less"/"description" are NOT matched; DESede(?!d) so the "DESeded" build flavour is NOT matched (adversary FP) while DESedeKeySpec still is
   // quantum-broken (Shor): public-key
   { re: /\bRSA(SSA|ES)?\b|RSA-?(512|768|1024|2048|3072|4096)|RSA_(public|private)_(en|de)crypt|RSA_PKCS1|PKCS#?1\b/i, algo: 'RSA', family: 'pubkey', risk: 'quantum-broken', rec: 'migrate KEM->ML-KEM-1024, sig->ML-DSA-87 (hybrid during transition)' }, // PKCS#?1\b so PKCS#11 (HSM) is NOT matched; +512/768 weak sizes + RSA_public/private_encrypt + RSA_PKCS1 underscore forms (adversary FN)
-  { re: /(?<![\w-])DSA(?![\w-])/i, algo: 'DSA', family: 'signature', risk: 'quantum-broken', rec: 'migrate to ML-DSA-87 / SLH-DSA' }, // not preceded/followed by word-char or '-' so ML-DSA/SLH-DSA/ECDSA are NOT matched
+  { re: /(?<![\w-])DSA(?![\w-])(?!\s+\()/i, algo: 'DSA', family: 'signature', risk: 'quantum-broken', rec: 'migrate to ML-DSA-87 / SLH-DSA' }, // not preceded/followed by word-char or '-' so ML-DSA/SLH-DSA/ECDSA are NOT matched; (?!\s+\() so an acronym being DEFINED — "DSA (Digital Services Act)" / "DSA (Democratic..." — is NOT matched (adversary FP; DORA/NIS2 audience), while a call "DSA(key)" (no space) and prose "DSA signing" still are
   { re: /\bECDSA\b/i, algo: 'ECDSA', family: 'signature', risk: 'quantum-broken', rec: 'migrate to ML-DSA-87 (keep ECDSA only as a HYBRID leg)' },
   { re: /\bECDHE?\b|\bECIES\b/i, algo: 'ECDH', family: 'kem', risk: 'quantum-broken', rec: 'migrate to ML-KEM-1024 (+ X25519 in HYBRID)' }, // +ECDHE (council)
   { re: /\b(secp(224|256|384|521)(r1|k1)|prime256v1|P-(224|256|384|521)|brainpool)\b/i, algo: 'EC curve', family: 'pubkey', risk: 'quantum-broken', rec: 'EC curve is Shor-broken; move to ML-KEM/ML-DSA (hybrid)' }, // +secp384r1/521r1/224r1, P-224 (council)
@@ -156,7 +162,7 @@ const RULES = [
   { re: /(?<![\d.])1\.3\.36\.3\.3\.2\.8\.1\.1\.\d+(?![\d.])/, algo: 'EC curve (brainpool OID)', family: 'pubkey', risk: 'quantum-broken', rec: 'brainpool curve by OID — Shor-broken EC' },
   // regional / national legacy families (anchored to crypto context to avoid common-word FP)
   { re: /\bGOST[-_ ]?(R[-_ ]?)?34[._]?1[01]\b|\bGOST[-_ ]?(3410|2012)(?!\d)/i, algo: 'GOST R 34.10/34.11 (legacy)', family: 'signature', risk: 'quantum-broken', rec: 'GOST R 34.10 (EC/DLP sig, Shor-broken) / 34.11 (Streebog) — non-NIST; migrate to ML-DSA-87 / SHA-512' }, // (?!\d) so gost2012_256 matches ('_' not a digit)
-  { re: /\bGOST[-_ ]?(28147|89|3412)\b|\b(Kuznyechik|Streebog|Magma)\b/i, algo: 'GOST cipher/hash (legacy)', family: 'cipher', risk: 'broken-classical', rec: 'GOST 28147/Magma (64-bit) / Kuznyechik / Streebog — non-NIST legacy; migrate to AES-256 / SHA-512 + PQC' },
+  { re: /\bGOST[-_ ]?(28147|89|3412)\b|\b(Kuznyechik|Streebog)\b|\bmagma[-_/.](cbc|ecb|cfb|ofb|ctr|gcm|cipher|new)|\b(cipher|algorithm|algo|gost)[-_/:= ]{1,3}magma\b/i, algo: 'GOST cipher/hash (legacy)', family: 'cipher', risk: 'broken-classical', rec: 'GOST 28147/Magma (64-bit) / Kuznyechik / Streebog — non-NIST legacy; migrate to AES-256 / SHA-512 + PQC' }, // "Magma" anchored to crypto context (SEPARATOR+mode/.new, or a cipher/gost keyword) so the very common project name — Meta Magma mobile core, Magma CAS, magma DB — is NOT flagged (adversary FP, grade-F impact); real magma-cbc / magma.NewCipher / gost magma still caught
   { re: /\bSM3?with[-_]?SM2\b|\bSM2[-_](sign|sig|with|enc|cipher)/i, algo: 'SM2 (GM EC)', family: 'signature', risk: 'quantum-broken', rec: 'SM2 — GM/T elliptic-curve, Shor-broken; migrate to ML-DSA-87' },
   { re: /\bSM4[-_/](CBC|ECB|GCM|CTR|OFB|CFB)\b/i, algo: 'SM4 (GM cipher)', family: 'cipher', risk: 'quantum-weakened', rec: 'SM4 — 128-bit GM block cipher; Grover-weakened; prefer AES-256-GCM' },
   { re: /\bSEED[-/](CBC|ECB|CFB|OFB|GCM)\b/i, algo: 'SEED (legacy cipher)', family: 'cipher', risk: 'quantum-weakened', rec: 'SEED — 128-bit Korean legacy block cipher; prefer AES-256-GCM' },
@@ -179,7 +185,7 @@ const LIB_RULES = [
   { re: /\b(liboqs|oqs|pqcrypto|pqclean|open-quantum-safe)\b/i, algo: 'lib:liboqs/pqcrypto', risk: 'quantum-safe', rec: 'OK — post-quantum library present' },
   { re: /@noble\/post-quantum/i, algo: 'lib:@noble/post-quantum', risk: 'quantum-safe', rec: 'OK — PQ primitives (FIPS 203/204/205)' },
   { re: /\b(libsodium|sodium-native|tweetnacl)\b/i, algo: 'lib:libsodium/nacl', risk: 'classical-hybrid-ok', rec: 'modern classical crypto (X25519/Ed25519/ChaCha20) — pair with PQ' },
-  { re: /\b(rustls|ring)\b/i, algo: 'lib:rustls/ring', risk: 'classical-hybrid-ok', rec: 'Rust TLS/crypto — verify TLS 1.3 + plan a PQ KEM' },
+  { re: /\brustls\b|(?<![\w-])ring(?![\w-])/i, manifests: /Cargo\.(toml|lock)$/i, algo: 'lib:rustls/ring', risk: 'classical-hybrid-ok', rec: 'Rust TLS/crypto — verify TLS 1.3 + plan a PQ KEM' }, // Rust-only crates: gate to Cargo manifests + require the exact `ring` token so the npm `ring-buffer`/`ring-*` packages (NOT the Rust crypto crate) do not false-positive (adversary FP)
   // --- v0.3: more crypto libraries (manifest-context keeps false positives low) ---
   { re: /\b(wolfssl|wolfcrypt|mbedtls|mbed[-_]?crypto|boringssl)\b/i, algo: 'lib:wolfSSL/mbedTLS/BoringSSL', risk: 'classical-hybrid-ok', rec: 'embedded TLS/crypto — verify TLS 1.3 + the provider PQ KEM support/roadmap' },
   { re: /\bcircl\b/i, algo: 'lib:CIRCL', risk: 'quantum-safe', rec: 'OK — Cloudflare CIRCL (ML-KEM/ML-DSA present); verify the PQ algos are actually used' },
@@ -190,6 +196,7 @@ const LIB_RULES = [
 function scanManifest(filename, text) {
   const found = new Map();
   for (const r of LIB_RULES) {
+    if (r.manifests && !r.manifests.test(filename)) continue; // rule scoped to a manifest kind (e.g. Rust `ring`/`rustls` -> Cargo only)
     if (!r.re.test(String(text))) continue;
     found.set(r.algo, { file: filename, context: 'dependency', confidence: 'likely', algo: r.algo, family: 'library', risk: r.risk, rec: r.rec, count: 1, code_count: 1, comment_count: 0, lines: [] });
   }
@@ -401,10 +408,24 @@ export function toSARIF(report, opts = {}) {
   };
 }
 
+// v0.10: glob -> regex for PATH EXCLUDES (dependency-free; * = within a segment, ** = across segments, ? = one char).
+// A pattern WITH '/' anchors at the scan root; one WITHOUT '/' matches that name as any path segment (dir or file).
+function globToRe(pattern) {
+  const p = String(pattern).trim().replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+  if (!p) return null;
+  const esc = p.replace(/[.+^${}()|[\]]/g, '\\$&')
+    .split('**').map((seg) => seg.replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]')).join('.*');
+  return p.includes('/') ? new RegExp('^' + esc + '(/|$)') : new RegExp('(^|/)' + esc + '(/|$)');
+}
+
 // directory walker for the CLI / dogfood (node only)
 export async function scanDirectory(dir, opts = {}) {
   const { readdirSync, readFileSync, lstatSync } = await import('fs');
-  const { join, extname } = await import('path');
+  const { join, extname, relative } = await import('path');
+  // v0.10: pqcbom's OWN OUTPUT ARTIFACTS are never re-scanned — a scan report names every algorithm it found, so
+  // re-ingesting it double-counts the repo's findings on every subsequent run (a feedback loop: scan -> report ->
+  // worse grade -> report...). Exact tool-output basenames only; counted in summary.skipped_outputs, never silent.
+  const OUTPUT_ARTIFACT = /^(cbom\.cdx\.json|pq-readiness-badge\.json|pqcbom\.sarif|quantum-readiness-report\.md|evidence-pack[\w.-]*\.json)$/i;
   // code + CONFIG extensions — TLS/SSH/JWT crypto lives in config files (.conf/.ini/.env/…), so scanning code-only
   // would leave the v0.2 protocol layer mostly dead in a directory/Action scan
   const exts = opts.exts || ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.py', '.go', '.rs', '.java', '.kt', '.c', '.cc', '.cpp', '.h', '.json', '.yaml', '.yml', '.toml', '.tf', '.cs', '.rb', '.php', '.conf', '.cnf', '.cfg', '.ini', '.config', '.properties', '.xml', '.gradle', '.sh', '.bash', '.zsh', '.ps1', '.pem', '.crt'];
@@ -416,6 +437,26 @@ export async function scanDirectory(dir, opts = {}) {
   // recurse forever, and a symlink could point outside the tree. Every fs call is wrapped so one unreadable file/dir
   // is skipped (recorded), never aborts the whole scan/gate.
   const skipped = [];
+  // v0.10: `.pqcbomignore` at the scan root is read BEFORE the walk. Two line kinds now:
+  //   PATH EXCLUDES  — a line containing '/' or prefixed `path:` (globs ok: test-fixtures/, path:rules.mjs, **/*.golden)
+  //   algo/risk allowlist — any other line (unchanged: an algo LABEL or RISK CLASS to accept)
+  // Path excludes are the standard SAST escape hatch (test fixtures, vendored rule tables, generated corpora) —
+  // opt-in, and every excluded path is COUNTED in summary.excluded_paths so a gate reviewer sees the scan was narrowed.
+  let ignoreAlgos = opts.ignoreAlgos ? [...(opts.ignoreAlgos instanceof Set ? opts.ignoreAlgos : opts.ignoreAlgos)] : [];
+  const excludePats = Array.isArray(opts.excludePaths) ? [...opts.excludePaths] : [];
+  try {
+    const ig = readFileSync(join(dir, '.pqcbomignore'), 'utf8');
+    for (const raw of ig.split(/\r?\n/)) {
+      const l = raw.replace(/#.*$/, '').trim(); if (!l) continue;
+      if (/^path:/i.test(l)) excludePats.push(l.replace(/^path:/i, '').trim());
+      else if (l.includes('/')) excludePats.push(l);
+      else ignoreAlgos.push(l);
+    }
+  } catch { /* no allowlist file — fine */ }
+  const excludeRes = excludePats.map(globToRe).filter(Boolean);
+  const relOf = (p) => relative(dir, p).split(/[\\/]/).join('/');
+  let excludedPaths = 0, skippedOutputs = 0;
+  const isExcluded = (p) => excludeRes.length > 0 && excludeRes.some((re) => re.test(relOf(p)));
   // include code/config by extension AND dependency manifests by filename (so the dependency layer fires for
   // requirements.txt / go.mod / pom.xml / Gemfile / *.csproj etc., which have no code-extension)
   const walk = (d) => {
@@ -425,25 +466,23 @@ export async function scanDirectory(dir, opts = {}) {
       const p = join(d, name);
       let st; try { st = lstatSync(p); } catch (e) { skipped.push(p); continue; }
       if (st.isSymbolicLink()) { skipped.push(p); continue; } // do not follow symlinks (cycle/out-of-tree safe)
+      if (isExcluded(p)) { excludedPaths += 1; continue; }    // v0.10 path exclude (prunes whole dirs; counted)
       if (st.isDirectory()) { walk(p); continue; }
+      if (OUTPUT_ARTIFACT.test(name)) { skippedOutputs += 1; continue; } // v0.10 never re-eat our own reports
       if (!(exts.includes(extname(name)) || MANIFEST.test(name) || CONFIG_FILE.test(name)) || st.size >= 2_000_000) continue;
       try { files.push({ name: p, text: readFileSync(p, 'utf8') }); } catch (e) { skipped.push(p); }
     }
   };
   walk(dir);
-  // allowlist file: `.pqcbomignore` at the scan root — one accepted algo label or risk class per line ('#' comments ok)
-  let ignoreAlgos = opts.ignoreAlgos ? [...(opts.ignoreAlgos instanceof Set ? opts.ignoreAlgos : opts.ignoreAlgos)] : [];
-  try {
-    const ig = readFileSync(join(dir, '.pqcbomignore'), 'utf8');
-    ignoreAlgos = ignoreAlgos.concat(ig.split(/\r?\n/).map((l) => l.replace(/#.*$/, '').trim()).filter(Boolean));
-  } catch { /* no allowlist file — fine */ }
   const res = scanFiles(files, { ...opts, ignoreAlgos }); // pass gradeContext through (a CI gate grades CODE, not comment mentions)
-  if (skipped.length) res.summary.skipped_paths = skipped.length; // surfaced, never silent
+  if (skipped.length) res.summary.skipped_paths = skipped.length;   // surfaced, never silent
+  if (excludedPaths) res.summary.excluded_paths = excludedPaths;    // paths dropped by the opt-in exclude list
+  if (skippedOutputs) res.summary.skipped_outputs = skippedOutputs; // our own prior scan artifacts (always skipped)
   return res;
 }
 
 /* ---------- self-test: node pqcbom.mjs ---------- */
-function selfTest() {
+async function selfTest() {
   let pass = 0, fail = 0; const ok = (c, m) => { if (c) pass++; else { fail++; console.error('FAIL:', m); } };
 
   const vulnerable = `
@@ -582,6 +621,19 @@ function selfTest() {
   ok(algos('hashlib.sha224(x)').has('SHA-224') && algos('kdf = PBKDF1(pw, salt)').has('PBKDF1 (weak KDF)') && algos('getParameterSpec("secp160r1")').has('EC curve (legacy)'), 'v0.8 FN: SHA-224 / PBKDF1 / secp160r1');
   ok(algos('RC2.new(key, RC2.MODE_ECB)').has('RC2') && algos('mcrypt_encrypt(MCRYPT_RC2, k)').has('RC2'), 'v0.8 FN: RC2.new / MCRYPT_RC2');
 
+  // --- v0.9: empirical FP corpus (popular OSS project names / target-audience acronyms that collided) ---
+  // Magma is a very common project name (Meta Magma mobile core, Magma CAS, magma DB) — bare "Magma" must NOT flag GOST (was grade-F)
+  ok(scanManifest('package.json', '{"dependencies":{"magma":"^1.2.0"}}').filter((f) => /GOST/.test(f.algo)).length === 0, 'v0.9 FP: "magma" dependency is NOT GOST (popular project name)');
+  ok(scanText('r.md', 'We deploy on Magma, the mobile core; magma-cooled reactors.').filter((f) => /GOST/.test(f.algo)).length === 0, 'v0.9 FP: "Magma" project/word is NOT GOST');
+  ok(algos('cipher = magma-cbc').has('GOST cipher/hash (legacy)') && algos('gost magma').has('GOST cipher/hash (legacy)') && algos('magma.NewCipher(k)').has('GOST cipher/hash (legacy)'), 'v0.9: real GOST Magma (magma-cbc / gost magma / magma.new) still caught');
+  // Rust `ring`/`rustls` are Cargo-only — the npm `ring-buffer` / `ring-*` packages must NOT trip the crypto-lib rule
+  ok(scanManifest('package.json', '{"dependencies":{"ring-buffer":"^1.0.0","clustering":"^2.0.0"}}').filter((f) => /ring/.test(f.algo)).length === 0, 'v0.9 FP: npm ring-buffer is NOT the Rust `ring` crate (gated to Cargo + exact token)');
+  ok(scanManifest('Cargo.toml', 'ring = "0.17"\nrustls = "0.23"').some((f) => f.algo === 'lib:rustls/ring'), 'v0.9: real Cargo ring/rustls dependency still caught');
+  ok(scanManifest('Cargo.toml', 'ring-channel = "0.12"').filter((f) => /ring/.test(f.algo)).length === 0, 'v0.9 FP: even in Cargo, ring-channel (hyphenated) is not the ring crate');
+  // "DSA" as a defined acronym — Digital Services Act (DORA/NIS2 audience) / Democratic Socialists — must NOT flag DSA
+  ok(scanText('policy.md', 'Compliance under the DSA (Digital Services Act) and the DSA (Democratic Socialists).').filter((f) => f.algo === 'DSA').length === 0, 'v0.9 FP: "DSA (Digital Services Act)" acronym-definition is not the DSA algorithm');
+  ok(algos('legacy DSA signing').has('DSA') && algos('KeyPairGenerator.getInstance("DSA")').has('DSA') && algos('DSA(key)').has('DSA'), 'v0.9: real DSA (prose "DSA signing" / getInstance("DSA") / DSA(key) call) still caught');
+
   // --- suppression: inline `pqcbom-ignore` + allowlist (adoption escape hatch) ---
   const inlIgnore = scanFiles([{ name: 'a.js', text: 'const k = RSA.gen(2048); // pqcbom-ignore: accepted legacy' }]);
   ok(!inlIgnore.findings.some((f) => f.algo === 'RSA') && inlIgnore.summary.suppressed >= 1, 'inline pqcbom-ignore suppresses the line (counted, not graded)');
@@ -592,7 +644,34 @@ function selfTest() {
   const allowRisk = scanFiles([{ name: 'a.js', text: 'RSA.gen(); ECDSA.sign();' }], { ignoreAlgos: ['quantum-broken'] });
   ok(allowRisk.summary.quantum_broken === 0 && allowRisk.summary.suppressed >= 2, 'allowlist by risk CLASS drops the whole class (quantum-broken) and counts it');
 
+  // --- v0.10: scanDirectory — path excludes + own-output skip (found by owner dogfooding: our repo graded F
+  //     because the scanner ate its OWN rule tables, test fixtures, and its own prior cbom.cdx.json report) ---
+  {
+    const { mkdtempSync, writeFileSync, mkdirSync, rmSync } = await import('fs');
+    const { tmpdir } = await import('os');
+    const { join } = await import('path');
+    const root = mkdtempSync(join(tmpdir(), 'pqcbom-t-'));
+    try {
+      writeFileSync(join(root, 'app.js'), 'const k = RSA.generate(2048); hash = MD5;');
+      mkdirSync(join(root, 'test-fixtures'));
+      writeFileSync(join(root, 'test-fixtures', 'bad.js'), 'RC4 3DES corpus fixture');
+      writeFileSync(join(root, 'cbom.cdx.json'), '{"components":[{"name":"RC2"},{"name":"Blowfish"}]}');
+      // 1) our own output artifact is never re-scanned (kills the report->grade feedback loop); real files still are
+      const r1 = await scanDirectory(root);
+      ok(r1.summary.skipped_outputs === 1 && !r1.findings.some((f) => f.algo === 'RC2'), 'v0.10: our own cbom.cdx.json output is skipped + counted (no feedback loop)');
+      ok(r1.findings.some((f) => f.algo === 'RC4'), 'v0.10: WITHOUT excludes the fixture RC4 is still found (no silent narrowing by default)');
+      // 2) .pqcbomignore path lines: fixtures excluded + counted; real code still graded F
+      writeFileSync(join(root, '.pqcbomignore'), '# self-scan policy\ntest-fixtures/\n');
+      const r2 = await scanDirectory(root);
+      ok(r2.summary.excluded_paths === 1 && !r2.findings.some((f) => f.algo === 'RC4'), 'v0.10: test-fixtures/ excluded via .pqcbomignore path line + counted');
+      ok(r2.findings.some((f) => f.algo === 'RSA') && r2.grade.letter === 'F', 'v0.10: path excludes do NOT hide real code (app.js RSA/MD5 still grades F)');
+      // 3) opts.excludePaths + a no-slash pattern matches that name as a path segment
+      const r3 = await scanDirectory(root, { excludePaths: ['app.js'] });
+      ok(r3.summary.excluded_paths === 2 && !r3.findings.some((f) => f.algo === 'RSA'), 'v0.10: opts.excludePaths name-only pattern excludes the file (counted alongside the ignore-file dir)');
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  }
+
   console.log('pqcbom self-test: ' + pass + ' pass, ' + fail + ' fail');
   if (typeof process !== 'undefined' && process.exit) process.exit(fail ? 1 : 0);
 }
-if (typeof process !== 'undefined' && process.argv && /pqcbom\.mjs$/.test(process.argv[1] || '')) selfTest();
+if (typeof process !== 'undefined' && process.argv && /pqcbom\.mjs$/.test(process.argv[1] || '')) await selfTest();

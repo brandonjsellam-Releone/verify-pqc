@@ -17,6 +17,10 @@ inputs:
     description: 'Minimum acceptable grade (A–F); build fails below it. Empty = no grade gate.'
     required: false
     default: ''
+  exclude:
+    description: 'Comma-separated path globs to exclude (e.g. test-fixtures/,examples/,**/*.golden). Also readable from .pqcbomignore lines containing "/" or prefixed "path:". Excluded paths are counted in the step summary, never silently dropped.'
+    required: false
+    default: ''
 outputs:
   grade:
     description: 'Post-Quantum Readiness grade (A–F)'

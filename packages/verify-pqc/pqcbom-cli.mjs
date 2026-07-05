@@ -19,6 +19,9 @@ Usage: node pqcbom-cli.mjs [path] [options]
   --fail-on=LIST      comma-separated risk classes that exit non-zero
                       (broken-classical,quantum-broken,quantum-weakened,classical-hybrid-ok,quantum-safe)
   --min-grade=A..F    exit non-zero below this grade
+  --exclude=GLOBS     comma-separated path excludes (e.g. test-fixtures/,examples/,**/*.golden) —
+                      also readable from .pqcbomignore lines containing '/' or prefixed 'path:';
+                      excluded paths are COUNTED in the summary, never silently dropped
   --sarif[=PATH]      also write a SARIF 2.1.0 report (default: pqcbom.sarif) for GitHub code-scanning
   --plan[=PATH]       also write a sequenced PQC migration plan (default: migration-plan.md)
   --json              print the CycloneDX CBOM to stdout (suppress the human summary)
@@ -42,6 +45,7 @@ const minGrade = opt('min-grade');
 const jsonOnly = args.includes('--json');
 const sarifOut = args.includes('--sarif') ? 'pqcbom.sarif' : opt('sarif');   // --sarif -> default path; --sarif=PATH -> PATH
 const planOut = args.includes('--plan') ? 'migration-plan.md' : opt('plan');  // --plan -> default path; --plan=PATH -> PATH
+const excludePaths = (opt('exclude') || '').split(',').map((s) => s.trim()).filter(Boolean); // v0.10 path excludes
 
 const RISK_EMOJI = { 'broken-classical': '⛔', 'quantum-broken': '🔴', 'quantum-weakened': '🟡', 'classical-hybrid-ok': '🔵', 'quantum-safe': '🟢' };
 function mdReport(r) {
@@ -55,7 +59,7 @@ function mdReport(r) {
   return lines.join('\n');
 }
 
-const report = await scanDirectory(dir);
+const report = await scanDirectory(dir, { excludePaths });
 // A scan that examined ZERO files cannot attest readiness — refuse to emit a
 // grade-A "all clear" for it (same false-attestation hazard as a bad path).
 if (report.summary.files_scanned === 0) {
@@ -65,7 +69,11 @@ if (report.summary.files_scanned === 0) {
 if (jsonOnly) { console.log(JSON.stringify(toCycloneDX(report), null, 2)); }
 else {
   console.log(`\n  Post-Quantum Readiness Scorecard: ${report.grade.letter}  (${report.grade.score}/100) — ${report.grade.label}`);
-  console.log(`  ${report.summary.files_scanned} files · broken-classical ${report.summary.broken_classical} · quantum-broken ${report.summary.quantum_broken} · weakened ${report.summary.quantum_weakened} · hybrid-ok ${report.summary.classical_hybrid_ok} · resistant ${report.summary.quantum_safe}\n`);
+  console.log(`  ${report.summary.files_scanned} files · broken-classical ${report.summary.broken_classical} · quantum-broken ${report.summary.quantum_broken} · weakened ${report.summary.quantum_weakened} · hybrid-ok ${report.summary.classical_hybrid_ok} · resistant ${report.summary.quantum_safe}`);
+  const nar = []; // transparency: a narrowed scan must SAY it was narrowed
+  if (report.summary.excluded_paths) nar.push(`${report.summary.excluded_paths} path(s) excluded by policy (--exclude / .pqcbomignore)`);
+  if (report.summary.skipped_outputs) nar.push(`${report.summary.skipped_outputs} pqcbom output artifact(s) skipped (never re-scanned)`);
+  console.log(nar.length ? `  (${nar.join(' · ')})\n` : '');
 }
 writeFileSync('cbom.cdx.json', JSON.stringify(toCycloneDX(report), null, 2));
 writeFileSync('quantum-readiness-report.md', mdReport(report));

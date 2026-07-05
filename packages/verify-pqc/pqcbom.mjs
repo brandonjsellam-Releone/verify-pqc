@@ -36,6 +36,12 @@
  * (des_ede3_cbc, MCRYPT_3DES, TDES, aes_128_ctr, arcfour128, MD-5, HmacSHA1, RSA512, md5WithRSAEncryption), weak
  * sizes/KDFs (RSA-512/768, openssl genrsa/dhparam, PBKDF1, SHA-224, secp160r1), and regional/legacy families (GOST /
  * Magma / Kuznyechik / Streebog, SM2 / SM4, SEED, Skipjack, IDEA, RC2 — all CONTEXT-ANCHORED so common words stay safe).
+ * v0.9 (empirical FP corpus): project-name/acronym collisions fixed — bare "Magma" (Meta mobile-core/CAS/DB) no longer
+ * GOST; Rust ring/rustls gated to Cargo manifests (npm ring-* safe); "DSA (Digital Services Act)" acronym-definition no
+ * longer the DSA algorithm. v0.10 (owner dogfood): scanDirectory never re-scans pqcbom's OWN output artifacts
+ * (cbom.cdx.json/badge/SARIF/report/evidence-pack — kills the report->grade feedback loop; summary.skipped_outputs) +
+ * PATH EXCLUDES (opts.excludePaths / CLI --exclude / .pqcbomignore lines with '/' or 'path:' prefix; glob *, **, ?;
+ * summary.excluded_paths — a narrowed scan SAYS it was narrowed, never silent).
  * Self-test: node pqcbom.mjs
  */
 const RULES = [
@@ -402,10 +408,24 @@ export function toSARIF(report, opts = {}) {
   };
 }
 
+// v0.10: glob -> regex for PATH EXCLUDES (dependency-free; * = within a segment, ** = across segments, ? = one char).
+// A pattern WITH '/' anchors at the scan root; one WITHOUT '/' matches that name as any path segment (dir or file).
+function globToRe(pattern) {
+  const p = String(pattern).trim().replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+  if (!p) return null;
+  const esc = p.replace(/[.+^${}()|[\]]/g, '\\$&')
+    .split('**').map((seg) => seg.replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]')).join('.*');
+  return p.includes('/') ? new RegExp('^' + esc + '(/|$)') : new RegExp('(^|/)' + esc + '(/|$)');
+}
+
 // directory walker for the CLI / dogfood (node only)
 export async function scanDirectory(dir, opts = {}) {
   const { readdirSync, readFileSync, lstatSync } = await import('fs');
-  const { join, extname } = await import('path');
+  const { join, extname, relative } = await import('path');
+  // v0.10: pqcbom's OWN OUTPUT ARTIFACTS are never re-scanned — a scan report names every algorithm it found, so
+  // re-ingesting it double-counts the repo's findings on every subsequent run (a feedback loop: scan -> report ->
+  // worse grade -> report...). Exact tool-output basenames only; counted in summary.skipped_outputs, never silent.
+  const OUTPUT_ARTIFACT = /^(cbom\.cdx\.json|pq-readiness-badge\.json|pqcbom\.sarif|quantum-readiness-report\.md|evidence-pack[\w.-]*\.json)$/i;
   // code + CONFIG extensions — TLS/SSH/JWT crypto lives in config files (.conf/.ini/.env/…), so scanning code-only
   // would leave the v0.2 protocol layer mostly dead in a directory/Action scan
   const exts = opts.exts || ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.py', '.go', '.rs', '.java', '.kt', '.c', '.cc', '.cpp', '.h', '.json', '.yaml', '.yml', '.toml', '.tf', '.cs', '.rb', '.php', '.conf', '.cnf', '.cfg', '.ini', '.config', '.properties', '.xml', '.gradle', '.sh', '.bash', '.zsh', '.ps1', '.pem', '.crt'];
@@ -417,6 +437,26 @@ export async function scanDirectory(dir, opts = {}) {
   // recurse forever, and a symlink could point outside the tree. Every fs call is wrapped so one unreadable file/dir
   // is skipped (recorded), never aborts the whole scan/gate.
   const skipped = [];
+  // v0.10: `.pqcbomignore` at the scan root is read BEFORE the walk. Two line kinds now:
+  //   PATH EXCLUDES  — a line containing '/' or prefixed `path:` (globs ok: test-fixtures/, path:rules.mjs, **/*.golden)
+  //   algo/risk allowlist — any other line (unchanged: an algo LABEL or RISK CLASS to accept)
+  // Path excludes are the standard SAST escape hatch (test fixtures, vendored rule tables, generated corpora) —
+  // opt-in, and every excluded path is COUNTED in summary.excluded_paths so a gate reviewer sees the scan was narrowed.
+  let ignoreAlgos = opts.ignoreAlgos ? [...(opts.ignoreAlgos instanceof Set ? opts.ignoreAlgos : opts.ignoreAlgos)] : [];
+  const excludePats = Array.isArray(opts.excludePaths) ? [...opts.excludePaths] : [];
+  try {
+    const ig = readFileSync(join(dir, '.pqcbomignore'), 'utf8');
+    for (const raw of ig.split(/\r?\n/)) {
+      const l = raw.replace(/#.*$/, '').trim(); if (!l) continue;
+      if (/^path:/i.test(l)) excludePats.push(l.replace(/^path:/i, '').trim());
+      else if (l.includes('/')) excludePats.push(l);
+      else ignoreAlgos.push(l);
+    }
+  } catch { /* no allowlist file — fine */ }
+  const excludeRes = excludePats.map(globToRe).filter(Boolean);
+  const relOf = (p) => relative(dir, p).split(/[\\/]/).join('/');
+  let excludedPaths = 0, skippedOutputs = 0;
+  const isExcluded = (p) => excludeRes.length > 0 && excludeRes.some((re) => re.test(relOf(p)));
   // include code/config by extension AND dependency manifests by filename (so the dependency layer fires for
   // requirements.txt / go.mod / pom.xml / Gemfile / *.csproj etc., which have no code-extension)
   const walk = (d) => {
@@ -426,25 +466,23 @@ export async function scanDirectory(dir, opts = {}) {
       const p = join(d, name);
       let st; try { st = lstatSync(p); } catch (e) { skipped.push(p); continue; }
       if (st.isSymbolicLink()) { skipped.push(p); continue; } // do not follow symlinks (cycle/out-of-tree safe)
+      if (isExcluded(p)) { excludedPaths += 1; continue; }    // v0.10 path exclude (prunes whole dirs; counted)
       if (st.isDirectory()) { walk(p); continue; }
+      if (OUTPUT_ARTIFACT.test(name)) { skippedOutputs += 1; continue; } // v0.10 never re-eat our own reports
       if (!(exts.includes(extname(name)) || MANIFEST.test(name) || CONFIG_FILE.test(name)) || st.size >= 2_000_000) continue;
       try { files.push({ name: p, text: readFileSync(p, 'utf8') }); } catch (e) { skipped.push(p); }
     }
   };
   walk(dir);
-  // allowlist file: `.pqcbomignore` at the scan root — one accepted algo label or risk class per line ('#' comments ok)
-  let ignoreAlgos = opts.ignoreAlgos ? [...(opts.ignoreAlgos instanceof Set ? opts.ignoreAlgos : opts.ignoreAlgos)] : [];
-  try {
-    const ig = readFileSync(join(dir, '.pqcbomignore'), 'utf8');
-    ignoreAlgos = ignoreAlgos.concat(ig.split(/\r?\n/).map((l) => l.replace(/#.*$/, '').trim()).filter(Boolean));
-  } catch { /* no allowlist file — fine */ }
   const res = scanFiles(files, { ...opts, ignoreAlgos }); // pass gradeContext through (a CI gate grades CODE, not comment mentions)
-  if (skipped.length) res.summary.skipped_paths = skipped.length; // surfaced, never silent
+  if (skipped.length) res.summary.skipped_paths = skipped.length;   // surfaced, never silent
+  if (excludedPaths) res.summary.excluded_paths = excludedPaths;    // paths dropped by the opt-in exclude list
+  if (skippedOutputs) res.summary.skipped_outputs = skippedOutputs; // our own prior scan artifacts (always skipped)
   return res;
 }
 
 /* ---------- self-test: node pqcbom.mjs ---------- */
-function selfTest() {
+async function selfTest() {
   let pass = 0, fail = 0; const ok = (c, m) => { if (c) pass++; else { fail++; console.error('FAIL:', m); } };
 
   const vulnerable = `
@@ -606,7 +644,34 @@ function selfTest() {
   const allowRisk = scanFiles([{ name: 'a.js', text: 'RSA.gen(); ECDSA.sign();' }], { ignoreAlgos: ['quantum-broken'] });
   ok(allowRisk.summary.quantum_broken === 0 && allowRisk.summary.suppressed >= 2, 'allowlist by risk CLASS drops the whole class (quantum-broken) and counts it');
 
+  // --- v0.10: scanDirectory — path excludes + own-output skip (found by owner dogfooding: our repo graded F
+  //     because the scanner ate its OWN rule tables, test fixtures, and its own prior cbom.cdx.json report) ---
+  {
+    const { mkdtempSync, writeFileSync, mkdirSync, rmSync } = await import('fs');
+    const { tmpdir } = await import('os');
+    const { join } = await import('path');
+    const root = mkdtempSync(join(tmpdir(), 'pqcbom-t-'));
+    try {
+      writeFileSync(join(root, 'app.js'), 'const k = RSA.generate(2048); hash = MD5;');
+      mkdirSync(join(root, 'test-fixtures'));
+      writeFileSync(join(root, 'test-fixtures', 'bad.js'), 'RC4 3DES corpus fixture');
+      writeFileSync(join(root, 'cbom.cdx.json'), '{"components":[{"name":"RC2"},{"name":"Blowfish"}]}');
+      // 1) our own output artifact is never re-scanned (kills the report->grade feedback loop); real files still are
+      const r1 = await scanDirectory(root);
+      ok(r1.summary.skipped_outputs === 1 && !r1.findings.some((f) => f.algo === 'RC2'), 'v0.10: our own cbom.cdx.json output is skipped + counted (no feedback loop)');
+      ok(r1.findings.some((f) => f.algo === 'RC4'), 'v0.10: WITHOUT excludes the fixture RC4 is still found (no silent narrowing by default)');
+      // 2) .pqcbomignore path lines: fixtures excluded + counted; real code still graded F
+      writeFileSync(join(root, '.pqcbomignore'), '# self-scan policy\ntest-fixtures/\n');
+      const r2 = await scanDirectory(root);
+      ok(r2.summary.excluded_paths === 1 && !r2.findings.some((f) => f.algo === 'RC4'), 'v0.10: test-fixtures/ excluded via .pqcbomignore path line + counted');
+      ok(r2.findings.some((f) => f.algo === 'RSA') && r2.grade.letter === 'F', 'v0.10: path excludes do NOT hide real code (app.js RSA/MD5 still grades F)');
+      // 3) opts.excludePaths + a no-slash pattern matches that name as a path segment
+      const r3 = await scanDirectory(root, { excludePaths: ['app.js'] });
+      ok(r3.summary.excluded_paths === 2 && !r3.findings.some((f) => f.algo === 'RSA'), 'v0.10: opts.excludePaths name-only pattern excludes the file (counted alongside the ignore-file dir)');
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  }
+
   console.log('pqcbom self-test: ' + pass + ' pass, ' + fail + ' fail');
   if (typeof process !== 'undefined' && process.exit) process.exit(fail ? 1 : 0);
 }
-if (typeof process !== 'undefined' && process.argv && /pqcbom\.mjs$/.test(process.argv[1] || '')) selfTest();
+if (typeof process !== 'undefined' && process.argv && /pqcbom\.mjs$/.test(process.argv[1] || '')) await selfTest();

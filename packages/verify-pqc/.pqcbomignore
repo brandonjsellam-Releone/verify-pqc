@@ -1,0 +1,37 @@
+# pqcbom self-scan policy for THIS repository (the scanner's own source).
+#
+# WHY THIS FILE EXISTS — read before crying foul:
+# A crypto SCANNER's source necessarily NAMES every algorithm it detects: its rule tables, its
+# adversarial test corpus, and its accuracy benchmarks are full of "MD5"/"RC4"/"RSA" strings by
+# design. That is detection LOGIC and test DATA, not cryptographic USE. Without this policy a
+# self-scan grades the scanner F for containing its own rules — a feedback loop, not a finding.
+# Everything excluded below is one of: (a) rule/policy tables, (b) deliberately-vulnerable test
+# fixtures, (c) test/benchmark harnesses asserting on vulnerable strings. The REAL crypto this
+# package USES (ML-DSA-87, SLH-DSA, ML-KEM, Falcon verification, SHA-384/512) is NOT excluded.
+# Delete this file and re-run for the raw, unfiltered lexical view — nothing is hidden, and the
+# scan output states how many paths this policy excluded.
+
+# (a) scanner rule tables + vendored copies (every rule names the algorithm it detects)
+path:pqcbom.mjs
+pqcbom-action/
+path:pqcbom-plan.mjs
+path:pqcbom-server.mjs
+path:pqcbom-report.mjs
+path:pqposture.mjs
+path:pqshield.mjs
+path:pqcompliance.mjs
+
+# (b) deliberately-vulnerable test fixtures, demo target + generated sample packs
+test-fixtures/
+examples/
+path:gen-sample-pack.mjs
+
+# (c) test + benchmark harnesses (assert on vulnerable strings by design)
+path:test*.mjs
+path:test.js
+path:accuracy-benchmark.mjs
+path:structural-corpus.mjs
+path:tamper-binding.mjs
+path:assurance-properties.mjs
+path:fuzz-*.mjs
+deploy/

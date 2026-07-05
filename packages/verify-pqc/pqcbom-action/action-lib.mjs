@@ -10,7 +10,7 @@ const VALID_GRADES = new Set(['A', 'B', 'C', 'D', 'F']);
 
 // shields.io endpoint schema — README badge via https://img.shields.io/endpoint?url=<this JSON>. JSON only, no SVG.
 export function scorecardBadge(grade) {
-  return { schemaVersion: 1, label: 'quantum-safe', message: grade.letter + ' (' + grade.score + ')', color: GRADE_COLOR[grade.letter] || 'lightgrey' };
+  return { schemaVersion: 1, label: 'PQ Readiness', message: grade.letter + ' (' + grade.score + ')', color: GRADE_COLOR[grade.letter] || 'lightgrey' };
 }
 
 // CI policy gate: fail on banned risk classes and/or below a minimum grade. Fails CLOSED on a typo'd config
