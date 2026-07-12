@@ -30,3 +30,19 @@ jobs:
         working-directory: packages/verify-pqc
       - name: Vendored action scanner is byte-identical to canonical (no drift)
         run: diff -q packages/verify-pqc/pqcbom.mjs packages/verify-pqc/pqcbom-action/pqcbom.mjs
+
+  # Machine-checked FORMAL proofs (Z3 SMT) — the "prove it, don't claim it" differentiator, gated on
+  # every push: each load-bearing property is proven (negation unsat) with a teeth control (broken
+  # design -> sat). Runs the whole suite via formal/run_all.py; a regression here fails the build.
+  formal-proofs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Z3
+        run: pip install z3-solver
+      - name: Machine-checked formal proof suite (Z3 SMT)
+        run: python formal/run_all.py
+        working-directory: packages/verify-pqc

@@ -73,6 +73,23 @@ council-reviewed; the design + spec each had a downgrade caught and closed). Hon
 | `pqflow` | **QuantumPay lifecycle engine** — merchant-signed, hash-chained capture lifecycle over a `pqpay` authorization (authorize→capture(s)→settle/void/refund); verifyFlow RECOMPUTES the state and enforces Σcaptures ≤ authorized + no-capture-after-close + refund ≤ captured; per-flow unique nonces + durable cross-flow ledger. Authorization/capture INTENT only — NOT money movement | 18 |
 | `pqdelegate` | **ThrondarAgent delegation engine** — attenuating capability-delegation chains over `pqcap` (multi-agent): a holder sub-delegates a NARROWER capability; verifyDelegationChain enforces attenuation 3 ways (caveat ACCUMULATION, tool/scope/max_uses narrow-only, signed delegator-chain + parent_ref binding) + leaf holder-PoP back to the root principal. A worker can never escalate beyond what it was granted | 26 |
 | `pqconsentflow` | **VaultHealth consent-lifecycle engine** — a controller-SIGNED, hash-chained grant→access→withdraw log over `pqconsent`; verifyConsentFlow recomputes the permitted state, binds the access time into the scope check, and flags access-after-withdrawal (vs the SUBJECT-signed `revoked_at`, not chain position) / withheld-withdrawal / out-of-scope as cryptographically-evidenced `violations` — returning `verified` (chain authentic) distinctly from `compliant` (no violation). Verifiable EVIDENCE, not access enforcement | 19 |
+| `pqaibom` | **AI Bill of Materials (MAP)** — verifiable ML-BOM (CycloneDX 1.6) + a *Declaration-Assurance* grade; assurance-level cap (an 'A' implies hash-bound components) + completeness floor (no vacuous 'A'); Z3-proven grade caps | 53 |
+| `pqeval` | **AI Evaluation Attestation (MEASURE)** — a signed eval receipt + posture grade; suite-type cap (a top posture needs an earned, registry-validated suite) + value/contamination/safety checks; Z3-proven | 26 |
+| `pqtrace` | **AI Execution Trace (MANAGE)** — runner-attested, hash-chained PQ execution/provenance log; salted-HMAC content commitments; RFC-6962 anchorable; Z3 chain-binding | 38 |
+| `pqgovernance-record` | **AI Governance Record (capstone)** — cross-binds MAP ∧ MEASURE ∧ MANAGE to ONE model (three distinct signers); subject authenticated from the signed AIBOM; pairwise-disjoint signer sets | 22 |
+| `pqgovernance-gate` | **CI admission gate** over the record — fail-closed; letter-floor / distinct-signer / fully-pinned-drift policy; `allowUnpinnedSeal` forced off | 25 |
+| `pqgovern-policy` | **Governance Policy (GOVERN)** — a signed, versioned admission policy the gate enforces (criteria become verifiable evidence); replay/window pins; caller can't shadow the signed criteria; Z3 admission-soundness proof | 37 |
+| `pqgovern-evidence` | **AI Governance Evidence Pack** — one self-contained, independently-verifiable artifact; re-derives the whole admission under the verifier's own pins (no embedded verdict); domain-separated packager seal | 15 |
+| `pqgovern-anchor` | **Transparency-anchored admissions** — bind an admission into an append-only RFC-6962 log; prove inclusion under a pinned STH + detect history-rewrite (consistency proofs); inclusion ≠ completeness | 17 |
+| `pqgovern-cli` | **CI admission command** — `node pqgovern-cli.mjs <pack.json> <config.json>` → exit 0 (ADMIT) / 1 (BLOCK) | 8 |
+
+### AI Governance layer (NIST AI RMF) — see [AI_GOVERNANCE.md](./AI_GOVERNANCE.md)
+
+The nine modules above (`pqaibom`/`pqeval`/`pqtrace` + `pqgovern*`) compose **MAP ∧ MEASURE ∧ MANAGE ∧
+GOVERN** into one cross-bound, fail-closed AI-governance admission — with a self-verifiable Evidence Pack,
+transparency anchoring, a CI command, an end-to-end composition test (`pqgovern-e2e`, 15), and a
+machine-checked Z3 admission-soundness proof (`formal/pqgovern_admission_z3.py`). Self-attested pre-audit;
+attestation proves *who signed what*, not that a claim is true; **not a certification**.
 
 Plus CLI + GitHub Action (`pqcbom-cli.mjs`, `pqcbom-action/` — SARIF→code-scanning, report-only default), the **Evidence
 Pack Express generator** (`pqevidence-cli.mjs` — point at any repo → scan → hybrid-signed pack + buyer-facing report +
