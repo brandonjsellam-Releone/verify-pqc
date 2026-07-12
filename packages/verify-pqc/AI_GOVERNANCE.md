@@ -77,13 +77,16 @@ the admission gets, fail-closed:
 
 ## Machine-checked proofs (Z3 SMT)
 
-`python formal/run_all.py` runs the whole suite (**15/15**). Each proof shows the *negation is unsat* (no
+`python formal/run_all.py` runs the whole suite (**16/16**). Each proof shows the *negation is unsat* (no
 counterexample in the model) plus a **teeth** control (a deliberately broken design → *sat*, proving the
 harness discriminates and the property is load-bearing). Governance-relevant proofs:
 
 - `pqgovern_admission_z3.py` — **admission soundness**: no ADMIT without an owner-authenticated policy, all
   three record legs owner-pinned + cross-bound, in-window, version-pinned, and the **signed** criteria met;
   and the caller cannot shadow those criteria. Non-vacuity check: the honest case still admits.
+- `pqgovern_witness_z3.py` — **witness-quorum reconciliation soundness**: a quorum is reported `consistent`
+  only when no witnesses fork *and* every different-size pair is proof-verified (a missing proof can never
+  read as safe), and every designed fork is detected. Its teeth reproduce the exact pre-fix bug.
 - `pqaibom_grade_cap_z3.py` — no unearned Declaration-Assurance grade (omission-gaming structurally capped).
 - `pqeval_posture_cap_z3.py` — no top posture without an earned, registry-validated suite.
 - `pqtrace_chain_z3.py` — the sealed head pins the entire step chain (any edit/reorder/truncate detectable).
@@ -136,7 +139,7 @@ window/version pins. See `pqgovern-cli.mjs` for the config shape.
 
 ```bash
 node test-all.mjs                 # every module self-test (91 modules, expect ALL MODULES PASS)
-python formal/run_all.py          # the machine-checked proof suite (expect 15/15)
+python formal/run_all.py          # the machine-checked proof suite (expect 16/16)
 ```
 
 ## Cryptographic suite
