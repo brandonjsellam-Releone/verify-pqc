@@ -32,6 +32,7 @@ import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { sthCoreBytes, verifySTH, verifyConsistency } from './pqsign.mjs';
 import { GovernLogMonitor } from './pqgovern-monitor.mjs';
+import { verifyAnchoredAdmission } from './pqgovern-anchor.mjs';
 
 // Domain separation: a witness co-signature MUST NOT be confusable with a log STH signature (STH_CTX) nor any
 // other artifact signature. A witness signs "witness W observed head H under the pinned log key at time T".
@@ -139,6 +140,60 @@ export function gossipReconcile(observations, logPub, opts = {}) {
     // gate on `consistent`, treat `unresolvedPairs` as "go fetch proofs", and only `equivocation` is "proven guilty").
     return { consistent: fullyResolved, equivocation: equivocations.length > 0, equivocations, unresolvedPairs, fullyResolved, witnessesCounted: valid.length, trustedCount: trustedByHex.size, skipped, agreedHead };
   } catch { return base; }
+}
+
+/** verifyWitnessedAdmission(anchor, observations, opts) -> the CAPSTONE relying-party verdict. TOTAL / fail-closed.
+ *  Composes anchor + witness: an admission is `witnessed` only when (1) it re-derives to ADMIT and its inclusion is
+ *  proven under the pinned STH (verifyAnchoredAdmission), (2) at least `minWitnesses` DISTINCT TRUSTED witnesses have
+ *  co-signed THE ANCHORED HEAD (exact tree_size + root), and (3) the reconciliation surfaced NO proven equivocation.
+ *  This is the k-of-n witnessing a relying party actually gates on — not just "is there a fork?" but "did enough
+ *  independent witnesses vouch for the very head my admission sits in, with no split-view proven?". `fullyResolved`
+ *  additionally reports whether every different-size pair was proof-resolved (a stricter, optional bar).
+ *  opts = the verify opts (aibomSealOpts/…/policySealOpts, atTs, …) + { logPub, trustedWitnesses, minWitnesses (clamped
+ *  >=1), proofs, requireFullyResolved? }. requireFullyResolved:true also demands every different-size pair be
+ *  proof-resolved (proven global consistency), not just "no fork proven". Safety-not-liveness: `witnessed` is a
+ *  statement about head H + its witnesses, never that the log is live or complete. */
+export function verifyWitnessedAdmission(anchor, observations, opts = {}) {
+  const base = { admit: false, anchored: false, witnessed: false, witnessCount: 0, minWitnesses: 1, equivocation: false, fullyResolved: false, why: '' };
+  try {
+    const logPub = opts.logPub;
+    if (!anchor || !anchor.sth || !isSafeInt(anchor.sth.tree_size) || !isHex(anchor.sth.root_hex) || !logPub) return { ...base, why: 'anchor.sth (safe-int size + hex root) and logPub required' };
+    const obsList = Array.isArray(observations) ? observations : [];
+    // 1. the admission must ADMIT and be ANCHORED (inclusion proven under the pinned STH), re-derived under the pins.
+    const av = verifyAnchoredAdmission(anchor, opts);
+    if (!av.admit || !av.anchored) return { ...base, admit: !!av.admit, anchored: !!av.anchored, why: av.why || 'admission did not admit/anchor under the verifier pins' };
+    // 2. reconcile the observations (proven-equivocation detection over the trusted set).
+    const recon = gossipReconcile(obsList, logPub, { trustedWitnesses: opts.trustedWitnesses, proofs: opts.proofs });
+    // 3. count DISTINCT trusted witnesses that co-signed EXACTLY the anchored head (its size + root), each verified.
+    const wantSize = anchor.sth.tree_size, wantRoot = anchor.sth.root_hex.toLowerCase();
+    const trustedByHex = new Map();
+    for (const pk of (Array.isArray(opts.trustedWitnesses) ? opts.trustedWitnesses : [])) { try { trustedByHex.set(bytesToHex(pk).toLowerCase(), pk); } catch { /* skip bad key */ } }
+    const witnessesOfHead = new Set();
+    for (const obs of obsList) {
+      if (!obs || typeof obs !== 'object') continue;
+      // CAPTURE-ONCE (anti-TOCTOU, council CRITICAL): snapshot every field ONCE into a plain object, so the head-filter
+      // and the signature check see IDENTICAL values — a caller object with stateful getters can't show head H to the
+      // filter and a different (legitimately-signed) head to verifyWitnessObservation and thereby be miscounted for H.
+      const s = { tree_size: obs.tree_size, root_hex: obs.root_hex, sth_ts: obs.sth_ts, observed_ts: obs.observed_ts, witness: obs.witness, log_sig: obs.log_sig, sig: obs.sig };
+      const whex = typeof s.witness === 'string' ? s.witness.toLowerCase() : null;
+      const wpub = whex ? trustedByHex.get(whex) : null;
+      if (!wpub || s.tree_size !== wantSize || String(s.root_hex).toLowerCase() !== wantRoot) continue;
+      if (verifyWitnessObservation(s, logPub, wpub).ok) witnessesOfHead.add(whex);
+    }
+    const minWitnesses = isSafeInt(opts.minWitnesses) && opts.minWitnesses > 0 ? opts.minWitnesses : 1;   // clamped >=1 by design (fail-closed)
+    const witnessCount = witnessesOfHead.size;
+    // `witnessed` = ADMITTED + ANCHORED + k distinct witnesses of THE head + NO PROVEN equivocation. A fork ANYWHERE in
+    // the reconciled set disqualifies — a proven fork means the LOG KEY equivocated (an attacker cannot forge a trusted
+    // witness's observation, so a proven fork is always the log's own fault). `opts.requireFullyResolved` additionally
+    // demands every different-size pair was proof-resolved (the stricter bar for an RP that wants proven GLOBAL
+    // consistency, not just "no fork proven"; off by default so a benign missing-proof/gossip gap doesn't block).
+    const witnessed = witnessCount >= minWitnesses && recon.equivocation === false && (!opts.requireFullyResolved || recon.fullyResolved === true);
+    return { admit: true, anchored: true, witnessed, witnessCount, minWitnesses, equivocation: recon.equivocation, fullyResolved: recon.fullyResolved,
+      why: witnessed ? `admitted + anchored + ${witnessCount}-of-${minWitnesses} witnessed, no equivocation${opts.requireFullyResolved ? ' (fully resolved)' : ''}`
+        : (recon.equivocation ? 'EQUIVOCATION proven among the witnesses (log key is faulty)'
+          : (opts.requireFullyResolved && !recon.fullyResolved ? 'an unresolved size-pair (missing consistency proof) under requireFullyResolved'
+            : `insufficient distinct witnesses of the anchored head (${witnessCount}/${minWitnesses})`)) };
+  } catch { return { ...base, why: 'exception (fail-closed)' }; }
 }
 
 /** GovernWitness — a witness IS a fork-refusing monitor that co-signs the heads it accepts. It NEVER emits an
@@ -286,6 +341,33 @@ async function selfTest() {
   // 14. fail-closed on garbage
   ok(gossipReconcile(null, logKey.publicKey).equivocation === false && gossipReconcile([{}], logKey.publicKey, { trustedWitnesses: trusted }).witnessesCounted === 0, 'malformed inputs -> fail-closed, nothing counted');
   ok(verifyWitnessObservation(null, logKey.publicKey, W1.publicKey).ok === false && verifyWitnessObservation({}, logKey.publicKey, W1.publicKey).ok === false, 'malformed observation -> verify fail-closed');
+
+  // 15. verifyWitnessedAdmission — the k-of-n relying-party CAPSTONE (anchor + witness composed)
+  const wlog = new PQTransparencyLog();
+  const wpack = mkPack(5000);
+  const { index: widx } = anchor.anchorAdmission(wpack, wlog, { anchored_ts: 5100 });
+  const wsth = wlog.signedTreeHead(logKey.secretKey, { ts: 8000 });   // size 1
+  const wanchor = { pack: wpack, entry: wlog.entries[widx], inclusion: wlog.inclusion(widx), sth: wsth, logPub: logKey.publicKey };
+  const wvopts = { aibomSealOpts: pins(declarant), evalSealOpts: pins(evaluator), traceSealOpts: pins(runner), policySealOpts: pins(owner), suiteRegistry: registry, loadedComponents: manifest.components, atTs: 1000, minVersion: 3, requireWindow: true, requireDistinctSigners: true };
+  const woW1 = witnessObserve(wsth, logKey.publicKey, W1.secretKey, W1.publicKey, { observed_ts: 1 });
+  const woW2 = witnessObserve(wsth, logKey.publicKey, W2.secretKey, W2.publicKey, { observed_ts: 1 });
+  const wa2 = verifyWitnessedAdmission(wanchor, [woW1, woW2], { ...wvopts, logPub: logKey.publicKey, trustedWitnesses: trusted, minWitnesses: 2 });
+  ok(wa2.admit === true && wa2.anchored === true && wa2.witnessed === true && wa2.witnessCount === 2, 'verifyWitnessedAdmission: admitted + anchored + 2 DISTINCT witnesses of the head -> witnessed (k-of-n)');
+  ok(verifyWitnessedAdmission(wanchor, [woW1, woW2], { ...wvopts, logPub: logKey.publicKey, trustedWitnesses: trusted, minWitnesses: 3 }).witnessed === false, 'verifyWitnessedAdmission: fewer distinct witnesses than minWitnesses -> NOT witnessed');
+  ok(verifyWitnessedAdmission(wanchor, [woW1, woW1], { ...wvopts, logPub: logKey.publicKey, trustedWitnesses: trusted, minWitnesses: 2 }).witnessCount === 1, 'verifyWitnessedAdmission: a DUPLICATE witness counts once (distinct)');
+  const woOther = witnessObserve(sth4, logKey.publicKey, W3.secretKey, W3.publicKey, { observed_ts: 1 });   // a DIFFERENT head (size 4)
+  ok(verifyWitnessedAdmission(wanchor, [woW1, woOther], { ...wvopts, logPub: logKey.publicKey, trustedWitnesses: trusted, minWitnesses: 2 }).witnessCount === 1, 'verifyWitnessedAdmission: an observation of a DIFFERENT head is not counted for this head');
+  const wlog2 = new PQTransparencyLog(); anchor.anchorAdmission(mkPack(6000), wlog2, {});
+  const wfork = wlog2.signedTreeHead(logKey.secretKey, { ts: 8100 });   // size 1, DIFFERENT root, same log key
+  const woFork = witnessObserve(wfork, logKey.publicKey, W2.secretKey, W2.publicKey, { observed_ts: 1 });
+  const waEq = verifyWitnessedAdmission(wanchor, [woW1, woFork], { ...wvopts, logPub: logKey.publicKey, trustedWitnesses: trusted, minWitnesses: 1 });
+  ok(waEq.equivocation === true && waEq.witnessed === false, 'verifyWitnessedAdmission: a PROVEN equivocation among witnesses disqualifies (witnessed false)');
+  ok(verifyWitnessedAdmission(wanchor, [woW1, woW2], { ...wvopts, aibomSealOpts: pins([mk(88), mkEd(89)]), logPub: logKey.publicKey, trustedWitnesses: trusted, minWitnesses: 1 }).witnessed === false, 'verifyWitnessedAdmission: admission fails under WRONG pins -> not witnessed (fail-closed)');
+  ok(verifyWitnessedAdmission(null, [], { logPub: logKey.publicKey }).witnessed === false && verifyWitnessedAdmission(wanchor, null, { ...wvopts, logPub: logKey.publicKey, trustedWitnesses: trusted }).witnessed === false, 'verifyWitnessedAdmission: malformed inputs -> fail-closed');
+  // requireFullyResolved (council DeepSeek): an unresolved unrelated size-pair does NOT block by default, but DOES under the strict flag.
+  const woOtherR = witnessObserve(sth4, logKey.publicKey, W3.secretKey, W3.publicKey, { observed_ts: 1 });   // size 4 -> an unresolved pair vs wsth (size 1) with no proof
+  ok(verifyWitnessedAdmission(wanchor, [woW1, woW2, woOtherR], { ...wvopts, logPub: logKey.publicKey, trustedWitnesses: trusted, minWitnesses: 2 }).witnessed === true, 'verifyWitnessedAdmission: an unresolved unrelated size-pair does NOT block witnessing of H by default (safety-not-liveness)');
+  ok(verifyWitnessedAdmission(wanchor, [woW1, woW2, woOtherR], { ...wvopts, logPub: logKey.publicKey, trustedWitnesses: trusted, minWitnesses: 2, requireFullyResolved: true }).witnessed === false, 'verifyWitnessedAdmission: requireFullyResolved -> an unresolved size-pair BLOCKS (proven global consistency demanded)');
 
   console.log('pqgovern-witness self-test: ' + pass + ' pass, ' + fail + ' fail');
   if (typeof process !== 'undefined' && process.exit) process.exit(fail ? 1 : 0);
