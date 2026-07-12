@@ -85,10 +85,11 @@ council-reviewed; the design + spec each had a downgrade caught and closed). Hon
 | `pqgovern-witness` | **Multi-party witness/gossip quorum** — independent witnesses co-sign the heads they accept; `gossipReconcile` detects a **split-view/equivocation** a single monitor is blind to; `verifyWitnessedAdmission` = the **k-of-n relying-party capstone** (admitted + anchored + ≥k distinct witnesses of THE head + no proven fork; capture-once/TOCTOU-safe; `requireFullyResolved` opt); `consistent` = proven append-only, never "no fork yet"; safety-not-liveness | 27 |
 | `pqgovern-witness-service` | **Runnable witness node + gossip reconciler** (deploy-ready reference) — durable fork-refusing witness (atomic persist + sig-verified state restore) + a bounded/deduped reconciler over HTTP; total handler + body cap; owner adds auth/TLS/durable store | 17 |
 | `pqgovern-cli` | **CI admission command** — `node pqgovern-cli.mjs <pack.json> <config.json>` → exit 0 (ADMIT) / 1 (BLOCK) | 8 |
+| `pqgovern-fulfill` | **Turnkey deliverable producer** — signed record + policy → Evidence Pack + REPORT.md + VERIFY.md; SELF-VERIFIES + fails closed unless `admit ∧ integrityOk ∧ artifactsVerified`; the sellable AI-governance artifact | 9 |
 
 ### AI Governance layer (NIST AI RMF) — see [AI_GOVERNANCE.md](./AI_GOVERNANCE.md)
 
-The twelve modules above (`pqaibom`/`pqeval`/`pqtrace` + `pqgovern*`) compose **MAP ∧ MEASURE ∧ MANAGE ∧
+The thirteen modules above (`pqaibom`/`pqeval`/`pqtrace` + `pqgovern*`) compose **MAP ∧ MEASURE ∧ MANAGE ∧
 GOVERN** into one cross-bound, fail-closed AI-governance admission — with a self-verifiable Evidence Pack,
 transparency anchoring, a CI command, an end-to-end composition test (`pqgovern-e2e`, 15), and a
 machine-checked Z3 admission-soundness proof (`formal/pqgovern_admission_z3.py`). Self-attested pre-audit;
