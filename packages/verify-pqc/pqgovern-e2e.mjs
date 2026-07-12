@@ -15,13 +15,21 @@
  *   6. ADMIT    (evaluateUnderPolicy)  owner-pinned policy + owner-pinned record + drift-clean -> ADMIT
  *   7. BLOCK BATTERY                    every tamper/attack is REJECTED with the right reason
  *   8. SEAL     (pqseal)               one AND-composition over every stage's digest -> the whole flow is one record
+ *   9. TRANSPARENCY                     the admission -> Evidence Pack -> ANCHOR (inclusion) -> fork-refusing MONITOR
+ *      (pqgovern-evidence/anchor/         -> WITNESS quorum; a split-view (two heads at one size) is CAUGHT end-to-end
+ *       monitor/witness)
  * Self-test: node pqgovern-e2e.mjs
  */
 import * as aibom from './pqaibom.mjs';
 import * as pqeval from './pqeval.mjs';
 import * as gov from './pqgovernance-record.mjs';
 import * as policy from './pqgovern-policy.mjs';
+import * as evidence from './pqgovern-evidence.mjs';
+import * as anchor from './pqgovern-anchor.mjs';
+import * as monitor from './pqgovern-monitor.mjs';
+import * as witness from './pqgovern-witness.mjs';
 import { seal, openSeal } from './pqseal.mjs';
+import { PQTransparencyLog } from './pqsign.mjs';
 import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha512 } from '@noble/hashes/sha2.js';
@@ -115,6 +123,42 @@ async function main() {
   ok(flowOpen.verified === true, 'stage 8: the entire governed-admission flow seals into ONE owner-signed record');
   const tampered = { ...flowDigest, decision: dig({ admit: true }) };   // flip the recorded verdict
   ok(openSeal(utf8ToBytes(JSON.stringify(tampered)), flowSeal, ownerSealOpts).verified === false, 'tampering the sealed flow record is detected');
+
+  // 9. TRANSPARENCY TIER — the governed admission is bundled into a self-verifiable Evidence Pack, ANCHORED into an
+  //    RFC-6962 log, followed by a fork-refusing MONITOR, co-signed by a WITNESS quorum, and a split-view is CAUGHT.
+  const tvopts = { ...vopts, policySealOpts: ownerSealOpts, atTs: 1000, minVersion: 3, requireWindow: true, requireDistinctSigners: true };
+  const logKey = ml_dsa87.keygen(new Uint8Array(32).fill(90));
+  const W1 = ml_dsa87.keygen(new Uint8Array(32).fill(91)), W2 = ml_dsa87.keygen(new Uint8Array(32).fill(92));
+
+  // 9a. EVIDENCE PACK — the whole admission re-derives under the VERIFIER's own pins (the pack carries no verdict).
+  const pack = evidence.buildEvidencePack({ record, signedPolicy }, { created_ts: 2000 });
+  ok(evidence.verifyEvidencePack(pack, tvopts).admit === true, 'stage 9a: the governed admission bundles into a self-verifiable Evidence Pack (admit re-derived under verifier pins)');
+
+  // 9b. ANCHOR — the pack is recorded in an append-only log; inclusion is proven under the pinned STH.
+  const log = new PQTransparencyLog();
+  const { index } = anchor.anchorAdmission(pack, log, { anchored_ts: 2100 });
+  const sth = log.signedTreeHead(logKey.secretKey, { ts: 8000 });
+  const inc = log.inclusion(index);
+  const av = anchor.verifyAnchoredAdmission({ pack, entry: log.entries[index], inclusion: inc, sth, logPub: logKey.publicKey }, tvopts);
+  ok(av.admit === true && av.anchored === true, 'stage 9b: the admission is ANCHORED (inclusion proven under the pinned STH; admit re-derived)');
+
+  // 9c. MONITOR — a fork-refusing watcher follows the log; the admission is on the monitored append-only chain.
+  const mon = new monitor.GovernLogMonitor({ logPub: logKey.publicKey });
+  ok(mon.ingestSTH(sth).accepted === true, 'stage 9c: a fork-refusing MONITOR accepts the signed head');
+  ok(mon.verifyAdmission({ pack, entry: log.entries[index], inclusion: inc, sth }, tvopts).onMonitoredChain === true, 'stage 9c: the anchored admission is on the monitored chain');
+
+  // 9d. WITNESS QUORUM — a witness co-signs the head; a single-witness quorum is consistent.
+  const trusted = [W1.publicKey, W2.publicKey];
+  const obs1 = witness.witnessObserve(sth, logKey.publicKey, W1.secretKey, W1.publicKey, { observed_ts: 1 });
+  ok(witness.gossipReconcile([obs1], logKey.publicKey, { trustedWitnesses: trusted }).consistent === true, 'stage 9d: a WITNESS co-signs the anchored head -> quorum consistent');
+
+  // 9e. SPLIT-VIEW CAUGHT — the log serves a DIFFERENT head at the same size to W2; the reconciler flags equivocation.
+  const log2 = new PQTransparencyLog();
+  anchor.anchorAdmission(evidence.buildEvidencePack({ record, signedPolicy }, { created_ts: 3000 }), log2, {});   // 1 entry, DIFFERENT content -> different root
+  const forkSth = log2.signedTreeHead(logKey.secretKey, { ts: 8100 });   // same size, different root, SAME log key
+  const obs2 = witness.witnessObserve(forkSth, logKey.publicKey, W2.secretKey, W2.publicKey, { observed_ts: 1 });
+  const recon = witness.gossipReconcile([obs1, obs2], logKey.publicKey, { trustedWitnesses: trusted });
+  ok(recon.equivocation === true && recon.equivocations[0].type === 'exact-size-fork', 'stage 9e: a WITNESS QUORUM CATCHES the split-view (log served two heads at one size) — full transparency tier end-to-end');
 
   console.log('pqgovern-e2e self-test: ' + pass + ' pass, ' + fail + ' fail');
   if (typeof process !== 'undefined' && process.exit) process.exit(fail ? 1 : 0);
