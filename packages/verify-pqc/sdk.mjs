@@ -47,6 +47,7 @@ import * as pqgovernanceRecord from './pqgovernance-record.mjs';
 import * as pqgovernanceGate from './pqgovernance-gate.mjs';
 import * as pqgovernPolicy from './pqgovern-policy.mjs';
 import * as pqgovernEvidence from './pqgovern-evidence.mjs';
+import * as pqgovernAnchor from './pqgovern-anchor.mjs';
 import * as qiv from './qiv.mjs';
 import * as qivPin from './qiv-pin.mjs';
 import * as omega from './omega.mjs';
@@ -68,7 +69,7 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const verifyPQC = require('./index.js');
 
-export { pqef, polarseek, pqsign, pqtransport, pqanswer, pqcouncil, pqguard, pqinduct, pqmoa, pqclaimgate, pqverify, pqratchet, pqratchetHE, pqx3dh, pqindex, pqassistant, pqcbom, pqcbomReport, pqgateway, pqgatewaySession, pqtsa, pqkt, pqverifyApi, pqpki, pqvault, pqcompliance, pqmarket, pqseal, pqattest, pqtrace, pqaibom, pqeval, pqgovernanceRecord, pqgovernanceGate, pqgovernPolicy, pqgovernEvidence, qiv, qivPin, omega, omegaGov, omegaBridge, omegaEvidence, omegaChain, omegaSentinel, omegaNexus, omegaServer, pqmeshServer, pqsearchServer, trelyanConsole, crossProductE2E, demoGateway, apiServer, verifyPQC };
+export { pqef, polarseek, pqsign, pqtransport, pqanswer, pqcouncil, pqguard, pqinduct, pqmoa, pqclaimgate, pqverify, pqratchet, pqratchetHE, pqx3dh, pqindex, pqassistant, pqcbom, pqcbomReport, pqgateway, pqgatewaySession, pqtsa, pqkt, pqverifyApi, pqpki, pqvault, pqcompliance, pqmarket, pqseal, pqattest, pqtrace, pqaibom, pqeval, pqgovernanceRecord, pqgovernanceGate, pqgovernPolicy, pqgovernEvidence, pqgovernAnchor, qiv, qivPin, omega, omegaGov, omegaBridge, omegaEvidence, omegaChain, omegaSentinel, omegaNexus, omegaServer, pqmeshServer, pqsearchServer, trelyanConsole, crossProductE2E, demoGateway, apiServer, verifyPQC };
 export const SDK_VERSION = '0.28.0-draft';
 export const SUITES = {
   kem: 'X25519+ML-KEM-1024',
@@ -79,4 +80,4 @@ export const SUITES = {
   onchain: 'Falcon-1024 (FIPS 206 in development — provenance only)',
   aead: 'AES-256-GCM',
 };
-export default { pqef, polarseek, pqsign, pqtransport, pqanswer, pqcouncil, pqguard, pqinduct, pqmoa, pqclaimgate, pqverify, pqratchet, pqratchetHE, pqx3dh, pqindex, pqassistant, pqcbom, pqcbomReport, pqgateway, pqgatewaySession, pqtsa, pqkt, pqverifyApi, pqpki, pqvault, pqcompliance, pqmarket, pqseal, pqattest, pqtrace, pqaibom, pqeval, pqgovernanceRecord, pqgovernanceGate, pqgovernPolicy, pqgovernEvidence, demoGateway, apiServer, verifyPQC, SDK_VERSION, SUITES };
+export default { pqef, polarseek, pqsign, pqtransport, pqanswer, pqcouncil, pqguard, pqinduct, pqmoa, pqclaimgate, pqverify, pqratchet, pqratchetHE, pqx3dh, pqindex, pqassistant, pqcbom, pqcbomReport, pqgateway, pqgatewaySession, pqtsa, pqkt, pqverifyApi, pqpki, pqvault, pqcompliance, pqmarket, pqseal, pqattest, pqtrace, pqaibom, pqeval, pqgovernanceRecord, pqgovernanceGate, pqgovernPolicy, pqgovernEvidence, pqgovernAnchor, demoGateway, apiServer, verifyPQC, SDK_VERSION, SUITES };
