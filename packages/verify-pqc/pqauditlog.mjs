@@ -38,7 +38,16 @@ function canon(v) {
 // payload binding: a 1-byte TYPE TAG + canonical bytes, so a raw string can NEVER collide with the structured value
 // whose canon() equals it (red-team: string S and value P were interchangeable when S === canon(P)). Uint8Array keeps a
 // raw fast-path under its own tag. Both producer (append) and verifier (verifyResponse) run this identical transform.
-function payloadTag(p) { return p instanceof Uint8Array ? 6 : (p === null ? 3 : Array.isArray(p) ? 4 : ({ number: 1, boolean: 2, string: 0, object: 5 })[typeof p] ?? 7); }
+function payloadTag(p) {
+  if (p instanceof Uint8Array) return 6;
+  if (p === null) return 3;
+  if (Array.isArray(p)) return 4;
+  const t = ({ number: 1, boolean: 2, string: 0, object: 5 })[typeof p];
+  // fail-CLOSED (sweep R1): function/symbol/undefined all fell through to a shared tag 7 and canon() '{}', so two distinct
+  // such payloads collided to the same payload hash. These are never legitimate signable payloads — reject rather than sign.
+  if (t === undefined) throw new Error('pqauditlog: unsupported payload type ' + typeof p + ' (allowed: string/number/boolean/null/array/object/Uint8Array)');
+  return t;
+}
 const payloadHash = (p) => bytesToHex(sha256(concatBytes(HASH_TAG, new Uint8Array([payloadTag(p)]), p instanceof Uint8Array ? p : utf8ToBytes(canon(p)))));
 // the signable core of an entry (everything except the signatures + the derived entry_hash)
 function coreOf(e) {
@@ -123,7 +132,10 @@ export function verifyLog(entries, trusted, opts = {}) {
       }
       seen.add(e.nonce); prev = e.entry_hash; lastTs = e.ts;
     }
-    if (opts.now != null && opts.maxAgeMs != null && entries.length) {
+    if (opts.maxAgeMs != null && entries.length) {
+      // a requested freshness bound (maxAgeMs) needs a FINITE clock; a null/non-finite opts.now would silently SKIP the
+      // staleness gate, letting a stale/withheld tip read fresh → fail-closed instead. (fix-verif sibling of pqgateway _negotiate, 1 Jul)
+      if (!Number.isFinite(opts.now)) return { ...base, n: entries.length, broken_at: entries.length - 1, reason: 'maxAgeMs set but no finite clock (opts.now) — cannot verify tip freshness (fail-closed)' };
       const tip = entries[entries.length - 1];
       if (opts.now - tip.ts > opts.maxAgeMs) return { ...base, n: entries.length, broken_at: entries.length - 1, reason: 'stale tip' };
     }
@@ -250,6 +262,10 @@ function selfTest() {
   let total = true;
   for (const bad of [null, undefined, {}, 42, [null], [{ seq: 5 }], [{ ...entries[0], seq: 1 }]]) { try { if (verifyLog(bad, trusted).verified !== false) total = false; } catch { total = false; } }
   ok(total, 'TOTAL: malformed logs -> verified:false, never throws');
+
+  // sweep-R1 lock: a function/symbol payload has no distinct tag+canon → THROW (was tag-7 + canon '{}' collision)
+  let fnThrew = false; try { append(log, { actor: 'x', action: 'y', stage: 'input', ts: 99999, payload: function f() {} }); } catch { fnThrew = true; }
+  ok(fnThrew, 'sweep-R1 lock: a function payload THROWS (no shared tag-7 / canon "{}" hash collision)');
 
   console.log('pqauditlog self-test: ' + pass + ' pass, ' + fail + ' fail');
   if (typeof process !== 'undefined' && process.exit) process.exit(fail ? 1 : 0);

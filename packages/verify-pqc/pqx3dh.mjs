@@ -74,6 +74,10 @@ export function verifyPrekeyBundle(bundle, opts = {}) {
       const pinHex = (typeof pin === 'string' ? pin : hx(pin)).toLowerCase();
       if (typeof bundle.ik_sig_pub !== 'string' || bundle.ik_sig_pub.toLowerCase() !== pinHex) return false; // not the pinned identity
     }
+    // reserved-id guard (sweep R1): a bundle whose one-time-KEM id collides with the reserved 'lastresort' sentinel would
+    // misroute the responder (it routes 'lastresort' to the last-resort key while the initiator used the one-time key →
+    // silent SK divergence). publishPrekeyBundle rejects this at creation; reject it on verify too (fail-closed).
+    if (bundle.kem_ot_id === 'lastresort') return false;
     // ONE-TIME prekeys are signed too (tamper-binding harness + Signal PQXDH): under HNDL the classical legs are broken,
     // so an active attacker who substitutes an UNSIGNED one-time PQ-KEM prekey could defeat the PQ protection. Bind them.
     const coreSigned = { ik_dh_pub: bundle.ik_dh_pub, spk_pub: bundle.spk_pub, kem_lastresort_pub: bundle.kem_lastresort_pub,
@@ -104,6 +108,7 @@ export function initiateHandshake(bobBundle, aliceIdentity) {
 export function respondHandshake(initialMessage, bobIdentity, bobBundle, bobSecrets) {
  try { // TOTAL: a malformed handshake message fails CLOSED ({ok:false}); the throwing sites are before any prekey is consumed
   if (bobSecrets.consumed.has(initialMessage.kem_ct)) return { ok: false, reason: 'replay: this handshake was already consumed' };
+  bobSecrets.consumed.add(initialMessage.kem_ct);   // consume-on-receipt (sweep R1): mark BEFORE decapsulation so a throwing/failed attempt on this ct is not retryable, and the check→consume is a single synchronous step (no interleave)
   let kemSk, kemUsedPub;
   if (initialMessage.kem_used_id === 'lastresort') { kemSk = bobSecrets.kem_lastresort_sk; kemUsedPub = bobBundle.kem_lastresort_pub; }
   else if (initialMessage.kem_used_id === bobSecrets.kem_ot_id && bobSecrets.kem_ot_sk) { kemSk = bobSecrets.kem_ot_sk; kemUsedPub = bobBundle.kem_ot_pub; }
@@ -120,7 +125,6 @@ export function respondHandshake(initialMessage, bobIdentity, bobBundle, bobSecr
   labelled.push(L('pqx3dh-kem'), ss);
   const th = transcriptHash({ proto: 'pqx3dh-v1', suite: SUITE, ik_a_dh: initialMessage.ik_dh_pub, ik_b_dh: bobBundle.ik_dh_pub, ek_a: initialMessage.ek_pub, spk_b: bobBundle.spk_pub, kem_used_pub: kemUsedPub, kem_used_id: initialMessage.kem_used_id, kem_ct: initialMessage.kem_ct, opk_b: opkPub, opk_id: opkId, bundle_sig: bobBundle.bundle_sig });
   const SK = deriveSK(labelled, th);
-  bobSecrets.consumed.add(initialMessage.kem_ct);               // replay defense
   if (initialMessage.kem_used_id === bobSecrets.kem_ot_id) bobSecrets.kem_ot_sk = null; // consume one-time KEM
   if (opkId) bobSecrets.onetime_priv = null;                    // consume one-time DH prekey
   return { ok: true, SK };
@@ -136,6 +140,7 @@ async function selfTest() {
   // 1. async offline handshake -> same SK; full transcript bound
   const { bundle, secrets } = publishPrekeyBundle(bob);
   ok(verifyPrekeyBundle(bundle) === true, 'prekey bundle signature verifies under Bob\'s identity');
+  ok(verifyPrekeyBundle({ ...bundle, kem_ot_id: 'lastresort' }) === false, 'sweep-R1 lock: a bundle claiming the reserved kem_ot_id "lastresort" is REJECTED on verify (SK-divergence guard)');
   const a = initiateHandshake(bundle, alice);
   const b = respondHandshake(a.initialMessage, bob, bundle, secrets);
   ok(a.ok && b.ok && hx(a.SK) === hx(b.SK) && a.SK.length === 32, 'Alice & Bob derive the SAME 32-byte SK (async, offline Bob)');

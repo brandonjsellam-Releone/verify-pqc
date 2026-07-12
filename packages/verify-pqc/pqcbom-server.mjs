@@ -1,5 +1,5 @@
 /*!
- * pqcbom-server — hosted "Quantum-Safe Scorecard" handler + CI policy gate (reference, DRAFT, standalone).
+ * pqcbom-server — hosted "Post-Quantum Readiness Scorecard" handler + CI policy gate (reference, DRAFT, standalone).
  *
  * The product surface of pqcbom: a serverless-shaped handler that turns a scan into (a) the free shareable
  * BADGE (shields.io endpoint JSON — we emit JSON only; shields renders it, so NO SVG is authored here, per
@@ -17,7 +17,7 @@ export const PREVIEW_NOTICE = 'PREVIEW — built on @trelyan/verify-pqc (UNAUDIT
 
 // shields.io endpoint schema — README badge via https://img.shields.io/endpoint?url=<this JSON>. JSON only, no SVG.
 export function scorecardBadge(grade) {
-  return { schemaVersion: 1, label: 'quantum-safe', message: grade.letter + ' (' + grade.score + ')', color: GRADE_COLOR[grade.letter] || 'lightgrey' };
+  return { schemaVersion: 1, label: 'PQ Readiness', message: grade.letter + ' (' + grade.score + ')', color: GRADE_COLOR[grade.letter] || 'lightgrey' };
 }
 
 // CI policy gate: fail on banned risk classes and/or below a minimum grade.
@@ -79,7 +79,7 @@ function selfTest() {
 
   const rV = handleScan(vuln);
   ok(rV.scorecard.grade === 'F' && rV.badge.color === 'red' && rV.badge.message.startsWith('F'), 'vulnerable scan -> grade F, red badge');
-  ok(rV.badge.schemaVersion === 1 && rV.badge.label === 'quantum-safe', 'badge is a valid shields.io endpoint object (JSON, no SVG authored)');
+  ok(rV.badge.schemaVersion === 1 && rV.badge.label === 'PQ Readiness', 'badge is a valid shields.io endpoint object (JSON, no SVG authored)');
   ok(!rV.cbom, 'free tier omits the full CBOM');
 
   const rS = handleScan(safe, { full: true });

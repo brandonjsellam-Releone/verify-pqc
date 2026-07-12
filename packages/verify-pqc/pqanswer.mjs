@@ -63,7 +63,7 @@ export function verifyAnswer(dossier, evidence, opts = {}) {
   const signer_trusted = trusted.includes((dossier.signer_pub_hex || '').toLowerCase());
   let signature_valid = false;
   try { signature_valid = ml_dsa87.verify(hexToBytes(dossier.sig_hex), dossierCore(dossier), hexToBytes(dossier.signer_pub_hex), { context: CTX }); } catch { signature_valid = false; }
-  const nonceOk = !opts.expectedNonce || ((dossier.nonce || '').toLowerCase() === opts.expectedNonce.toLowerCase());
+  const nonceOk = !opts.expectedNonce || (dossier.nonce === opts.expectedNonce);   // sweep R1: EXACT match (opaque nonces are case-sensitive; case-folding weakened replay binding)
 
   // content binding (selective disclosure: any omitted field -> null = not checked)
   let queryOk = null, answerOk = null, sourcesOk = null;
@@ -71,8 +71,15 @@ export function verifyAnswer(dossier, evidence, opts = {}) {
     if (evidence.query !== undefined) queryOk = sha(evidence.query) === dossier.query_sha256;
     if (evidence.answer !== undefined) answerOk = sha(evidence.answer) === dossier.answer_sha256;
     if (Array.isArray(evidence.sources)) {
-      const dset = new Set((dossier.sources || []).map((s) => s.url + '|' + s.content_sha256)); // order/dup-safe set compare
-      sourcesOk = evidence.sources.length === (dossier.sources || []).length && evidence.sources.every((s) => dset.has(s.url + '|' + sha(s.content)));
+      const dsrc = dossier.sources || [];
+      const dset = new Set(dsrc.map((s) => s.url + '|' + s.content_sha256));                 // order-safe set compare
+      const eset = new Set(evidence.sources.map((s) => s.url + '|' + sha(s.content)));
+      // ONE-TO-ONE covering (fix-verif sibling of pqcouncil, 1 Jul): length equality alone let a relay omit a
+      // dissenting source and pad a DUPLICATE of a supporting one to keep the count — provenance "fully verified"
+      // while a source was suppressed. Require both sides duplicate-free (|set|==length) so subset+equal-length ⇒ equal.
+      sourcesOk = evidence.sources.length === dsrc.length
+        && eset.size === evidence.sources.length && dset.size === dsrc.length
+        && evidence.sources.every((s) => dset.has(s.url + '|' + sha(s.content)));
     }
   }
   const suppliedPass = [queryOk, answerOk, sourcesOk].filter((x) => x !== null).every(Boolean);
@@ -114,7 +121,7 @@ function selfTest() {
   ok(good.content_verified && good.signature_valid && good.signer_trusted && good.sourcesOk && good.evidence_match === 'full', 'all content-verification flags true');
 
   // tampered answer / source -> not verified
-  ok(verifyAnswer(dossier, { ...input, answer: 'CNSA 2.0 requires RSA-2048.' }, { trustedSigners }).answerOk === false, 'tampered answer -> answerOk false');
+  ok(verifyAnswer(dossier, { ...input, answer: 'CNSA 2.0 requires RSA-2048.' }, { trustedSigners }).answerOk === false, 'tampered answer -> answerOk false'); // pqcbom-ignore: self-test fixture string (scanned at runtime, not crypto use)
   ok(verifyAnswer(dossier, { ...input, sources: [{ ...input.sources[0], content: 'fabricated' }, input.sources[1]] }, { trustedSigners }).sourcesOk === false, 'tampered source -> sourcesOk false');
 
   // source REORDERING must still verify (order/duplicate-safe binding — council fix)
@@ -131,6 +138,7 @@ function selfTest() {
 
   // replay/nonce: wrong expected nonce -> not verified (council fix)
   ok(verifyAnswer(dossier, input, { trustedSigners, expectedNonce: 'deadbeef' }).nonceOk === false, 'wrong nonce -> nonceOk false (replay defence)');
+  ok(verifyAnswer(dossier, input, { trustedSigners, expectedNonce: 'A1B2C3' }).nonceOk === false, 'sweep-R1 lock: case-variant nonce (A1B2C3 vs a1b2c3) -> nonceOk FALSE (exact match, no case-fold)');
 
   // selective disclosure: hashes-only is BINDING-verified but NOT content-verified (council fix to semantics)
   const hashesOnly = verifyAnswer(dossier, { query: input.query, answer: input.answer }, { trustedSigners, expectedNonce: 'a1b2c3' });

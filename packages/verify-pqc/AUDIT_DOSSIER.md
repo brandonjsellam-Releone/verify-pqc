@@ -29,7 +29,7 @@ docs and adds the formal cross-module crypto details an auditor needs first. **P
 | Signature (load-bearing) | **ML-DSA-87** | FIPS 204 |
 | Signature (hash-based diversity) | **SLH-DSA-SHA2-256f** (pqseal, pqattest, pqcbom-report, slhdsa leg) · **SLH-DSA-SHAKE-256s** (pqef, pqinduct, kat-conformance, fips-conformance) | FIPS 205 |
 | Signature (classical hybrid leg) | Ed25519 | — |
-| Signature (on-chain/provenance ONLY) | Falcon-1024 | draft FIPS 206 |
+| Signature (on-chain/provenance ONLY) | Falcon-1024 | FIPS 206 in development |
 | AEAD | AES-256-GCM / ChaCha20-Poly1305 | — |
 | Hash | SHA-512 / SHA3-256 / SHAKE-256 | — |
 | KDF | HKDF-SHA-384 / SHA-512 | — |

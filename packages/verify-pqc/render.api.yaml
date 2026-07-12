@@ -1,0 +1,23 @@
+# render.yaml — one-click Render deploy of the TRELYAN API server (owner-gated).
+# In the Render dashboard: New → Blueprint → point at this repo/path, or copy this
+# into a render.yaml at the deploy root. Set the two secret env vars in the dashboard
+# (never commit them). Health check is the open /healthz.
+services:
+  - type: web
+    name: trelyan-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile.api
+    dockerContext: .
+    healthCheckPath: /healthz
+    plan: starter
+    envVars:
+      - key: EXPOSE
+        value: "1"                 # fail closed unless tokens are set
+      - key: DEMO_API_TOKENS
+        sync: false                # SET IN DASHBOARD — comma-separated live API keys (secret)
+      - key: DEMO_QUOTA
+        value: "1000"              # included requests per key (tune per plan; empty = unlimited)
+      - key: THRONDAR_SLHDSA_LEG
+        value: "1"                 # keep the hybrid signature leg on
+# NOTE: the token→customer/plan mapping + billing is wired to Stripe out of band;
+# this service only ENFORCES the key + quota. Rotating a key = update DEMO_API_TOKENS.

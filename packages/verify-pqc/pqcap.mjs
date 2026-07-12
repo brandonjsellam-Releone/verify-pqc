@@ -59,23 +59,42 @@ function normCaveats(c) {
 export function evalCaveats(caveats, args) {
   try {
     const c = caveats || {};
-    const isPlainObj = args != null && typeof args === 'object' && !Array.isArray(args);
+    const proto = args == null ? undefined : Object.getPrototypeOf(args);
+    // A "plain data object" ({} literal or Object.create(null)). Reject EXOTIC objects — class instances, Proxies,
+    // Map/Set/Date, etc. — whose prototype could trap property access or whose hidden state the tool honors (apex 1 Jul).
+    const isPlainObj = args != null && typeof args === 'object' && !Array.isArray(args) && (proto === Object.prototype || proto === null);
     const hasConstraints = !!(c.arg_equals || c.arg_prefix || c.arg_max || c.arg_in || c.deny_unlisted === true || Array.isArray(c.args_allowed));
     // FAIL-CLOSED on non-plain-object args under ANY constraint: the tool receives the ORIGINAL args, so silently
-    // coercing an array/primitive to {} would hide it from the caveat + deny_unlisted checks (DeepSeek 1 Jul). A token
-    // with NO constraints is "tool unconstrained" by design, so any args shape is permitted there.
-    if (hasConstraints && args != null && !isPlainObj) return { ok: false, reason: 'non-object args cannot be constrained (array/primitive under caveats)' };
+    // coercing an array/primitive/exotic to {} would hide it from the caveat + deny_unlisted checks (DeepSeek 1 Jul). A
+    // token with NO constraints is "tool unconstrained" by design, so any args shape is permitted there.
+    if (hasConstraints && args != null && !isPlainObj) return { ok: false, reason: 'non-plain-object args cannot be constrained (array/primitive/exotic under caveats)' };
     const a = isPlainObj ? args : {};
-    if (c.arg_equals) for (const [k, v] of Object.entries(c.arg_equals)) if (canon(a[k]) !== canon(v)) return { ok: false, reason: `arg_equals ${k}` };
-    if (c.arg_prefix) for (const [k, p] of Object.entries(c.arg_prefix)) { if (typeof a[k] !== 'string' || !a[k].startsWith(String(p))) return { ok: false, reason: `arg_prefix ${k}` }; }
+    // Reject ACCESSOR (getter/setter) own props under constraints: a getter can return one value to the caveat check
+    // and another to the tool's later read (TOCTOU), defeating arg_equals/arg_max/arg_in. Require pure data properties.
+    if (hasConstraints && isPlainObj) for (const k of Reflect.ownKeys(a)) {
+      const d = Object.getOwnPropertyDescriptor(a, k);
+      if (d && (typeof d.get === 'function' || typeof d.set === 'function')) return { ok: false, reason: `accessor arg ${String(k)} cannot be constrained (getter TOCTOU)` };
+    }
+    // Read every constrained value as an OWN data property. `a[k]` walks the prototype chain, so an inherited value from a
+    // polluted Object.prototype could satisfy arg_equals/arg_in on an object that does not actually OWN that key — while the
+    // tool later reads the same inherited value. Own-only reads keep the caveat check aligned with genuine request args. (fix-verif 1 Jul)
+    const ownVal = (k) => (Object.hasOwn(a, k) ? a[k] : undefined);
+    if (c.arg_equals) for (const [k, v] of Object.entries(c.arg_equals)) if (canon(ownVal(k)) !== canon(v)) return { ok: false, reason: `arg_equals ${k}` };
+    if (c.arg_prefix) for (const [k, p] of Object.entries(c.arg_prefix)) { const av = ownVal(k); if (typeof av !== 'string' || !av.startsWith(String(p))) return { ok: false, reason: `arg_prefix ${k}` }; }
     // arg_max: STRICT number — reject strings/arrays/objects (Number() coercion of [50] / "50" / {valueOf} is a bypass)
-    if (c.arg_max) for (const [k, mx] of Object.entries(c.arg_max)) { if (typeof a[k] !== 'number' || !Number.isFinite(a[k]) || a[k] > Number(mx)) return { ok: false, reason: `arg_max ${k}` }; }
-    if (c.arg_in) for (const [k, arr] of Object.entries(c.arg_in)) { const allowed = Array.isArray(arr) ? arr.map(canon) : []; if (!allowed.includes(canon(a[k]))) return { ok: false, reason: `arg_in ${k}` }; }
+    if (c.arg_max) for (const [k, mx] of Object.entries(c.arg_max)) { const av = ownVal(k); if (typeof av !== 'number' || !Number.isFinite(av) || av > Number(mx)) return { ok: false, reason: `arg_max ${k}` }; }
+    if (c.arg_in) for (const [k, arr] of Object.entries(c.arg_in)) { const allowed = Array.isArray(arr) ? arr.map(canon) : []; if (!allowed.includes(canon(ownVal(k)))) return { ok: false, reason: `arg_in ${k}` }; }
     // deny-unlisted-args (least-privilege strict mode): NO request arg may exist beyond the named/allowed set
     if (c.deny_unlisted === true || Array.isArray(c.args_allowed)) {
       const allowed = new Set([...(c.args_allowed || []),
         ...Object.keys(c.arg_equals || {}), ...Object.keys(c.arg_prefix || {}), ...Object.keys(c.arg_max || {}), ...Object.keys(c.arg_in || {})]);
-      for (const k of Object.keys(a)) if (!allowed.has(k)) return { ok: false, reason: `unlisted arg ${k}` };
+      // Reflect.ownKeys enumerates ALL own keys — including NON-ENUMERABLE and SYMBOL keys an agent could smuggle
+      // (Object.keys skips them, yet the tool can still read them → ambient-authority escalation). String() the key so
+      // a Symbol is safely stringified (and never matches the string allow-set → rejected). (apex 1 Jul)
+      for (const k of Reflect.ownKeys(a)) if (!allowed.has(k)) return { ok: false, reason: `unlisted arg ${String(k)}` };
+      // ...and any INHERITED enumerable property (from a polluted Object.prototype): the tool can read req.args.<k> even
+      // though it is not an own key, so under least-privilege it is smuggled ambient authority. `for..in` walks the chain. (fix-verif 1 Jul)
+      for (const k in a) if (!Object.hasOwn(a, k) && !allowed.has(k)) return { ok: false, reason: `unlisted inherited arg ${String(k)}` };
     }
     return { ok: true };
   } catch { return { ok: false, reason: 'caveat eval error' }; }
@@ -137,7 +156,11 @@ export function verifyCapability(token, trustedIssuer, opts = {}) {
     let agentPub; try { agentPub = { ed: hexToBytes(token.agent_pub.ed), mldsa: hexToBytes(token.agent_pub.mldsa), ...(token.agent_pub.slh ? { slh: hexToBytes(token.agent_pub.slh) } : {}) }; } catch { return { verified: false, reason: 'bad agent_pub' }; }
     if (makeAgentId(agentPub) !== token.agent) return { verified: false, reason: 'agent_pub does not match signed agent id' };
     // expiry / not-yet-valid
-    if (token.expires_at != null && opts.now == null && opts.allowNoExpiryClock !== true) return { verified: false, reason: 'expires_at declared but no clock (opts.now) supplied — cannot verify freshness' };
+    // Cover BOTH temporal bounds: a declared issued_at (lower/not-yet-valid) OR expires_at (upper) needs a finite clock —
+    // else the token's validity window can't be checked. The lower bound was previously unguarded, so a future-dated,
+    // no-expiry token verified with no clock / a NaN clock (premature-use = the mirror of the expiry fail-open). Matches
+    // pqpki hasWindow / pqmarket. (fix-verif lower-bound mirror, 1 Jul)
+    if ((token.expires_at != null || token.issued_at != null) && (opts.now == null || !Number.isFinite(opts.now)) && opts.allowNoExpiryClock !== true) return { verified: false, reason: 'a validity bound (issued_at/expires_at) is declared but no finite clock (opts.now) supplied — cannot verify freshness' };
     if (token.expires_at != null && opts.now != null && Number(opts.now) >= Number(token.expires_at)) return { verified: false, reason: 'expired' };
     if (token.issued_at != null && opts.now != null && Number(opts.now) < Number(token.issued_at)) return { verified: false, reason: 'not yet valid' };
     // audience binding
@@ -162,15 +185,20 @@ export function verifyCapability(token, trustedIssuer, opts = {}) {
     }
     // replay / max_uses — FAIL-CLOSED: a max_uses token requires a durable, atomic ledger ({has(nonce)->count, add}).
     // Without one the limit is unenforceable, so reject — unless the caller explicitly asks for a non-consuming check.
+    let unmetered = false;
     if (token.max_uses != null) {
       if (opts.useLedger && typeof opts.useLedger.has === 'function') {
         const used = Number(opts.useLedger.has(token.nonce) || 0);
         if (used >= token.max_uses) return { verified: false, reason: 'max_uses exhausted' };
       } else if (!opts.allowUnmeteredCheck) {
         return { verified: false, reason: 'max_uses set but no useLedger (pass a durable ledger, or allowUnmeteredCheck for a non-consuming check)' };
+      } else {
+        // sweep R1: signature + caveats are valid but the max_uses limit was NOT enforced/consumed. Surface this
+        // explicitly so a caller checking `verified` alone cannot mistake a non-consuming PRE-CHECK for AUTHORIZATION.
+        unmetered = true;
       }
     }
-    return { verified: true, issuer: token.issuer, agent: token.agent, tool: token.tool, scope: token.scope };
+    return { verified: true, unmetered, ...(unmetered ? { warning: 'max_uses NOT enforced — non-consuming check only; pass useLedger to authorize' } : {}), issuer: token.issuer, agent: token.agent, tool: token.tool, scope: token.scope };
   } catch { return { verified: false }; }
 }
 
@@ -256,6 +284,7 @@ function selfTest() {
   const useReq = { tool: 'DatabaseQuery', args: { op: 'select' } };
   ok(verifyCapability(tokU, tIssuer, { request: useReq, now: 1, audience: 'orch-1' }).verified === false, 'APEX-TEAM FIX: max_uses set but NO ledger -> fail-closed (limit unenforceable)');
   ok(verifyCapability(tokU, tIssuer, { request: useReq, now: 1, audience: 'orch-1', allowUnmeteredCheck: true }).verified === true, 'allowUnmeteredCheck -> explicit non-consuming validity check passes');
+  { const u = verifyCapability(tokU, tIssuer, { request: useReq, now: 1, audience: 'orch-1', allowUnmeteredCheck: true }); ok(u.unmetered === true && /NOT enforced/.test(u.warning || ''), 'sweep-R1 lock: allowUnmeteredCheck surfaces unmetered:true + warning (a non-consuming check is NOT authorization)'); }
   const led = makeUseLedger();
   ok(verifyAndConsume(tokU, tIssuer, led, { request: useReq, now: 1, audience: 'orch-1' }).verified === true, 'use 1/2 verifies + consumes');
   ok(verifyAndConsume(tokU, tIssuer, led, { request: useReq, now: 1, audience: 'orch-1' }).verified === true, 'use 2/2 verifies + consumes');
@@ -266,6 +295,17 @@ function selfTest() {
   // DeepSeek 1 Jul hardenings:
   // (1) non-object args under constraints fail closed — an array would coerce to {} and slip deny_unlisted
   ok(verifyCapability(strict, tIssuer, { request: { tool: 'execCommand', args: ['ls', '--sudo'] } }).verified === false, 'non-object (array) args under caveats → REJECTED (no coercion bypass of deny_unlisted)');
+  // (1b) apex 1 Jul — evalCaveats exotic-object / enumerability / TOCTOU hardening (strict = arg_equals{cmd:'ls'} + deny_unlisted):
+  class _ExoticArgs {} const _exotic = new _ExoticArgs(); _exotic.cmd = 'ls';
+  ok(verifyCapability(strict, tIssuer, { request: { tool: 'execCommand', args: _exotic } }).verified === false, 'exotic object (class instance) args under caveats → REJECTED (non-plain prototype)');
+  const _nullProto = Object.create(null); _nullProto.cmd = 'ls';
+  ok(verifyCapability(strict, tIssuer, { request: { tool: 'execCommand', args: _nullProto } }).verified === true, 'Object.create(null) plain-data args with only the named arg → verifies (null proto is allowed)');
+  const _neSmuggle = { cmd: 'ls' }; Object.defineProperty(_neSmuggle, 'sudo', { value: true, enumerable: false, configurable: true });
+  ok(verifyCapability(strict, tIssuer, { request: { tool: 'execCommand', args: _neSmuggle } }).verified === false, 'NON-ENUMERABLE smuggled arg (Object.keys misses it, tool can read it) → caught by Reflect.ownKeys → REJECTED');
+  const _symSmuggle = { cmd: 'ls' }; _symSmuggle[Symbol('inject')] = 'rm -rf /';
+  ok(verifyCapability(strict, tIssuer, { request: { tool: 'execCommand', args: _symSmuggle } }).verified === false, 'SYMBOL-keyed smuggled arg → caught by Reflect.ownKeys → REJECTED (String(symbol) does not throw)');
+  const _getterCmd = {}; Object.defineProperty(_getterCmd, 'cmd', { get() { return 'ls'; }, enumerable: true, configurable: true });
+  ok(verifyCapability(strict, tIssuer, { request: { tool: 'execCommand', args: _getterCmd } }).verified === false, 'GETTER on the named arg (arg_equals read would pass, but a getter is TOCTOU vs the tool re-read) → REJECTED (data props only)');
   // (2) a token declaring expires_at must not verify without a clock
   ok(verifyCapability(tok, tIssuer, { request: goodReq, audience: 'orch-1' }).verified === false, 'declared expires_at + no opts.now → refused (no silent expiry bypass)');
   ok(verifyCapability(tok, tIssuer, { request: goodReq, audience: 'orch-1', allowNoExpiryClock: true }).verified === true, 'explicit allowNoExpiryClock → permits a deliberately time-less check');

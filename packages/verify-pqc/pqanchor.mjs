@@ -126,12 +126,20 @@ export function verifyAnchorChain(anchors, trustedAnchor, opts = {}) {
   const base = { verified: false, n: 0, broken_at: 0, reason: '' };
   try {
     if (!Array.isArray(anchors) || !trustedAnchor || !trustedAnchor.ed || !trustedAnchor.mldsa) return { ...base, reason: 'args' };
-    let prev = GENESIS, lastTs = -Infinity, lastN = -1;
+    let prev = GENESIS, lastTs = -Infinity, lastN = -1, firstLogSigner = null;
+    // optional out-of-band pin of the expected log signer (hex). Without it, we still enforce the log signer is CONSTANT
+    // across the chain (sweep R1): a silent mid-chain log_signer swap — e.g. a compromised anchor authority re-anchoring a
+    // different log — must not pass; key rotation has to be an explicit, separately-verified event, not an unnoticed change.
+    const pinLog = opts.trustedLog ? { ed: bytesToHex(opts.trustedLog.ed), mldsa: bytesToHex(opts.trustedLog.mldsa) } : null;
     for (let i = 0; i < anchors.length; i++) {
       const a = anchors[i]; const at = (reason) => ({ ...base, n: anchors.length, broken_at: i, reason });
       if (!a || a.seq !== i) return at('seq/shape');
       const coreBytes = utf8ToBytes(canon(anchorCore(a)));
       if (a.prev_anchor !== prev) return at('anchor chain linkage');
+      if (!a.log_signer || typeof a.log_signer.ed !== 'string' || typeof a.log_signer.mldsa !== 'string') return at('anchor missing log_signer');
+      if (i === 0) firstLogSigner = a.log_signer;
+      else if (a.log_signer.ed !== firstLogSigner.ed || a.log_signer.mldsa !== firstLogSigner.mldsa) return at('log_signer changed mid-chain (silent log-key swap rejected)');
+      if (pinLog && (a.log_signer.ed !== pinLog.ed || a.log_signer.mldsa !== pinLog.mldsa)) return at('anchor log_signer != pinned trustedLog');
       if (anchorHashOf(coreBytes) !== a.anchor_hash) return at('anchor_hash mismatch (tamper)');
       if (!CHAINS.includes(a.chain)) return at('unknown chain tag');
       if (typeof a.ts !== 'number' || a.ts < lastTs) return at('ts not non-decreasing');
@@ -247,6 +255,12 @@ async function selfTest() {
   appendAnchor(ach2, { root: lv2.tip, n: 5, logSignerPubs: { ed: bytesToHex(trustedLog.ed), mldsa: bytesToHex(trustedLog.mldsa) } }, { ts: 1 });
   appendAnchor(ach2, { root: lv.tip, n: 2, logSignerPubs: { ed: bytesToHex(trustedLog.ed), mldsa: bytesToHex(trustedLog.mldsa) } }, { ts: 2 });
   ok(verifyAnchorChain(ach2.anchors, trustedAnchor).verified === true && verifyAnchorChain(ach2.anchors, trustedAnchor, { requireMonotonicN: true }).verified === false, 'red-team: anchored log-state rollback (n 5->2) DETECTED via requireMonotonicN');
+
+  // sweep-R1 lock: a mid-chain log_signer SWAP (anchor authority validly re-anchors a DIFFERENT log signer) is REJECTED
+  const swapAch = createAnchorChain(anchorSigner, { chain: 'algorand' });
+  appendAnchor(swapAch, { root: lv.tip, n: lv.n, logSignerPubs: { ed: bytesToHex(trustedLog.ed), mldsa: bytesToHex(trustedLog.mldsa) } }, { ts: 1 });
+  appendAnchor(swapAch, { root: lv2.tip, n: lv2.n, logSignerPubs: { ed: bytesToHex(ed(9).publicKey), mldsa: bytesToHex(ml_dsa87.keygen(new Uint8Array(32).fill(9)).publicKey) } }, { ts: 2 });
+  { const v = verifyAnchorChain(swapAch.anchors, trustedAnchor); ok(v.verified === false && /log_signer/.test(v.reason || ''), 'sweep-R1 lock: mid-chain log_signer swap REJECTED (silent log-key change caught)'); }
 
   // DUAL-CHAIN: anchor the same log to Algorand + QRL-Zond at once; both must verify + bind the same root
   const dual = createDualAnchor(anchorSigner);

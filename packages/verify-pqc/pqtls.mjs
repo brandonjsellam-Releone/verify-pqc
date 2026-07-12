@@ -19,8 +19,8 @@ import { randomBytes } from '@noble/hashes/utils.js';
 
 // IANA TLS Supported Groups (code -> { name, pq }). PQ = ML-KEM hybrid (or legacy Kyber draft).
 export const GROUPS = {
-  0x001d: { name: 'X25519', pq: false }, 0x0017: { name: 'secp256r1', pq: false },
-  0x0018: { name: 'secp384r1', pq: false }, 0x0019: { name: 'secp521r1', pq: false },
+  0x001d: { name: 'X25519', pq: false }, 0x0017: { name: 'secp256r1', pq: false }, // pqcbom-ignore: classification registry (data about algorithms, not use)
+  0x0018: { name: 'secp384r1', pq: false }, 0x0019: { name: 'secp521r1', pq: false }, // pqcbom-ignore: classification registry (data about algorithms, not use)
   0x0100: { name: 'ffdhe2048', pq: false }, 0x0101: { name: 'ffdhe3072', pq: false },
   0x11ec: { name: 'X25519MLKEM768', pq: true }, 0x11eb: { name: 'SecP256r1MLKEM768', pq: true },
   0x11ed: { name: 'SecP384r1MLKEM1024', pq: true },
@@ -40,7 +40,7 @@ export function buildClientHello(host, x25519Pub) {
   const cipherSuites = Buffer.concat([u16(0x1301), u16(0x1302), u16(0x1303)]);          // AES-128/256-GCM, ChaCha20
   const groupCodes = [0x11ec, 0x6399, 0x001d, 0x0017];                                  // ML-KEM hybrids FIRST, then classical
   const supportedGroups = ext(0x000a, Buffer.concat([u16(groupCodes.length * 2), ...groupCodes.map(u16)]));
-  const sigCodes = [0x0403, 0x0804, 0x0805, 0x0806, 0x0401, 0x0807];                    // ECDSA-P256, RSA-PSS, RSA-PKCS1, Ed25519
+  const sigCodes = [0x0403, 0x0804, 0x0805, 0x0806, 0x0401, 0x0807];                    // ECDSA-P256, RSA-PSS, RSA-PKCS1, Ed25519 // pqcbom-ignore: claim-hygiene / migration prose
   const sigAlgs = ext(0x000d, Buffer.concat([u16(sigCodes.length * 2), ...sigCodes.map(u16)]));
   const supportedVersions = ext(0x002b, Buffer.concat([Buffer.from([2]), u16(0x0304)]));// TLS 1.3
   const ksEntry = Buffer.concat([u16(0x001d), u16(32), Buffer.from(x25519Pub)]);        // key_share: X25519 only

@@ -1,4 +1,4 @@
-# Quantum-Safe Scorecard — deploy runbook (OWNER-GATED)
+# Post-Quantum Readiness Scorecard — deploy runbook (OWNER-GATED)
 *Prepared, NOT executed. Every step here requires Brandon's explicit go — Claude will not deploy, publish, register a domain, or set billing autonomously.*
 
 > ## ⏸️ CURRENT POSTURE (owner decision, this session): **PREVIEW-READY, HOLD ALL DEPLOYS UNTIL THE THIRD-PARTY CRYPTO AUDIT.**

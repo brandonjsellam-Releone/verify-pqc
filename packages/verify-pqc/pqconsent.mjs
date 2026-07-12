@@ -128,7 +128,7 @@ export function verifyConsent(receipt, opts = {}) {
     if (opts.requireSlh) { try { slhOk = !!(subPub.slh && receipt.slh_sig && slh_dsa_sha2_256f.verify(hexToBytes(receipt.slh_sig), coreBytes, subPub.slh, { context: CONSENT_SLH_CTX })); } catch { slhOk = false; } }
     if (!edOk || !pqOk || !slhOk) return { verified: false, reason: 'subject hybrid signature invalid (or required leg missing)' };
     if (opts.controller != null && receipt.controller !== opts.controller) return { verified: false, reason: 'controller mismatch' };
-    if (receipt.expires_at != null && opts.now == null && opts.allowNoExpiryClock !== true) return { verified: false, reason: 'expires_at declared but no clock (opts.now) supplied — cannot verify freshness' };
+    if (receipt.expires_at != null && (opts.now == null || !Number.isFinite(opts.now)) && opts.allowNoExpiryClock !== true) return { verified: false, reason: 'expires_at declared but no finite clock (opts.now) supplied — cannot verify freshness' }; // non-finite now (NaN/''/[]) also can't check expiry (fix-verif sibling of pqmarket, 1 Jul)
     if (receipt.expires_at != null && opts.now != null && Number(opts.now) >= Number(receipt.expires_at)) return { verified: false, reason: 'expired' };
     // scope: deny-by-default — a purpose/category not explicitly granted is NOT consented
     if (opts.purpose != null) { const p = normToken(opts.purpose); if (p === null || !receipt.purposes.includes(p)) return { verified: false, reason: 'purpose not consented' }; }

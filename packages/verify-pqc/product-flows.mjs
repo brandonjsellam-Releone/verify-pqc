@@ -32,8 +32,8 @@ function selfTest() {
   {
     const issuer = keyset(true); const tIss = pub(issuer);
     const cbomBefore = [
-      { label: 'edge-tls', algorithm: 'RSA-2048', internet_facing: true, sensitive: true },
-      { label: 'vpn', algorithm: 'ECDH-P256', internet_facing: true },
+      { label: 'edge-tls', algorithm: 'RSA-2048', internet_facing: true, sensitive: true }, // pqcbom-ignore: self-test fixture string (scanned at runtime, not crypto use)
+      { label: 'vpn', algorithm: 'ECDH-P256', internet_facing: true }, // pqcbom-ignore: self-test fixture string (scanned at runtime, not crypto use)
       { label: 'data-at-rest', algorithm: 'AES-256' },
       { label: 'svc-mesh', algorithm: 'Ed25519', internet_facing: true },
     ];

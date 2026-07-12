@@ -73,7 +73,12 @@ export function verifyCert(cert, issuerPub, opts = {}) {
   try { mldsaOk = ml_dsa87.verify(hexToBytes(cert.signatures.mldsa), msg, hexToBytes(issuerPub.mldsa_pub), { context: CERT_CTX }); } catch { mldsaOk = false; }
   try { edOk = ed25519.verify(hexToBytes(cert.signatures.ed), edDomMsg(CERT_CTX, msg), hexToBytes(issuerPub.ed_pub)); } catch { edOk = false; }
   const at = opts.at;
-  const timeOk = at == null || ((cert.tbs.not_before == null || at >= cert.tbs.not_before) && (cert.tbs.not_after == null || at <= cert.tbs.not_after));
+  // FAIL-CLOSED when a signed validity window can't be checked: verifying with NO clock (opts.at omitted) would SKIP the
+  // window and accept an EXPIRED / not-yet-valid cert. Matches pqpay/pqvc/pqcap/pqadmit + this file's own checkRevocation.
+  // An explicit allowNoTimeClock permits a deliberate time-less check. (apex sweep 1 Jul — verifyChain inherits it.)
+  const hasWindow = cert.tbs.not_before != null || cert.tbs.not_after != null;
+  if (hasWindow && (at == null || !Number.isFinite(at)) && opts.allowNoTimeClock !== true) return { verified: false, mldsaOk, edOk, timeOk: false, reason: 'validity window declared but no finite clock (opts.at) supplied' }; // non-finite at (NaN/''/[]/'3000') must NOT coerce into the window (fix-verif: pqpki lacked the Number.isFinite guard its siblings got, 1 Jul)
+  const timeOk = at == null || (Number.isFinite(at) && (cert.tbs.not_before == null || at >= cert.tbs.not_before) && (cert.tbs.not_after == null || at <= cert.tbs.not_after));
   // ML-DSA is load-bearing (must verify); Ed25519 must ALSO verify when present (hybrid = both, defeats strip).
   const verified = mldsaOk && edOk && timeOk;
   return { verified, mldsaOk, edOk, timeOk, reason: !mldsaOk ? 'PQ (ML-DSA-87) signature invalid' : !edOk ? 'classical (Ed25519) signature invalid' : !timeOk ? 'outside validity window' : 'ok' };
@@ -134,7 +139,7 @@ export function checkRevocation(crl, caPub, serial, opts = {}) {
   const at = opts.at;
   // FRESHNESS (4th sweep): when the caller supplies opts.at, a MISSING next_update is STALE (fail-closed) — NOT a free
   // pass. The old `at==null || next_update==null ? true : ...` let a CA mint a null-next_update CRL that bypassed the gate.
-  const fresh = at == null ? true : (crl.tbs.next_update != null && at >= (crl.tbs.this_update ?? -Infinity) && at <= crl.tbs.next_update);
+  const fresh = at == null ? true : (Number.isFinite(at) && crl.tbs.next_update != null && at >= (crl.tbs.this_update ?? -Infinity) && at <= crl.tbs.next_update); // a non-finite clock (''/[]/string) must NOT coerce into the freshness window and mark a STALE CRL usable (fix-verif 1 Jul)
   const notRolledBack = opts.minCrlNumber == null || crl.tbs.crl_number >= opts.minCrlNumber;
   // SCOPE (4th sweep): the CRL's SIGNED issuer_kid must match the verifying CA key — makes issuer_kid load-bearing so a
   // CRL from a DIFFERENT CA (even if its own signature verifies) is marked unusable for THIS key.
@@ -169,6 +174,8 @@ function selfTest() {
 
   // 3. expired / not-yet-valid
   ok(verifyCert(leafCert, pubOf(inter), { at: 9999 }).timeOk === false, 'leaf outside its validity window -> timeOk false');
+  ok(verifyCert(leafCert, pubOf(inter)).verified === false, 'apex-sweep: cert with a validity window verified with NO clock (opts.at omitted) -> FAILS CLOSED (closes the expiry fail-open)');
+  ok(verifyCert(leafCert, pubOf(inter), { allowNoTimeClock: true }).timeOk === true, 'apex-sweep: explicit allowNoTimeClock -> a deliberate time-less cert check is permitted');
 
   // 4. hybrid: a broken classical sig also fails (both must verify)
   const edBad = JSON.parse(JSON.stringify(leafCert)); edBad.signatures.ed = edBad.signatures.ed.slice(0, -2) + (edBad.signatures.ed.endsWith('00') ? '11' : '00');
@@ -176,6 +183,7 @@ function selfTest() {
 
   // 5. full chain leaf -> inter -> root, pinned root
   ok(verifyChain([leafCert, interCert, rootCert], rootPub, { at: 1000 }).verified === true, 'chain leaf->inter->root verifies to the pinned root');
+  ok(verifyChain([leafCert, interCert, rootCert], rootPub).verified === false, 'apex-sweep: verifyChain with NO clock -> FAILS CLOSED (inherits the fail-closed window check; no expired-chain fail-open)');
   // wrong pinned root -> fail
   ok(verifyChain([leafCert, interCert, rootCert], pubOf(generateIdentity(new Uint8Array(32).fill(9))), { at: 1000 }).verified === false, 'chain under a non-pinned root -> FAILS');
   // a non-CA cannot be an issuer: re-issue leaf as if from the leaf (not a CA)

@@ -18,17 +18,17 @@ const issuer = { ed: { secretKey: new Uint8Array(32).fill(1), publicKey: ed25519
 // ⚠️ MUST mirror website/v2/sandbox.html `SAMPLES` verbatim.
 const SAMPLES = {
   vuln: [
-    { label: 'edge-tls', algorithm: 'RSA-2048', internet_facing: true, sensitive: true },
-    { label: 'vpn-gw', algorithm: 'ECDH-P256', internet_facing: true },
-    { label: 'code-signing', algorithm: 'RSA-4096' },
-    { label: 'legacy-api', algorithm: '3DES', sensitive: true, long_retention: true },
+    { label: 'edge-tls', algorithm: 'RSA-2048', internet_facing: true, sensitive: true }, // pqcbom-ignore: self-test fixture string (scanned at runtime, not crypto use)
+    { label: 'vpn-gw', algorithm: 'ECDH-P256', internet_facing: true }, // pqcbom-ignore: self-test fixture string (scanned at runtime, not crypto use)
+    { label: 'code-signing', algorithm: 'RSA-4096' }, // pqcbom-ignore: self-test fixture string (scanned at runtime, not crypto use)
+    { label: 'legacy-api', algorithm: '3DES', sensitive: true, long_retention: true }, // pqcbom-ignore: self-test fixture string (scanned at runtime, not crypto use)
     { label: 'svc-mesh', algorithm: 'Ed25519', internet_facing: true },
   ],
   mixed: [
     { label: 'edge-tls', algorithm: 'HYBRID-X25519-ML-KEM-768', internet_facing: true, sensitive: true },
     { label: 'vpn-gw', algorithm: 'HYBRID-X25519-ML-KEM-768', internet_facing: true },
     { label: 'data-at-rest', algorithm: 'AES-256' },
-    { label: 'code-signing', algorithm: 'RSA-2048' },
+    { label: 'code-signing', algorithm: 'RSA-2048' }, // pqcbom-ignore: self-test fixture string (scanned at runtime, not crypto use)
   ],
   pq: [
     { label: 'edge-tls', algorithm: 'HYBRID-X25519-ML-KEM-1024', internet_facing: true, sensitive: true },
@@ -43,7 +43,7 @@ const EXPECT = { vuln: 'F', mixed: 'D', pq: 'A' };
 function selfTest() {
   let pass = 0, fail = 0; const ok = (c, m) => { if (c) pass++; else { fail++; console.error('FAIL:', m); } };
   for (const [k, assets] of Object.entries(SAMPLES)) {
-    const r = createShieldReport({ issuerKeys: issuer, target: k, assets });
+    const r = createShieldReport({ issuerKeys: issuer, target: k, assets, generatedAt: 1 });
     ok(r.grade === EXPECT[k], `sandbox sample "${k}": pqshield grade=${r.grade} (expected ${EXPECT[k]}) — "same engine as the SDK" holds`);
   }
   console.log('sandbox-parity: ' + pass + ' pass, ' + fail + ' fail');

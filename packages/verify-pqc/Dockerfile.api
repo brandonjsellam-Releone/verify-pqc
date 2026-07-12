@@ -1,0 +1,20 @@
+# TRELYAN API server — the demo services behind the fail-closed metered gateway.
+# Build:  docker build -f Dockerfile.api -t trelyan-api .
+# Run:    docker run -p 8080:8080 -e EXPOSE=1 -e DEMO_API_TOKENS=sk_live_xxx -e DEMO_QUOTA=1000 trelyan-api
+# Health: GET /healthz (open). All other routes require a bearer key when DEMO_API_TOKENS is set.
+FROM node:20-alpine
+WORKDIR /app
+
+# Install only what the API server needs (the @noble optional deps the CLIs/verify use).
+COPY package.json ./
+RUN npm install --omit=dev --no-audit --no-fund \
+      @noble/post-quantum@^0.6.1 @noble/hashes@^1.8.0 @noble/ciphers@^2.2.0 @noble/curves@^2.2.0
+
+# The SDK modules the server composes (copy the package sources).
+COPY *.mjs *.js ./
+
+ENV PORT=8080
+# EXPOSE=1 makes the gateway fail closed unless DEMO_API_TOKENS is set — set both at deploy time.
+EXPOSE 8080
+# Fail-closed: with EXPOSE=1 and no DEMO_API_TOKENS, non-health routes 503 (never an open service).
+CMD ["node", "api-server.mjs", "--serve", "8080"]

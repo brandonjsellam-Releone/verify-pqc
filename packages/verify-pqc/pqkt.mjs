@@ -117,6 +117,7 @@ export function resolveIssuerKey(events, issuer_id, opts = {}) {
   // rolls back a later revoke for an atTime query. Walk the FULL signed-seq chain, then resolve atTime from the
   // transition timeline: state as-of atTime = the snapshot of the LAST accepted transition whose effective ts <= atTime.
   if (atTime !== Infinity) {
+    if (!Number.isFinite(atTime)) return null; // fix-verif 1 Jul: a non-finite point-in-time query (NaN/''/[]) is ill-defined -> fail-closed (don't let ''/[] coerce to 0 and silently resolve the time-0 state)
     if (!allFiniteTs) return null; // 6th sweep: point-in-time is ill-defined without a finite ts on every transition -> fail-closed
     let best = null;
     for (const t of timeline) { if (t.ts <= atTime) best = t; } // effTs non-decreasing -> last qualifying = greatest effTs <= atTime
@@ -160,8 +161,11 @@ export function detectUnexpectedRotation(events, issuer_id, expectedPubkeyHash, 
  * trusted witness co-signatures.
  *
  * HONEST SCOPE (Hermes review — this NARROWS, does not alone CLOSE, split-view):
- *  - GOVERNANCE: split-view resistance holds only if the log controls ≤ k-1 of the n trusted witnesses (≥ n-k+1
- *    independent + honest). Weaker threshold or shared control collapses to trusting the log.
+ *  - GOVERNANCE (machine-checked bound — formal/pqkt_witness_quorum_z3.py): with at most d log-controlled/dishonest
+ *    witnesses out of n, split-view PREVENTION requires the quorum threshold to satisfy 2k - n > d (two k-quorums then
+ *    intersect in an honest witness, whose one-root-per-size rule forbids co-signing both). d ≤ k-1 alone is NOT
+ *    sufficient (e.g. n=5,k=3,d=1 admits a split view — Z3 exhibits it); below the bound, gossip is the DETECTION
+ *    layer, not prevention. Requires each witness's `seen`/`last` to be durable (next bullet).
  *  - DURABILITY: the per-witness `seen` map MUST be persistent in production — a witness that restarts and loses it
  *    could re-attest a conflicting root at a known size. This reference keeps it in-memory (documented limit).
  *  - PARTITION: the local check alone does NOT stop a log that shows view A to some witnesses and view B to others

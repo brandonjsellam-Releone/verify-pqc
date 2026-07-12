@@ -88,14 +88,16 @@ export function verifyComplianceReport(report, trustedPub, opts = {}) {
     const gradeOk = !!(report.grade && summaryOk && gradeOf(rt).letter === report.grade.letter);
     const consistent = fhOk && gradeOk && JSON.stringify(recomputed.controls) === JSON.stringify(report.controls) && recomputed.control_gaps === report.control_gaps;
     const s = report.signature;
-    const pinned = !trustedPub || (s && s.signer_pub_hex && s.signer_pub_hex.toLowerCase() === bytesToHex(trustedPub).toLowerCase());
+    // pinOk = "no key supplied OR the supplied key matched" (internal; keeps the self-consistency-only mode working). The
+    // SURFACED `pinned` (see return) is the honest TRUST flag: a key was supplied AND matched (sweep R1 posture-cluster).
+    const pinOk = !trustedPub || (s && s.signer_pub_hex && s.signer_pub_hex.toLowerCase() === bytesToHex(trustedPub).toLowerCase());
     let sigOk = false;
     if (s && s.sig_hex) sigOk = ml_dsa87.verify(hexToBytes(s.sig_hex), utf8ToBytes(canon(core(report))), trustedPub ? trustedPub : hexToBytes(s.signer_pub_hex), { context: COMP_CTX });
     // validity-vs-trust (mirror verifyEvidencePack): with NO trustedPub a pass proves self-consistency ONLY, not
     // authenticity (an attacker can self-sign a "no gaps" report). trustAnchored exposes this; opts.requirePinned enforces a real anchor.
-    const trustAnchored = !!trustedPub && pinned && sigOk;
-    return { verified: !!(consistent && pinned && sigOk && (!opts.requirePinned || trustAnchored)), findingsBound: fhOk, gradeOk, consistent, pinned, sigOk, trustAnchored };
-  } catch { return { verified: false, findingsBound: false, consistent: false, pinned: false, sigOk: false, trustAnchored: false }; }
+    const trustAnchored = !!trustedPub && pinOk && sigOk;
+    return { verified: !!(consistent && pinOk && sigOk && (!opts.requirePinned || trustAnchored)), findingsBound: fhOk, gradeOk, consistent, pinned: !!trustedPub && !!pinOk, pinOk: !!pinOk, sigOk, trustAnchored };
+  } catch { return { verified: false, findingsBound: false, consistent: false, pinned: false, pinOk: false, sigOk: false, trustAnchored: false }; }
 }
 
 /* ---------- self-test: node pqcompliance.mjs ---------- */
@@ -133,7 +135,7 @@ function selfTest() {
   // from the hash-bound findings catch it (grade is no longer trusted from the forgeable summary)
   const f3 = JSON.parse(JSON.stringify(signed));
   f3.summary = { ...f3.summary, broken_classical: 0, quantum_broken: 0, quantum_weakened: 0, classical_hybrid_ok: 0, quantum_safe: 0 };
-  f3.grade = { letter: 'A', score: 100, label: 'Quantum-safe', badge: 'Quantum-Safe: A' };
+  f3.grade = { letter: 'A', score: 100, label: 'Post-Quantum Readiness', badge: 'PQ Readiness: A' };
   ok(verifyComplianceReport(f3, signer.publicKey).verified === false, 'forged clean summary+grade over bad findings -> verify FAILS (tallies recomputed from findings)');
 
   // REGRESSION (code-security review): unpinned verify proves self-consistency ONLY, not authenticity (an attacker can
@@ -142,6 +144,7 @@ function selfTest() {
   const evilClean = signComplianceReport(assessCompliance(safeScan, { subject: 'VictimCorp', generated_ts: 1 }), attackerKey.secretKey, attackerKey.publicKey);
   const unpinnedV = verifyComplianceReport(evilClean);
   ok(unpinnedV.verified === true && unpinnedV.trustAnchored === false, 'unpinned self-signed report: self-consistent but trustAnchored=false (authenticity NOT established)');
+  ok(unpinnedV.pinned === false && unpinnedV.pinOk === true, 'sweep-R1 lock: surfaced `pinned` is FALSE with no key (trust, not validity); internal pinOk matches-or-no-key exposed separately');
   ok(verifyComplianceReport(evilClean, null, { requirePinned: true }).verified === false, 'requirePinned closes the fail-open: self-signed report with no trust anchor -> verified FALSE');
   ok(verifyComplianceReport(signed, signer.publicKey).trustAnchored === true, 'pinned + matching signer -> trustAnchored=true');
 

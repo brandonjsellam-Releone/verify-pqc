@@ -33,7 +33,8 @@ const CORPUS = [
   { id: 'dhe', text: 'KEX = DHE-RSA', find: ['finite-field DH', 'RSA'], notFind: [] },
   // --- true positives: quantum-weakened ---
   { id: 'aes128', text: 'AES-128-CBC', find: ['AES-128/192'], notFind: ['AES-256'] },
-  { id: 'sha256', text: 'hash = SHA-256', find: ['SHA-256/384'], notFind: [] },
+  { id: 'sha256', text: 'hash = SHA-256', find: ['SHA-256'], notFind: [] },
+  { id: 'sha384', text: 'digest = SHA-384', find: ['SHA-384'], notFind: ['SHA-256'] }, // CNSA-2.0: SHA-384 is quantum-resistant, NOT weakened
   // --- true positives: classical-hybrid-ok ---
   { id: 'x25519', text: 'kex = X25519', find: ['X25519/X448'], notFind: [] },
   { id: 'ed25519', text: 'sig = Ed25519', find: ['Ed25519/Ed448'], notFind: [] },

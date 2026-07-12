@@ -40,10 +40,20 @@ export function verifyListing(listing, trustedAgentPub, opts = {}) {
  try { // TOTAL (fuzz): throwing getter/Proxy/BigInt field fails CLOSED, never DoS
   if (!listing || typeof listing !== 'object' || typeof listing.agent_pub !== 'string' || typeof listing.agent_id !== 'string' || typeof listing.sig !== 'string') return false;
   const { sig, ...core } = listing;
+  // TOFU GUARD (round-2): with NO trustedAgentPub, verification would otherwise fall back to the listing's OWN
+  // self-claimed agent_pub — i.e. any self-signed listing "verifies" its authenticity leg (reputation still gates,
+  // but the identity pin is silently caller-optional). TOFU must be a DELIBERATE choice, not a silent default:
+  // fail CLOSED unless the caller passes opts.allowTOFU === true (matches trustedIssuers/pinning patterns elsewhere).
+  if (!trustedAgentPub && opts.allowTOFU !== true) return false;
   const pub = trustedAgentPub ? trustedAgentPub : hexToBytes(listing.agent_pub);
   if (trustedAgentPub && listing.agent_pub.toLowerCase() !== bytesToHex(trustedAgentPub).toLowerCase()) return false;
   if (agentId(pub) !== listing.agent_id) return false; // agent_id must bind the key
   const at = opts.at;
+  // FAIL-CLOSED when a SIGNED freshness window can't be checked: a listing declaring valid_from/expires_at but verified
+  // with NO clock would otherwise pass even when EXPIRED / not-yet-valid — defeating the anti-replay the signed window
+  // exists to provide. Matches pqpay.mjs/pqvc.mjs; an explicit allowNoExpiryClock permits a deliberate time-less check.
+  // (apex sweep 1 Jul — reachable via selectAgent, whose `at` has no default.)
+  if ((at == null || !Number.isFinite(at)) && (listing.valid_from != null || listing.expires_at != null) && opts.allowNoExpiryClock !== true) return false; // a NON-FINITE clock (NaN/''/[] ) also can't check the window → fail closed (fix-verif 1 Jul)
   if (at != null && ((listing.valid_from != null && at < listing.valid_from) || (listing.expires_at != null && at > listing.expires_at))) return false; // freshness window
   return ml_dsa87.verify(hexToBytes(sig), utf8ToBytes(canon(core)), pub, { context: LISTING_CTX });
  } catch { return false; }
@@ -97,13 +107,19 @@ export function computeReputation(log, { subject_agent_id, capability, trustedRe
 
 // consumer gate. opts.at = current time (listing freshness). maxDisputes default 0 = strict fail-closed (one trusted
 // reviewer's dispute blocks — a POLICY choice; raise maxDisputes / weight reviewers for open marketplaces).
-export function selectAgent(listing, log, { trustedAgentPub, capability, trustedReviewers, minDistinct = 1, maxDisputes = 0, at } = {}) {
-  if (!verifyListing(listing, trustedAgentPub, { at })) return { accept: false, reason: 'listing invalid / not the pinned agent / expired' };
+// opts.trustedAgentPub PINS the listing's identity; WITHOUT it, selection fails closed unless opts.allowTOFU===true
+// (TOFU = trust the listing's self-claimed key — a DELIBERATE choice; the accept verdict then carries tofu:true).
+export function selectAgent(listing, log, { trustedAgentPub, capability, trustedReviewers, minDistinct = 1, maxDisputes = 0, at, allowTOFU } = {}) {
+  // TOFU is a DELIBERATE choice: without a pin, selection fails closed unless the caller opts into allowTOFU.
+  // `tofu` is surfaced on the verdict so a caller that DID opt in can see the listing authenticity was UNPINNED.
+  const tofu = !trustedAgentPub && allowTOFU === true;
+  if (!verifyListing(listing, trustedAgentPub, { at, allowTOFU })) return { accept: false, reason: 'listing invalid / not the pinned agent / expired / unpinned (no trustedAgentPub and allowTOFU not set)' };
   if (capability && !listing.capabilities.includes(capability)) return { accept: false, reason: 'agent does not list this capability' };
   const rep = computeReputation(log, { subject_agent_id: listing.agent_id, capability, trustedReviewers, minDistinct, maxDisputes });
   if (rep.disputed_distinct > maxDisputes) return { accept: false, reason: rep.disputed_distinct + ' dispute(s) from trusted reviewers (> maxDisputes ' + maxDisputes + ')', rep };
   if (!rep.sufficient) return { accept: false, reason: 'insufficient reputation (' + rep.met_distinct + '/' + minDistinct + ' distinct trusted reviewers)', rep };
-  return { accept: true, rep };
+  return { accept: true, rep, tofu }; // tofu:true => listing authenticity was TOFU (self-claimed key), NOT pinned
+
 }
 
 /* ---------- self-test: node pqmarket.mjs ---------- */
@@ -120,7 +136,20 @@ function selfTest() {
   const listing = publishCapability({ agent, capabilities: [cap, 'cbom-scan'], claims: { sdk: '0.12.0' } }, { ts: 1, validFrom: 0, expiresAt: 1000 });
   ok(verifyListing(listing, agent.publicKey, { at: 500 }) === true, 'capability listing verifies under the pinned agent key (within validity)');
   ok(verifyListing(listing, agent.publicKey, { at: 5000 }) === false, 'EXPIRED listing -> FAILS (freshness window, anti-replay)');
+  ok(verifyListing(listing, agent.publicKey) === false, 'apex-sweep: windowed listing verified with NO clock (opts.at omitted) -> FAILS CLOSED (closes the expiry/anti-replay fail-open)');
+  ok(verifyListing(listing, agent.publicKey, { allowNoExpiryClock: true }) === true, 'apex-sweep: explicit allowNoExpiryClock -> a deliberate time-less check of a windowed listing passes');
   ok(verifyListing({ ...listing, capabilities: ['everything'] }, agent.publicKey, { at: 500 }) === false, 'tampered capability list -> listing FAILS');
+  // 1b. round-2 TOFU guard: unpinned (no trustedAgentPub) must NOT silently verify against the listing's own key.
+  const listing2 = publishCapability({ agent, capabilities: [cap], claims: {} }, { ts: 1 }); // no validity window -> isolates the pin/TOFU leg
+  ok(verifyListing(listing2, agent.publicKey) === true, 'round-2 TOFU: PINNED listing verifies against the trusted agent key (unchanged)');
+  ok(verifyListing(listing2) === false, 'round-2 TOFU: UNPINNED (no trustedAgentPub, no allowTOFU) -> FAILS CLOSED (no silent self-claimed-key TOFU)');
+  ok(verifyListing(listing2, undefined, { allowTOFU: true }) === true, 'round-2 TOFU: UNPINNED + allowTOFU:true -> explicit TOFU against the self-claimed key still works');
+  ok(verifyListing(listing2, null, { allowTOFU: false }) === false, 'round-2 TOFU: UNPINNED + allowTOFU:false -> still FAILS CLOSED (deliberate opt-in required)');
+  // a forged self-signed listing (attacker mints its own key) must NOT pass under allowTOFU as the pinned agent
+  const evil = generateAgent(new Uint8Array(32).fill(77));
+  const evilListing = publishCapability({ agent: evil, capabilities: [cap], claims: {} }, { ts: 1 });
+  ok(verifyListing(evilListing, agent.publicKey) === false, 'round-2 TOFU: a DIFFERENT self-signed key does NOT satisfy the pin');
+  ok(verifyListing(evilListing, undefined, { allowTOFU: true }) === true && agentIdOf(evil.publicKey) !== aid, 'round-2 TOFU: allowTOFU verifies the self-signed listing but its agent_id is the ATTACKER\'s, not the pinned agent (reputation/pin still gate)');
 
   // 2. attestation inclusion in the append-only log
   const log = new PQTransparencyLog();
@@ -134,6 +163,12 @@ function selfTest() {
   const rep = computeReputation(log, { subject_agent_id: aid, capability: cap, trustedReviewers: trusted, minDistinct: 2 });
   ok(rep.met_distinct === 2 && rep.sufficient === true, 'two distinct trusted reviewers -> reputation sufficient (2/2)');
   ok(selectAgent(listing, log, { trustedAgentPub: agent.publicKey, capability: cap, trustedReviewers: trusted, minDistinct: 2, at: 500 }).accept === true, 'selectAgent accepts a listed, sufficiently-attested, in-validity agent');
+  ok(selectAgent(listing, log, { trustedAgentPub: agent.publicKey, capability: cap, trustedReviewers: trusted, minDistinct: 2 }).accept === false, 'apex-sweep: selectAgent with NO `at` on a windowed listing -> REJECTS (fail-closed; the forgotten-clock fail-open is closed)');
+  // 3b. round-2 TOFU guard on selectAgent: no trustedAgentPub -> rejected unless allowTOFU; allowTOFU verdict marks tofu:true
+  ok(selectAgent(listing2, log, { capability: cap, trustedReviewers: trusted, minDistinct: 2, at: 500 }).accept === false, 'round-2 TOFU: selectAgent with NO trustedAgentPub and no allowTOFU -> REJECTS (not silently TOFU-accepted)');
+  const tofuSel = selectAgent(listing2, log, { capability: cap, trustedReviewers: trusted, minDistinct: 2, at: 500, allowTOFU: true });
+  ok(tofuSel.accept === true && tofuSel.tofu === true, 'round-2 TOFU: selectAgent + allowTOFU:true -> accepts AND marks the verdict tofu:true (authenticity was unpinned)');
+  ok(selectAgent(listing2, log, { trustedAgentPub: agent.publicKey, capability: cap, trustedReviewers: trusted, minDistinct: 2, at: 500 }).tofu === false, 'round-2 TOFU: a PINNED accept is NOT flagged tofu (pin was honored)');
 
   // 4. INFLATION: one reviewer attesting 10x -> counts ONCE
   const inflLog = new PQTransparencyLog(); for (let i = 0; i < 10; i++) logAttestation(inflLog, att(r1, 'cbom-scan', 'met', 20 + i));

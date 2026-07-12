@@ -72,7 +72,12 @@ export async function verify(request) {
         return wrap(t, verifyKeyEventInclusion(a, hexToU8(tr.log_pub_hex)), true);
       }
       case 'shield-report': { const k = hybrid(tr); if (!k) return err('shield-report ' + NEED_HYBRID); return wrap(t, verifyShieldReport(a, k, { now: tr.now, expectedAnchor: tr.expectedAnchor }), true); }
-      case 'capability': { const k = hybrid(tr); if (!k) return err('capability ' + NEED_HYBRID); return wrap(t, verifyCapability(a, k, { request: tr.request, now: tr.now, audience: tr.audience, holderProof: tr.holderProof, challenge: tr.challenge, requireHolderProof: !!tr.holderProof, allowUnmeteredCheck: true }), true, tr.request ? undefined : 'token validity only — no request supplied to scope-check'); }
+      case 'capability': { const k = hybrid(tr); if (!k) return err('capability ' + NEED_HYBRID);
+        // honest caveats (apex sweep 1 Jul): (1) scope unchecked if no request; (2) a use-limited (max_uses) token's
+        // replay/use-limit is NOT enforced here (allowUnmeteredCheck:true) — the gateway MUST meter the nonce in a durable
+        // ledger (verifyAndConsume). Mirrors payment-auth so a verdict never silently over-claims a use-limited token.
+        const capCav = [(a && a.max_uses != null) ? 'use-limited token: max_uses/replay is NOT enforced here — the gateway must meter the nonce in a durable ledger (verifyAndConsume)' : null, tr.request ? null : 'token validity only — no request supplied to scope-check'].filter(Boolean).join('; ') || undefined;
+        return wrap(t, verifyCapability(a, k, { request: tr.request, now: tr.now, audience: tr.audience, holderProof: tr.holderProof, challenge: tr.challenge, requireHolderProof: !!tr.holderProof, allowUnmeteredCheck: true }), true, capCav); }
       case 'app-cert': { const k = hybrid(tr); if (!k) return err('app-cert ' + NEED_HYBRID); const bytes = tr.artifact_hex ? hexToU8(tr.artifact_hex) : undefined; if (!bytes && tr.allowUnboundArtifact !== true) return err('app-cert: supply trust.artifact_hex to bind the deployed binary, or set trust.allowUnboundArtifact:true for an explicit metadata-only check'); return wrap(t, verifyAdmission(a, k, { artifactBytes: bytes, allowUnboundArtifact: !bytes, now: tr.now, minCertLevel: tr.minCertLevel, minVersion: tr.minVersion, revoked: arrToSet(tr.revoked) }), true, bytes ? undefined : 'metadata-only — the deployed binary is NOT bound here; the deploy gate must bind it'); }
       case 'consent-receipt': { return wrap(t, verifyConsent(a, { now: tr.now, controller: tr.controller, purpose: tr.purpose, category: tr.category, revoked: arrToSet(tr.revoked) }), false, 'self-sovereign: the data subject self-signs — there is NO external key to pin (pinned:false), so this confirms the subject signed their own consent (evidence), NOT third-party-verifiable trust or legal validity'); }
       case 'credential': { const k = hybrid(tr); if (!k) return err('credential ' + NEED_HYBRID); return wrap(t, verifyCredential(a, k, { now: tr.now, revoked: tr.revoked }), true); }
@@ -108,7 +113,7 @@ async function selfTest() {
 
   // 1. Evidence Pack: pinned -> verified; unpinned -> validity-only flag; wrong key -> false
   const signer = ml_dsa87.keygen(new Uint8Array(32).fill(41));
-  const pack = signEvidencePack(buildEvidencePack({ scan: scanFiles([{ name: 'x.js', text: 'RSA-2048; MD5;' }]), meta: { generated_ts: 1 } }), signer.secretKey, signer.publicKey);
+  const pack = signEvidencePack(buildEvidencePack({ scan: scanFiles([{ name: 'x.js', text: 'RSA-2048; MD5;' }]), meta: { generated_ts: 1 } }), signer.secretKey, signer.publicKey); // pqcbom-ignore: self-test fixture string (scanned at runtime, not crypto use)
   const ep = await verify({ type: 'evidence-pack', artifact: pack, trust: { signer_pub_hex: bytesToHex(signer.publicKey) } });
   ok(ep.ok && ep.pinned && ep.verdict.verified === true, 'evidence-pack verifies under a pinned signer key');
   const epU = await verify({ type: 'evidence-pack', artifact: pack });
@@ -143,7 +148,7 @@ async function selfTest() {
   const tpub = (ks) => ({ ed_pub_hex: bytesToHex(ks.ed.publicKey), mldsa_pub_hex: bytesToHex(ks.mldsa.publicKey) });
 
   const shk = mkks(70, 71);
-  const shrep = createShieldReport({ issuerKeys: shk, target: 'api', assets: [{ label: 'x', algorithm: 'RSA-2048', internet_facing: true }] });
+  const shrep = createShieldReport({ issuerKeys: shk, target: 'api', assets: [{ label: 'x', algorithm: 'RSA-2048', internet_facing: true }], generatedAt: 1 }); // pqcbom-ignore: self-test fixture string (scanned at runtime, not crypto use)
   ok((await verify({ type: 'shield-report', artifact: shrep, trust: tpub(shk) })).verdict.verified === true, 'shield-report verifies under a pinned hybrid issuer');
   ok((await verify({ type: 'shield-report', artifact: shrep, trust: tpub(mkks(1, 2)) })).verdict.verified === false, 'shield-report under a wrong key -> not verified');
   ok((await verify({ type: 'shield-report', artifact: shrep })).ok === false, 'shield-report without a pinned hybrid key -> error (must pin)');
@@ -162,6 +167,11 @@ async function selfTest() {
   const cap = issueCapability({ issuerKeys: cik, agent: pubBytes(cak), tool: 'T', caveats: { arg_in: { op: ['read'] } }, nonce: 'api-cap' });
   ok((await verify({ type: 'capability', artifact: cap, trust: { ...tpub(cik), request: { tool: 'T', args: { op: 'read' } } } })).verdict.verified === true, 'capability verifies an in-scope request');
   ok((await verify({ type: 'capability', artifact: cap, trust: { ...tpub(cik), request: { tool: 'T', args: { op: 'write' } } } })).verdict.verified === false, 'capability rejects an out-of-scope request');
+  // apex-sweep 1 Jul: a use-limited (max_uses) token verifies validity BUT the hosted surface does not meter it — the
+  // verdict must DISCLOSE that (no silent over-claim), mirroring payment-auth's replay-not-enforced caveat.
+  { const capU = issueCapability({ issuerKeys: cik, agent: pubBytes(cak), tool: 'T', caveats: { arg_in: { op: ['read'] } }, maxUses: 1, nonce: 'api-cap-u' });
+    const r = await verify({ type: 'capability', artifact: capU, trust: { ...tpub(cik), request: { tool: 'T', args: { op: 'read' } } } });
+    ok(r.verdict.verified === true && /max_uses\/replay is NOT enforced/.test(r.caveat || ''), 'apex-sweep: use-limited (max_uses) capability -> verified BUT carries the honest replay/use-limit-not-enforced caveat (no over-claim)'); }
 
   const aik = mkks(82, 83);
   const cert = issueAppCert({ issuerKeys: aik, app: 'acme/api', version: '1.0.0', artifactBytes: fwb, certLevel: 'SOVEREIGN_GOLD', checks: { cbom_pass: true, cve_pass: true, opa_pass: true, pqc_pass: true } });

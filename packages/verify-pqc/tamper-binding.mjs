@@ -93,7 +93,7 @@ function selfTest() {
   // 1) pqmarket capability listing — every non-sig field is in the signed core; agent_pub also binds agent_id
   const agent = pqmarket.generateAgent(seed(11));
   const listing = pqmarket.publishCapability({ agent, capabilities: ['pq-sign', 'attest'], claims: { region: 'eu' } }, { ts: 100, validFrom: 0, expiresAt: 1e9 });
-  runScenario({ label: 'pqmarket.verifyListing', obj: listing, verify: (o) => pqmarket.verifyListing(o, agent.publicKey), skipPaths: ['sig'] }, ok);
+  runScenario({ label: 'pqmarket.verifyListing', obj: listing, verify: (o) => pqmarket.verifyListing(o, agent.publicKey, { at: 100 }), skipPaths: ['sig'] }, ok);
   // KEY-BINDING: a different agent key must not verify this listing under the original pin
   const other = pqmarket.generateAgent(seed(12));
   ok(!pqmarket.verifyListing({ ...listing, agent_pub: bytesToHex(other.publicKey), agent_id: pqmarket.agentIdOf(other.publicKey) }, agent.publicKey), 'pqmarket.verifyListing: swapped agent key -> FALSE (key binding)');
@@ -295,12 +295,13 @@ function selfTest() {
 
   // ---- nested platform-engine chains (this session) ----
   // 25) pqflow genesis — the merchant signs transitionCore (bound); the embedded pqpay auth is bound via auth_sha256
-  //     (so every auth.* field is bound); merchant_pub + the top-level flow convenience copies (payer/payee/currency/v,
-  //     not re-checked by verifyFlow — the authoritative data is the bound genesis auth) are documented-unsigned.
+  //     (so every auth.* field is bound). payer/payee/currency are top-level convenience copies NOT in transitionCore,
+  //     but verifyFlow now CROSS-CHECKS them against the signed auth (apex sweep 1 Jul) → BOUND / tamper-evident. Only
+  //     `v` + merchant_pub/slh_signer_pub (informational; verify uses the pinned merchant key) are documented-unsigned.
   const flP = hk(190, 191), flM = hk(192, 193);
   const flAuth = pqpay.createAuthorization({ payerKeys: flP, id: 'p', payee: 'm', amount: 1000, currency: 'USD', nonce: 'tb' });
   const flFlow = pqflow.openFlow({ auth: flAuth, payerPub: hpub(flP), merchantKeys: flM, at: 1, allowUnmeteredOpen: true });
-  runScenario({ label: 'pqflow.verifyFlow (genesis)', obj: flFlow, verify: (o) => pqflow.verifyFlow(o, hpub(flM), hpub(flP)).verified, skipPaths: ['transitions.0.ed_sig', 'transitions.0.mldsa_sig'], unbound: new Set(['v', 'payer', 'payee', 'currency', 'transitions.0.v', 'transitions.0.merchant_pub.ed', 'transitions.0.merchant_pub.mldsa', 'transitions.0.slh_signer_pub_hex']) }, ok);
+  runScenario({ label: 'pqflow.verifyFlow (genesis)', obj: flFlow, verify: (o) => pqflow.verifyFlow(o, hpub(flM), hpub(flP)).verified, skipPaths: ['transitions.0.ed_sig', 'transitions.0.mldsa_sig'], unbound: new Set(['v', 'transitions.0.v', 'transitions.0.merchant_pub.ed', 'transitions.0.merchant_pub.mldsa', 'transitions.0.slh_signer_pub_hex']) }, ok);
 
   // 26) pqdelegate chain [root, delegation] — each link's core is bound by its signer; agent/delegator/delegatee pubs
   //     bind their ids (bound); the carried `v` + the root's informational issuer_pub + the (null) slh pub are unsigned.

@@ -94,7 +94,9 @@ export function initiatorFinish(msg2, iState, iIdentity, expectedRIdentityPubHex
   const session = R_auth_ok ? deriveSession(ss_x, ss_m, th) : null;
   // th = the public handshake transcript hash (binds suite + both identities + all ephemerals); exposed so a PQC
   // gateway can bind its session attestation to the REAL transcript (see pqgateway-session.mjs).
-  return { msg3: { i_sig: bytesToHex(i_sig) }, session, th: bytesToHex(th), R_auth_ok, rSigOk, rPinOk: rPin.ok, R_pinned: rPin.pinned };
+  // sweep R1: R_auth_ok means "valid handshake" and is TRUE under TOFU (no pin). For TRUST, a production caller MUST
+  // check R_trustAnchored (signature valid AND the responder identity was PINNED) — validity != trust.
+  return { msg3: { i_sig: bytesToHex(i_sig) }, session, th: bytesToHex(th), R_auth_ok, R_trustAnchored: rSigOk && rPin.pinned, rSigOk, rPinOk: rPin.ok, R_pinned: rPin.pinned };
 }
 
 // R receives msg3 -> verifies I (initiator context + pin against the identity seen in msg1)
@@ -103,7 +105,7 @@ export function responderFinish(msg3, rState, expectedIIdentityPubHex) {
   const iPin = pinCheck(expectedIIdentityPubHex, bytesToHex(rState.i_identity_pub));
   const I_auth_ok = iSigOk && iPin.ok;
   // FAIL-CLOSED: withhold the session keys unless the initiator is authenticated (no use-before-verify on R's side).
-  return { session: I_auth_ok ? rState.session : null, th: bytesToHex(rState.th), I_auth_ok, iSigOk, iPinOk: iPin.ok, I_pinned: iPin.pinned };
+  return { session: I_auth_ok ? rState.session : null, th: bytesToHex(rState.th), I_auth_ok, I_trustAnchored: iSigOk && iPin.pinned, iSigOk, iPinOk: iPin.ok, I_pinned: iPin.pinned };
 }
 
 /* ---------- AEAD channel: deterministic per-direction COUNTER nonces (no reuse) ---------- */
@@ -181,7 +183,7 @@ function selfTest() {
   ok(initiatorFinish(tamper, a.state, I, Rpub).R_auth_ok === false, 'tampered transcript -> responder signature verification FAILS');
 
   // identity binding: if an attacker swaps the identity in msg1 (so th would differ), R signs a different th than I expects -> auth fails
-  const downgradeRejected = (() => { try { responderRespond({ ...a.msg1, suite_id: 'WEAK-RSA-1' }, R); return false; } catch { return true; } })();
+  const downgradeRejected = (() => { try { responderRespond({ ...a.msg1, suite_id: 'WEAK-RSA-1' }, R); return false; } catch { return true; } })(); // pqcbom-ignore: self-test fixture string (scanned at runtime, not crypto use)
   ok(downgradeRejected, 'downgrade to an unsupported suite -> rejected');
 
   // FIX (red-team A): an empty-string / falsy pin must FAIL CLOSED, not silently become accept-anyone (TOFU)
@@ -192,6 +194,9 @@ function selfTest() {
   // explicit TOFU (pin omitted) still authenticates on the signature, but reports it is NOT identity-anchored
   const cTofu = initiatorFinish(b.msg2, a.state, I, undefined);
   ok(cTofu.R_auth_ok === true && cTofu.R_pinned === false && cTofu.session !== null, 'omitted pin = TOFU: auth passes on signature, R_pinned:false (validity != anchored trust), keys issued');
+  // sweep-R1 lock: R_trustAnchored is the honest TRUST flag — FALSE under TOFU (auth ok, not pinned), TRUE only when pinned
+  ok(cTofu.R_trustAnchored === false, 'sweep-R1 lock: TOFU -> R_trustAnchored FALSE (a caller must check this, not R_auth_ok)');
+  ok(c.R_trustAnchored === true && c.R_auth_ok === true, 'sweep-R1 lock: a PINNED handshake -> R_trustAnchored TRUE (sig valid AND identity pinned)');
   // responder side: empty initiator pin also fails closed + withholds keys
   const dEmpty = responderFinish(c.msg3, b.state, '');
   ok(dEmpty.I_auth_ok === false && dEmpty.session === null, 'empty-string initiator pin -> responder FAILS CLOSED + withholds keys');

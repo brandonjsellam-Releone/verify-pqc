@@ -80,17 +80,27 @@ function foldState(entries, opts = {}) {
   // controller-chosen chain position or entry `at` — both of which the controller could reorder/back-date. We also fold
   // in any out-of-band known revocation time the verifier supplies (opts.knownRevokedAt), which lets a subject/regulator
   // who holds their own revocation detect a controller that reordered, back-dated, or WITHHELD the withdrawal.
+  // FINITE-TIME INVARIANT (fix-verif 1 Jul). Two axes must carry a FINITE timestamp, enforced at the honest API
+  // (logAccess/withdraw) and re-checked in verifyConsentFlow for hand-crafted entries:
+  //   • every access `at`  — an untimestamped access is unauditable and is exactly how a controller dodges the revoked-at
+  //     compare (slip a post-revocation access with at:null before the withdraw entry). It is now ALWAYS a hard violation,
+  //     which removes the earlier null-`at`-vs-honest ambiguity (no false-positive on honest logs, since honest logs are
+  //     always timestamped; no evasion, since a null `at` is flagged regardless of ordering).
+  //   • the subject-signed `revoked_at` — a null/NaN revoked_at previously left effectiveRevokedAt null/NaN and SILENTLY
+  //     disabled the whole revoked-at compare (a post-revocation access before the withdraw entry then passed). Non-finite
+  //     revoked_at is rejected upstream, and Number.isFinite guards here so a coerced NaN can never disable the guard.
   let subjectRevokedAt = null, hasWithdraw = false;
-  for (const e of entries) if (e && e.type === 'withdraw') { hasWithdraw = true; const rt = e.revocation && e.revocation.revoked_at; if (rt != null && (subjectRevokedAt == null || Number(rt) < subjectRevokedAt)) subjectRevokedAt = Number(rt); }
-  const known = opts.knownRevokedAt != null ? Number(opts.knownRevokedAt) : null;
-  const effectiveRevokedAt = [subjectRevokedAt, known].filter((x) => x != null).reduce((a, b) => (a == null ? b : Math.min(a, b)), null);
+  for (const e of entries) if (e && e.type === 'withdraw') { hasWithdraw = true; const rt = e.revocation && e.revocation.revoked_at; if (Number.isFinite(rt) && (subjectRevokedAt == null || rt < subjectRevokedAt)) subjectRevokedAt = rt; }
+  const known = Number.isFinite(opts.knownRevokedAt) ? opts.knownRevokedAt : null;
+  const effectiveRevokedAt = [subjectRevokedAt, known].filter((x) => Number.isFinite(x)).reduce((a, b) => (a == null ? b : Math.min(a, b)), null);
   let status = 'open', withdrawn_at = null; const accesses = []; const violations = [];
   for (let i = 1; i < entries.length; i++) {
     const e = entries[i];
     if (e.type === 'access') {
       accesses.push({ purpose: e.purpose, category: e.category, at: e.at });
-      if (status === 'withdrawn') violations.push({ kind: 'access-after-withdrawal', basis: 'chain-position', at: e.at, purpose: e.purpose, category: e.category });
-      else if (effectiveRevokedAt != null && e.at != null && Number(e.at) >= effectiveRevokedAt) violations.push({ kind: 'access-after-withdrawal', basis: 'revoked-at', at: e.at, purpose: e.purpose, category: e.category });
+      if (!Number.isFinite(e.at)) violations.push({ kind: 'access-missing-timestamp', basis: 'untimestamped', at: e.at ?? null, purpose: e.purpose, category: e.category });
+      else if (status === 'withdrawn') violations.push({ kind: 'access-after-withdrawal', basis: 'chain-position', at: e.at, purpose: e.purpose, category: e.category });
+      else if (effectiveRevokedAt != null && e.at >= effectiveRevokedAt) violations.push({ kind: 'access-after-withdrawal', basis: 'revoked-at', at: e.at, purpose: e.purpose, category: e.category });
     } else if (e.type === 'withdraw') {
       if (status === 'withdrawn') return { valid: false, error: 'double withdrawal' };
       status = 'withdrawn'; withdrawn_at = e.at;
@@ -115,6 +125,7 @@ export function logAccess(flow, { purpose, category, controllerKeys, nonce, at =
   const st = foldState(flow.entries);
   if (!st.valid) throw new Error('flow invalid: ' + st.error);
   if (st.status === 'withdrawn') throw new Error('consent withdrawn — no further access permitted');
+  if (!Number.isFinite(at)) throw new Error('a finite access timestamp `at` is required — an untimestamped consent access is unauditable (fail-closed ordering)');
   const receipt = flow.entries[0].receipt;
   if (!verifyConsent(receipt, { purpose, category, now: at }).verified) throw new Error('access is OUTSIDE the granted scope (purpose/category not consented)');
   if (nonce == null) throw new Error('a fresh nonce is required');
@@ -127,6 +138,7 @@ export function withdraw(flow, { revocation, subjectPub, controllerKeys, nonce, 
   if (!revocation || revocation.subject !== makeSubjectId(subjectPub)) throw new Error('revocation subject != pinned subject');
   if (revocation.receipt_id !== flow.receipt_id) throw new Error('revocation does not match this consent (receipt_id)');
   if (!verifyConsentRevocation(revocation, flow.subject).verified) throw new Error('cannot record an UNVERIFIED withdrawal (fail-dangerous)');
+  if (!Number.isFinite(revocation.revoked_at)) throw new Error('revocation must carry a finite subject-signed revoked_at — a consent-flow withdrawal without a timestamp cannot anchor access-after-withdrawal (fail-closed)');
   return append(flow, { type: 'withdraw', receipt_id: flow.receipt_id, nonce: String(nonce ?? ('w-' + flow.entries.length)), embed_sha256: h(canon(revocation)), at }, controllerKeys, { revocation });
 }
 
@@ -169,6 +181,7 @@ export function verifyConsentFlow(flow, subjectPub, controllerPub, opts = {}) {
         if (!e.revocation || e.embed_sha256 !== h(canon(e.revocation))) return { verified: false, reason: 'withdraw ' + i + ' embedded revocation hash mismatch' };
         if (e.revocation.subject !== makeSubjectId(subjectPub) || e.revocation.receipt_id !== flow.receipt_id) return { verified: false, reason: 'withdraw ' + i + ' revocation not by the pinned subject for this receipt' };
         if (!verifyConsentRevocation(e.revocation, flow.subject).verified) return { verified: false, reason: 'withdraw ' + i + ' revocation invalid' };
+        if (!Number.isFinite(e.revocation.revoked_at)) return { verified: false, reason: 'withdraw ' + i + ' revocation has no finite revoked_at — cannot anchor the lifecycle (fail-closed)' };
       }
     }
     const st = foldState(flow.entries, opts);
@@ -227,6 +240,32 @@ async function selfTest() {
   withdraw(bd, { revocation: revokeConsent({ subjectKeys: subject, receiptId: receipt.receipt_id, revokedAt: 200 }), subjectPub: pub(subject), controllerKeys: ctrl, at: 260 });
   const vbd = verifyConsentFlow(bd, pub(subject), pub(ctrl));
   ok(vbd.verified && !vbd.compliant && vbd.violations.some((x) => x.basis === 'revoked-at'), 'access at/after the SUBJECT revoked_at (logged before the withdraw entry) → violation detected via revoked-at, not chain position');
+
+  // TIMESTAMP INVARIANT (fix-verif 1 Jul). Every access MUST be finite-timestamped. The honest API refuses an untimestamped
+  // access; a HAND-CRAFTED at:null access entry still VERIFIES (signed+chained) but is NON-compliant. This closes the
+  // null-`at` evasion (an untimestamped access could dodge BOTH chain-position and the revoked-at compare) WITHOUT a
+  // false-positive on honest logs — honest logs are always timestamped, so the earlier ambiguity is gone.
+  let noTs = false;
+  try { const t = openConsentFlow({ receipt, subjectPub: pub(subject), controllerKeys: ctrl, at: 100 }); logAccess(t, { purpose: 'ai_coaching', category: 'HEART_RATE', controllerKeys: ctrl, nonce: 'ut0', at: null }); } catch { noTs = true; }
+  ok(noTs, 'untimestamped access (at:null) → refused at logAccess (honest path)');
+  const ut = openConsentFlow({ receipt, subjectPub: pub(subject), controllerKeys: ctrl, at: 100 });
+  const utPrev = ut.entries[ut.entries.length - 1];
+  ut.entries.push(signEntry(entryCore({ seq: ut.entries.length, prev_hash: utPrev.entry_hash, type: 'access', receipt_id: ut.receipt_id, purpose: 'ai_coaching', category: 'HEART_RATE', nonce: 'ut1', controller: makeControllerId(ctrl), at: null }), ctrl));
+  withdraw(ut, { revocation: revokeConsent({ subjectKeys: subject, receiptId: receipt.receipt_id, revokedAt: 200 }), subjectPub: pub(subject), controllerKeys: ctrl, at: 260 });
+  const vut = verifyConsentFlow(ut, pub(subject), pub(ctrl));
+  ok(vut.verified && !vut.compliant && vut.violations.some((x) => x.kind === 'access-missing-timestamp'), 'hand-crafted untimestamped access → chain VERIFIED but NON-compliant (access-missing-timestamp)');
+
+  // NULL/NaN `revoked_at` FAIL-CLOSED (fix-verif 1 Jul): a withdrawal whose subject-signed revocation carries no finite
+  // revoked_at cannot anchor the lifecycle — it previously left effectiveRevokedAt null and SILENTLY disabled the
+  // revoked-at compare (a post-revocation access before the withdraw entry then passed). Refused at the API + at verify.
+  let nrThrow = false;
+  try { const n = openConsentFlow({ receipt, subjectPub: pub(subject), controllerKeys: ctrl, at: 100 }); withdraw(n, { revocation: revokeConsent({ subjectKeys: subject, receiptId: receipt.receipt_id, reason: 'no-time' }), subjectPub: pub(subject), controllerKeys: ctrl, at: 260 }); } catch { nrThrow = true; }
+  ok(nrThrow, 'withdraw with a revocation lacking a finite revoked_at → refused at the honest API (fail-closed anchor)');
+  const nr = openConsentFlow({ receipt, subjectPub: pub(subject), controllerKeys: ctrl, at: 100 });
+  const revNoTime = revokeConsent({ subjectKeys: subject, receiptId: receipt.receipt_id, reason: 'no-time' });
+  const nrPrev = nr.entries[nr.entries.length - 1];
+  nr.entries.push({ ...signEntry(entryCore({ seq: nr.entries.length, prev_hash: nrPrev.entry_hash, type: 'withdraw', receipt_id: nr.receipt_id, nonce: 'w-x', embed_sha256: h(canon(revNoTime)), controller: makeControllerId(ctrl), at: 260 }), ctrl), revocation: revNoTime });
+  ok(verifyConsentFlow(nr, pub(subject), pub(ctrl)).verified === false, 'hand-crafted withdraw embedding a revocation with no finite revoked_at → verified:false (fail-closed)');
 
   // WITHHELD-WITHDRAWAL detection (DeepSeek #2): the controller never logs the withdrawal. With the subject's known
   // revocation supplied out-of-band, BOTH the withheld withdrawal and the post-revocation access are flagged.

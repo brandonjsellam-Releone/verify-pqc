@@ -1,8 +1,8 @@
 /*!
- * pqtsa — Quantum-Safe Timestamping Authority + legacy-signature re-stamping (reference, DRAFT, standalone).
+ * pqtsa — Post-Quantum Timestamping Authority + legacy-signature re-stamping (reference, DRAFT, standalone).
  *
  * The eIDAS-2.0 gap product: an RFC-3161-style TSA that ML-DSA-87-signs timestamp tokens (TSTs) over a content
- * hash, and — the key piece — RE-STAMPS legacy classical signatures (RSA/ECDSA/Ed25519) into a post-quantum-
+ * hash, and — the key piece — RE-STAMPS legacy classical signatures (RSA/ECDSA/Ed25519) into a post-quantum- // pqcbom-ignore: claim-hygiene / migration prose
  * anchored proof. Why it matters: under "harvest-now / forge-later", a classical signature could be forged once
  * the scheme breaks. A PQ timestamp that attests "this classical signature over this content was VERIFIED and
  * existed at time T" preserves its long-term legal validity even after the classical scheme falls — because the

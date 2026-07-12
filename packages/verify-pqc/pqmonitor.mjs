@@ -60,6 +60,11 @@ export function appendSnapshot(ledger, report, trustedIssuer, { at = null } = {}
   const v = verifyShieldReport(report, trustedIssuer);
   if (!v.verified) throw new Error('refusing to record an UNVERIFIED report (fail-dangerous): ' + (v.reason || 'invalid'));
   const snapshot = snapshotOf(report);
+  // FAIL-CLOSED anti-replay (apex sweep 1 Jul; reconciled fix-verif 1 Jul): every recorded snapshot MUST carry a signed
+  // generated_at — a null one would DISABLE the strict-newer guard below, letting a genuine OLD report replay as "latest"
+  // and hide an intervening regression. createShieldReport now REQUIRES a finite generated_at, so a well-formed report
+  // always satisfies this; the check remains as defense-in-depth against a hand-crafted null-generated_at report.
+  if (snapshot.generated_at == null) throw new Error('report has no signed generated_at — cannot establish freshness; refusing to record (fail-closed anti-replay)');
   const prev = ledger.entries[ledger.entries.length - 1];
   if (prev) {
     if (snapshot.target !== prev.snapshot.target) throw new Error('target mismatch: this ledger tracks "' + prev.snapshot.target + '"');
@@ -67,7 +72,7 @@ export function appendSnapshot(ledger, report, trustedIssuer, { at = null } = {}
     // signature alone does NOT prevent replay — a genuine OLD report replayed to the recorder would otherwise append
     // as "latest" and hide an intervening regression. generated_at is signed by the issuer, so it is trustworthy here.
     const pg = prev.snapshot.generated_at, ng = snapshot.generated_at;
-    if (pg != null && ng != null && !(Number(ng) > Number(pg))) throw new Error('stale/replayed report: generated_at (' + ng + ') must be strictly newer than the last recorded snapshot (' + pg + ')');
+    if (pg != null && !(Number(ng) > Number(pg))) throw new Error('stale/replayed report: generated_at (' + ng + ') must be strictly newer than the last recorded snapshot (' + pg + ')');
   }
   const seq = ledger.entries.length;
   const prev_hash = prev ? prev.entry_hash : null;
@@ -179,8 +184,8 @@ async function selfTest() {
   const rep = (assets, at) => createShieldReport({ issuerKeys: issuer, target: T, assets, generatedAt: at });
 
   // t0: one RED asset; t1: a SECOND RED asset appears (regression); t2: both fixed to PQ (improvement)
-  const a0 = [{ label: 'edge-tls', algorithm: 'RSA-2048', internet_facing: true }, { label: 'db', algorithm: 'AES-256' }];
-  const a1 = [{ label: 'edge-tls', algorithm: 'RSA-2048', internet_facing: true }, { label: 'db', algorithm: 'AES-256' }, { label: 'vpn', algorithm: 'ECDH-P256', internet_facing: true }];
+  const a0 = [{ label: 'edge-tls', algorithm: 'RSA-2048', internet_facing: true }, { label: 'db', algorithm: 'AES-256' }]; // pqcbom-ignore: self-test fixture string (scanned at runtime, not crypto use)
+  const a1 = [{ label: 'edge-tls', algorithm: 'RSA-2048', internet_facing: true }, { label: 'db', algorithm: 'AES-256' }, { label: 'vpn', algorithm: 'ECDH-P256', internet_facing: true }]; // pqcbom-ignore: self-test fixture string (scanned at runtime, not crypto use)
   const a2 = [{ label: 'edge-tls', algorithm: 'HYBRID-X25519-ML-KEM-1024', internet_facing: true }, { label: 'db', algorithm: 'AES-256' }, { label: 'vpn', algorithm: 'ML-KEM-1024' }];
 
   const L = createLedger();
@@ -199,6 +204,10 @@ async function selfTest() {
   ok(replayOld && L.entries.length === 3, 'anti-replay: an OLD report (generated_at 100 < last 300) → refused (ledger unchanged)');
   let replaySame = false; try { appendSnapshot(L, rep(a2, 300), tIssuer, { at: 500 }); } catch { replaySame = true; }
   ok(replaySame && L.entries.length === 3, 'anti-replay: a report at the SAME generated_at as last → refused (must be strictly newer)');
+  // apex-sweep 1 Jul: a NULL generated_at previously DISABLED the strict-newer guard, letting a stale report replay as
+  // "latest" and mask a regression. Now every recorded snapshot must carry a signed generated_at (fail-closed).
+  let nullGenRejected = false; try { appendSnapshot(L, rep(a0, null), tIssuer, { at: 600 }); } catch { nullGenRejected = true; }
+  ok(nullGenRejected && L.entries.length === 3, 'apex-sweep: report with NULL generated_at REFUSED at ingest (no null-timestamp replay evasion; anti-replay always applies)');
 
   // trend detection
   const d01 = diffSnapshots(L.entries[0].snapshot, L.entries[1].snapshot);

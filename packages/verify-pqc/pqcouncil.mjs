@@ -97,8 +97,17 @@ export function verifyCouncilRun(att, evidence, opts = {}) {
     if (evidence.question !== undefined) questionOk = sha(evidence.question) === att.question_sha256;
     if (evidence.synthesis !== undefined) synthesisOk = sha(evidence.synthesis) === att.synthesis_sha256;
     if (Array.isArray(evidence.seats)) {
-      const dset = new Set((att.seats || []).map((s) => s.seat + '|' + s.model_id + '|' + s.response_sha256));
-      seatsOk = evidence.seats.length === (att.seats || []).length && evidence.seats.every((s) => dset.has(s.seat + '|' + s.model_id + '|' + sha(s.response)));
+      const attSeats = att.seats || [];
+      const dset = new Set(attSeats.map((s) => s.seat + '|' + s.model_id + '|' + s.response_sha256));
+      const eset = new Set(evidence.seats.map((s) => s.seat + '|' + s.model_id + '|' + sha(s.response)));
+      // ONE-TO-ONE covering, not merely length + set-membership: also reject DUPLICATE evidence seats (eset.size ===
+      // length) and a duplicate-padded attestation (dset.size === length). Otherwise a relay pads a duplicate seat to
+      // hide an OMITTED (e.g. dissenting) seat's response while content_verified still passes. Given |eset|==|evidence|
+      // ==|att|==|dset| and eset ⊆ dset, the covering is exact. (apex sweep 1 Jul — reachable via pqmoa.verifyMoA)
+      seatsOk = evidence.seats.length === attSeats.length
+        && eset.size === evidence.seats.length
+        && dset.size === attSeats.length
+        && evidence.seats.every((s) => dset.has(s.seat + '|' + s.model_id + '|' + sha(s.response)));
     }
   }
   const suppliedPass = [questionOk, synthesisOk, seatsOk].filter((x) => x !== null).every(Boolean);
@@ -165,6 +174,10 @@ function selfTest() {
 
   // tamper a seat response, untrusted signer, nonce
   ok(verifyCouncilRun(att, { ...run, seats: seats.map((s, i) => i === 1 ? { ...s, response: 'FAKE' } : s) }, { trustedSigners, expectedRoster }).seatsOk === false, 'tampered seat -> seatsOk false');
+  // apex-sweep 1 Jul: DUPLICATE-PADDING evasion — pad a duplicate attested seat to hide an OMITTED (e.g. dissenting) seat
+  // while length + membership still pass. One-to-one covering must reject it.
+  const dupPad = verifyCouncilRun(att, { ...run, seats: [seats[0], seats[1], seats[0]] }, { trustedSigners, expectedRoster });
+  ok(dupPad.seatsOk === false && dupPad.content_verified === false, 'apex-sweep: duplicate-padded evidence (dup seat[0], omit seat[2]) -> seatsOk FALSE (one-to-one covering closes the hidden-seat bypass)');
   ok(verifyCouncilRun(att, run, { trustedSigners: [], expectedRoster }).verified === false, 'untrusted signer -> NOT verified');
   ok(verifyCouncilRun(att, run, { trustedSigners, expectedNonce: 'wrong', expectedRoster }).nonceOk === false, 'wrong nonce -> nonceOk false');
 

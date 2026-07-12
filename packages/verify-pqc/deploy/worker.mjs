@@ -1,5 +1,5 @@
 /*!
- * worker.mjs — Cloudflare-Worker-style hosted endpoint for the TRELYAN Quantum-Safe Scorecard.
+ * worker.mjs — Cloudflare-Worker-style hosted endpoint for the TRELYAN Post-Quantum Readiness Scorecard.
  * OWNER-GATED: prepared, NOT deployed. See DEPLOY.md. Routes:
  *   GET  /                 -> service info
  *   POST /scan             -> { files:[{name,text}], full?, policy? }  => scorecard (+full=CBOM, paid)
@@ -39,7 +39,7 @@ export default {
       const score = Number(url.searchParams.get('score') || 0);
       return json(scorecardBadge({ letter: grade, score }));
     }
-    return json({ ok: true, service: 'trelyan-quantum-safe-scorecard', notice: PREVIEW_NOTICE, tiers: { free: '/badge + /scan (scorecard) + /verify (verify any TRELYAN artifact)', paid: '/scan {full:true | evidencePack:true} + Bearer key (CBOM / signed Evidence Pack)' } });
+    return json({ ok: true, service: 'trelyan-post-quantum-readiness-scorecard', notice: PREVIEW_NOTICE, tiers: { free: '/badge + /scan (scorecard) + /verify (verify any TRELYAN artifact)', paid: '/scan {full:true | evidencePack:true} + Bearer key (CBOM / signed Evidence Pack)' } });
   },
 };
 function json(o, status = 200) { return new Response(JSON.stringify(o), { status, headers: CORS }); }

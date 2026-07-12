@@ -156,9 +156,14 @@ export function verifyFlow(flow, merchantPub, payerPub, opts = {}) {
     const av = verifyAuthorization(g.auth, payerPub, { now: opts.now, allowUnmeteredCheck: true });
     if (!av.verified) return { verified: false, reason: 'embedded authorization invalid under the pinned payer: ' + (av.reason || '') };
     if (g.amount !== g.auth.amount || g.nonce !== g.auth.nonce || g.auth.id !== flow.auth_id) return { verified: false, reason: 'genesis does not match the embedded authorization' };
+    // payer/payee/currency live ONLY on the unsigned top-level flow object (not in the signed transitionCore). Bind them
+    // to the SIGNED embedded auth — otherwise an attacker mutates flow.payee/currency/payer post-signing to REROUTE
+    // settlement and verifyFlow still returns verified:true with the attacker's payee. (apex sweep 1 Jul, partial-coverage)
+    if (flow.payer !== g.auth.payer || flow.payee !== g.auth.payee || flow.currency !== g.auth.currency) return { verified: false, reason: 'flow payer/payee/currency != the signed authorization (settlement-routing tamper)' };
     const st = foldState(flow.transitions);
     if (!st.valid) return { verified: false, reason: 'lifecycle invariant violated: ' + st.error };
-    return { verified: true, state: { auth_id: flow.auth_id, payer: flow.payer, payee: flow.payee, currency: flow.currency, authorized: st.authorized, captured: st.captured, refunded: st.refunded, remaining: st.remaining, status: st.status } };
+    // source the returned routing fields from the SIGNED auth (not the unsigned top-level) so a rail consumes signed truth
+    return { verified: true, state: { auth_id: flow.auth_id, payer: g.auth.payer, payee: g.auth.payee, currency: g.auth.currency, authorized: st.authorized, captured: st.captured, refunded: st.refunded, remaining: st.remaining, status: st.status } };
   } catch { return { verified: false }; }
 }
 
@@ -177,6 +182,10 @@ async function selfTest() {
   const led = makeNonceLedger();
   const flow = openFlow({ auth, payerPub: tPayer, merchantKeys: merchant, at: 1, seenNonces: led });
   ok(flow.transitions.length === 1 && verifyFlow(flow, tMerch, tPayer).verified === true, 'open on a verified auth → valid 1-entry flow');
+  // apex-sweep 1 Jul: payer/payee/currency are UNSIGNED top-level fields — mutating them post-signing to reroute settlement must be caught
+  const tamperRoute = { ...flow, payee: 'merchant:ATTACKER', currency: 'EUR', payer: 'pay:ATTACKER' };
+  ok(verifyFlow(tamperRoute, tMerch, tPayer).verified === false, 'apex-sweep: mutated flow.payee/currency/payer (settlement-routing tamper) → verifyFlow REJECTS (bound to the signed auth, no partial-coverage bypass)');
+  ok(verifyFlow(flow, tMerch, tPayer).state.payee === 'merchant:acme' && verifyFlow(flow, tMerch, tPayer).state.currency === 'USD', 'apex-sweep: verifyFlow.state.payee/currency are sourced from the SIGNED auth (merchant:acme / USD), not the unsigned top-level');
   capture(flow, { amount: 4000, nonce: 'c1', merchantKeys: merchant, at: 2 });
   capture(flow, { amount: 3000, nonce: 'c2', merchantKeys: merchant, at: 3 });
   const v = verifyFlow(flow, tMerch, tPayer);

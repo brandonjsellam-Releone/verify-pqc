@@ -52,7 +52,7 @@ this over the tested cases below (it is evidence, not a formal injectivity proof
 
 ## 4. Domain separation (separate from canon)
 `canon()` produces the message; cross-protocol separation is provided by the ML-DSA-87 **context** parameter (one
-distinct `trelyan-*-v1` context per signing surface — see `domain-separation.mjs`, 25 distinct, 0 reuse, 0 bare). So
+distinct `trelyan-*-v1` context per signing surface — see `domain-separation.mjs`, 65 distinct, 0 reuse, 0 bare). So
 even if two modules' canon outputs were byte-identical, the context makes the signatures non-interchangeable; and the
 contexts are proven distinct. Context is load-bearing AND redundant with per-module core shapes.
 

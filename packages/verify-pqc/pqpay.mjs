@@ -78,7 +78,7 @@ export function verifyAuthorization(auth, trustedPayer, opts = {}) {
     // a declared expiry MUST be checkable: refuse to verify an auth that carries expires_at when no clock (opts.now) is
     // supplied — silently skipping expiry on a PAYMENT would let an expired authorization pass (DeepSeek 1 Jul). Explicit
     // opt-out (allowNoExpiryClock) only for a pure signature/well-formedness check that deliberately ignores time.
-    if (auth.expires_at != null && opts.now == null && opts.allowNoExpiryClock !== true) return { verified: false, reason: 'expires_at declared but no clock (opts.now) supplied — cannot verify freshness' };
+    if (auth.expires_at != null && (opts.now == null || !Number.isFinite(opts.now)) && opts.allowNoExpiryClock !== true) return { verified: false, reason: 'expires_at declared but no finite clock (opts.now) supplied — cannot verify freshness' }; // non-finite now (NaN/''/[]) also can't check expiry (fix-verif sibling of pqmarket, 1 Jul)
     const expired = auth.expires_at != null && opts.now != null && Number(opts.now) > Number(auth.expires_at);
     const replayed = opts.seenNonces && typeof opts.seenNonces.has === 'function' && opts.seenNonces.has(String(auth.nonce));
     const overCap = opts.maxAmount != null && auth.amount > Number(opts.maxAmount);

@@ -94,7 +94,7 @@ export function verifyCredential(vc, trustedIssuer, opts = {}) {
     if (vc.issuer !== makeDid(trustedIssuer)) return { verified: false, reason: 'issuer DID != pinned issuer keys' };
     const sigOk = hybridVerify(utf8ToBytes(canon(vcCore(vc))), vc.proof, trustedIssuer);
     if (!sigOk) return { verified: false, reason: 'hybrid proof invalid' };
-    if (vc.expirationDate != null && opts.now == null && opts.allowNoExpiryClock !== true) return { verified: false, reason: 'expirationDate declared but no clock (opts.now) supplied — cannot verify freshness' };
+    if (vc.expirationDate != null && (opts.now == null || !Number.isFinite(opts.now)) && opts.allowNoExpiryClock !== true) return { verified: false, reason: 'expirationDate declared but no finite clock (opts.now) supplied — cannot verify freshness' }; // non-finite now (NaN/''/[]) also can't check expiry (fix-verif sibling of pqmarket, 1 Jul)
     const expired = vc.expirationDate != null && opts.now != null && Number(opts.now) > Number(vc.expirationDate);
     const revokedSet = opts.revoked instanceof Set ? opts.revoked : new Set(opts.revoked || []);
     const revoked = revokedSet.has(vc.id);
@@ -118,6 +118,8 @@ export function present(vc, holderRecord, discloseClaims, opts = {}) {
 }
 
 // verify a presentation: VC valid + disclosed claims provably bound to THIS VC's claims root + (optional) holder PoP.
+// opts.requireHolderProof REQUIRES opts.holderKeys AND a verifier-issued fresh single-use opts.expectedNonce — the holder
+// PoP is signed over a holder-chosen nonce, so binding a verifier-supplied challenge is what stops cross-session replay.
 export function verifyPresentation(vp, trustedIssuer, opts = {}) {
   try {
     if (!vp || !vp.vc || !vp.disclosure) return { verified: false };
@@ -131,12 +133,18 @@ export function verifyPresentation(vp, trustedIssuer, opts = {}) {
     if (opts.requireHolderProof) {
       holderOk = false;
       const h = vp.holder;
-      if (h && h.did === vp.vc.subject && opts.holderKeys && h.did === makeDid(opts.holderKeys)) {
+      // FAIL-CLOSED challenge binding (match sibling pqcap's verifyCapability holder PoP): the holder PoP is signed over a
+      // HOLDER-CHOSEN nonce, so without a verifier-issued fresh single-use challenge it is replayable — an attacker who
+      // observes ONE presentation replays the identical VP to any other verifier session. requireHolderProof therefore
+      // DEMANDS opts.expectedNonce and binds it; an absent/non-matching expectedNonce is a hard failure, never a silent
+      // pass. (fix-verif: closes the fail-open replay pqvc had vs pqcap, 2 Jul)
+      if (h && h.did === vp.vc.subject && opts.holderKeys && h.did === makeDid(opts.holderKeys)
+          && opts.expectedNonce != null && String(h.nonce) === String(opts.expectedNonce)) {
         const b = concatBytes(VP_CTX, utf8ToBytes(String(h.nonce) + '|' + vp.vc.id));
         let e = false, m = false;
         try { e = ed25519.verify(hexToBytes(h.ed_sig), b, _pub(opts.holderKeys.ed)); } catch { e = false; }
         try { m = ml_dsa87.verify(hexToBytes(h.mldsa_sig), b, _pub(opts.holderKeys.mldsa), { context: VP_CTX }); } catch { m = false; }
-        holderOk = e && m && (opts.expectedNonce == null || String(h.nonce) === String(opts.expectedNonce));
+        holderOk = e && m;
       }
     }
     return { verified: holderOk, disclosed: disc.disclosed, subject: vp.vc.subject, issuer: vp.vc.issuer, holderOk };
@@ -211,9 +219,15 @@ function selfTest() {
   ok(verifyPresentation(vpSplice, tIssuer, { now: 2000 }).verified === false, 'cross-VC claims splice -> FAILS (root mismatch)');
 
   // holder proof-of-possession: presenter proves control of the subject DID
+  const tHolder = { ed: holder.ed.publicKey, mldsa: holder.mldsa.publicKey };
   const vpPoP = present(vc, hrec, ['country'], { holderKeys: holder, nonce: 'chal-xyz' });
-  ok(verifyPresentation(vpPoP, tIssuer, { now: 2000, requireHolderProof: true, holderKeys: { ed: holder.ed.publicKey, mldsa: holder.mldsa.publicKey }, expectedNonce: 'chal-xyz' }).verified === true, 'holder proof-of-possession verifies (presenter controls subject DID)');
-  ok(verifyPresentation(present(vc, hrec, ['country']), tIssuer, { now: 2000, requireHolderProof: true, holderKeys: { ed: holder.ed.publicKey, mldsa: holder.mldsa.publicKey } }).verified === false, 'requireHolderProof with no holder proof -> FAILS');
+  // (a) correct verifier-issued nonce -> verifies (legitimate path preserved)
+  ok(verifyPresentation(vpPoP, tIssuer, { now: 2000, requireHolderProof: true, holderKeys: tHolder, expectedNonce: 'chal-xyz' }).verified === true, 'holder proof-of-possession verifies (presenter controls subject DID, correct nonce)');
+  ok(verifyPresentation(present(vc, hrec, ['country']), tIssuer, { now: 2000, requireHolderProof: true, holderKeys: tHolder }).verified === false, 'requireHolderProof with no holder proof -> FAILS');
+  // (b) FAIL-CLOSED: requireHolderProof but verifier OMITS expectedNonce -> a valid-looking PoP must NOT pass (no cross-session replay)
+  ok(verifyPresentation(vpPoP, tIssuer, { now: 2000, requireHolderProof: true, holderKeys: tHolder }).verified === false, 'requireHolderProof but NO expectedNonce -> FAILS closed (holder-chosen nonce is not a fresh challenge; a captured VP would otherwise replay)');
+  // (c) wrong / mismatched verifier nonce -> fails (replay of a VP minted for a different challenge)
+  ok(verifyPresentation(vpPoP, tIssuer, { now: 2000, requireHolderProof: true, holderKeys: tHolder, expectedNonce: 'chal-OTHER' }).verified === false, 'holder PoP nonce != expectedNonce -> FAILS (cross-session replay rejected)');
 
   // hybrid SLH 3rd leg
   const slh = slh_dsa_sha2_256f.keygen(new Uint8Array(96).fill(7));

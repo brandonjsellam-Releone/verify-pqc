@@ -21,7 +21,7 @@ production keys touched.** `SDK_VERSION 0.16.0-draft`.
 | KEM (confidentiality) | X25519 **+ ML-KEM-1024** hybrid | 203 |
 | Signature (load-bearing) | **ML-DSA-87** (hedged default; deterministic via fixed extraEntropy only in KAT) | 204 |
 | Signature (diversity leg) | **SLH-DSA-SHAKE-256s** | 205 |
-| On-chain / provenance ONLY | Falcon-1024 (draft FIPS 206 — never a compliance signature) | — |
+| On-chain / provenance ONLY | Falcon-1024 (FIPS 206 in development — never a compliance signature) | — |
 | Hash | SHA-512 / SHA-384 / SHA3-256 (Merkle leaf/node 0x00/0x01 per RFC-6962) | 180/202 |
 | AEAD | AES-256-GCM (counter nonces) · ChaCha20-Poly1305 | — |
 | KDF | HKDF-SHA384 / SHA-512 | — |

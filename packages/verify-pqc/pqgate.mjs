@@ -8,8 +8,10 @@
  * an attacker can't silently weaken the floor (pqadmit takes minCertLevel/minVersion/revoked as untrusted caller
  * args — here they are signed); (2) the ALLOW/DENY decision is hybrid-signed AND RECOMPUTE-VERIFIABLE — verifyDecision
  * re-evaluates the admission from the cert + the signed policy and rejects a forged "allow"; (3) every decision
- * (allow AND deny) is hash-chained into a tamper-evident audit log. FAIL-DANGEROUS: admit() refuses to act under a
- * policy whose signature doesn't verify.
+ * (allow AND deny) is appended to an audit log that is hash-chained for INTEGRITY and carries the gate's per-decision
+ * hybrid signature for AUTHENTICITY — verifyAdmissionLog(log, trustedGate) proves the decisions were really issued by
+ * the pinned gate (chain-intact alone does NOT: a fabricated intact chain of allow:true records is trivial without the
+ * signature check). FAIL-DANGEROUS: admit() refuses to act under a policy whose signature doesn't verify.
  *
  * HONEST SCOPE: a decision proves "this cert met this signed policy under pqadmit's model" — NOT that the build is
  * safe. Inherits pqadmit's revocation caveat (a withheld revocation can still admit; pair with short expiry + an
@@ -84,7 +86,9 @@ export function verifyPolicy(policy, trustedAuthority) {
 export function evaluateAdmission({ cert, certIssuer, policy, artifactBytes, now = null }) {
   if (!cert || !policy) return { allow: false, reason: 'missing cert or policy', app: policy && policy.app, cert_id: null, version: null, cert_level: null, policy_id: policy && policy.policy_id };
   if (String(cert.app) !== String(policy.app)) return { allow: false, reason: 'cert app != policy app', app: policy.app, cert_id: cert.cert_id ?? null, version: cert.version ?? null, cert_level: cert.cert_level ?? null, policy_id: policy.policy_id };
-  const v = verifyAdmission(cert, certIssuer, { artifactBytes, allowUnboundArtifact: !artifactBytes && !policy.require_artifact, now,
+  // sweep R1 posture-cluster: unbound admission requires an EXPLICIT policy opt-out (`require_artifact === false`), so a
+  // policy that OMITS require_artifact defaults to binding-REQUIRED (fail-closed) rather than silently allowing any binary.
+  const v = verifyAdmission(cert, certIssuer, { artifactBytes, allowUnboundArtifact: !artifactBytes && policy.require_artifact === false, now,
     minCertLevel: policy.min_cert_level ?? undefined, minVersion: policy.min_version ?? undefined, revoked: setOf(policy.revoked), requireAllChecks: policy.require_all_checks !== false });
   return { allow: v.verified === true, reason: v.verified ? 'ok' : (v.reason || 'denied'), app: policy.app, cert_id: cert.cert_id ?? null, version: cert.version ?? null, cert_level: cert.cert_level ?? null, policy_id: policy.policy_id };
 }
@@ -134,33 +138,73 @@ export function verifyDecision(decision, trustedGate, opts = {}) {
     // the certified rules. Surface that, and let strict callers force the re-evaluation.
     const didRecompute = !!(opts.cert && opts.policy && opts.certIssuer && opts.policyAuthority);
     if (opts.requireRecompute && !didRecompute) return { verified: false, reason: 'requireRecompute: supply cert + policy (+ pinned issuers) to re-derive the decision (a signature-only verdict is not recompute-checked)' };
-    return { verified: true, recomputed: didRecompute, policy_pinned: opts.trustedPolicyId != null, allow: decision.allow, app: decision.app, cert_id: decision.cert_id, version: decision.version, policy_id: decision.policy_id };
+    // sweep R1 posture-cluster: `verified:true` means the decision is AUTHENTIC — NOT that it still matches the CURRENT
+    // policy (a stale allow signed under an older/weaker policy is authentic but replayable). An authorization caller MUST
+    // check `current_policy_checked` (or pass trustedPolicyId / requireRecompute) — authenticity != current-policy validity.
+    const current_policy_checked = (opts.trustedPolicyId != null) || didRecompute;
+    return { verified: true, recomputed: didRecompute, policy_pinned: opts.trustedPolicyId != null, current_policy_checked, allow: decision.allow, app: decision.app, cert_id: decision.cert_id, version: decision.version, policy_id: decision.policy_id };
   } catch { return { verified: false }; }
 }
 
-/* ---------- tamper-evident admission LOG (hash-chained audit trail of every allow/deny) ---------- */
+/* ---------- admission LOG ----------
+ * WHAT THE CHAIN PROVES vs WHAT IT DOES NOT (round-2 finding): the hash-chain (seq + prev_hash + entry_hash) proves
+ * INTEGRITY — that the ordered set of records has not been reordered/edited/truncated-in-the-middle since it was built.
+ * It does NOT prove AUTHENTICITY: anyone can hand-build a perfectly-intact chain of fabricated allow:true records,
+ * because the record fields are not signed by the gate. Chain-intact is therefore necessary but NOT sufficient to
+ * trust the decisions. To make authenticity verifiable, appendDecision now CARRIES the gate's per-decision hybrid
+ * signature (option b) into each record, and verifyAdmissionLog(log, trustedGate) re-verifies every entry's signature
+ * against the pinned gate keyset via verifyDecision. With NO trusted gate supplied, verifyAdmissionLog returns
+ * authenticated:false so a caller can never mistake .intact for proof of authentic decisions.
+ * Backward-compatible: legacy records without a `sig` still chain-verify (.intact) but are reported unauthenticated. */
 export function createAdmissionLog() { return { v: '1', entries: [] }; }
+// carry the decision's own gate id + hybrid signatures so the record is authenticity-verifiable, not just chained.
+const decisionSigOf = (d) => (d && d.ed_sig && d.mldsa_sig ? { gate: d.gate, gate_pub: d.gate_pub, slh_signer_pub_hex: d.slh_signer_pub_hex ?? null, ed_sig: d.ed_sig, mldsa_sig: d.mldsa_sig, ...(d.slh_sig ? { slh_sig: d.slh_sig } : {}), reason: d.reason, cert_level: d.cert_level, at: d.at ?? null } : null);
 export function appendDecision(log, decision, { at = null } = {}) {
   const prev = log.entries[log.entries.length - 1];
   const seq = log.entries.length, prev_hash = prev ? prev.entry_hash : null;
+  const sig = decisionSigOf(decision);
   const rec = { seq, prev_hash, ts: at, allow: decision.allow, app: decision.app, cert_id: decision.cert_id, version: decision.version, policy_id: decision.policy_id };
-  rec.entry_hash = h(canon(rec));
+  if (sig) rec.sig = sig; // gate id + hybrid signature legs, so verifyAdmissionLog can prove authenticity, not just integrity
+  rec.entry_hash = h(canon(rec)); // entry_hash covers `sig` too → the carried signature is itself tamper-evident in the chain
   log.entries.push(rec);
   return { log, entry: rec };
 }
-export function verifyAdmissionLog(log) {
+// reconstruct the signed decision object from a log record's carried signature, so verifyDecision can re-check it.
+function decisionFromRecord(rec) {
+  if (!rec || !rec.sig) return null;
+  const s = rec.sig;
+  const d = { v: '1', gate: s.gate, app: rec.app, allow: rec.allow, reason: s.reason, cert_id: rec.cert_id, version: rec.version, cert_level: s.cert_level, policy_id: rec.policy_id, at: s.at ?? null,
+    gate_pub: s.gate_pub, slh_signer_pub_hex: s.slh_signer_pub_hex ?? null, ed_sig: s.ed_sig, mldsa_sig: s.mldsa_sig };
+  if (s.slh_sig) d.slh_sig = s.slh_sig;
+  return d;
+}
+// verify the log. Chain-integrity ALWAYS; authenticity only when a trusted gate keyset is supplied. When authenticated,
+// every entry's carried gate signature is re-verified via verifyDecision (fail-closed: an unsigned or forged entry fails).
+// Returns { intact, authenticated, length, head_hash }: authenticated=false means "chain-intact but UNAUTHENTICATED" —
+// do NOT read .intact alone as proof that these allow/deny decisions were really issued by the gate.
+export function verifyAdmissionLog(log, trustedGate = null) {
   try {
-    if (!log || typeof log !== 'object' || !Array.isArray(log.entries)) return { intact: false, length: 0, head_hash: null };
-    let prevHash = null;
+    if (!log || typeof log !== 'object' || !Array.isArray(log.entries)) return { intact: false, authenticated: false, length: 0, head_hash: null };
+    const wantAuth = !!(trustedGate && trustedGate.ed && trustedGate.mldsa);
+    let prevHash = null, allSigned = log.entries.length > 0, authOk = true;
     for (let i = 0; i < log.entries.length; i++) {
       const x = log.entries[i];
-      if (x.seq !== i || x.prev_hash !== prevHash) return { intact: false, length: log.entries.length, head_hash: null, at: i };
+      if (x.seq !== i || x.prev_hash !== prevHash) return { intact: false, authenticated: false, length: log.entries.length, head_hash: null, at: i };
       const { entry_hash, ...core } = x;
-      if (h(canon(core)) !== entry_hash) return { intact: false, length: log.entries.length, head_hash: null, at: i };
+      if (h(canon(core)) !== entry_hash) return { intact: false, authenticated: false, length: log.entries.length, head_hash: null, at: i };
+      if (wantAuth) {
+        const d = decisionFromRecord(x); // fail-closed: no carried signature ⇒ cannot be authenticated ⇒ authentication fails
+        const vr = d ? verifyDecision(d, trustedGate) : { verified: false };
+        // bind the carried signature to the record's own fields (a valid sig lifted from another decision must not pass)
+        const bound = d && vr.verified && d.allow === x.allow && d.app === x.app && d.cert_id === x.cert_id && d.version === x.version && d.policy_id === x.policy_id;
+        if (!bound) { authOk = false; if (!allSigned) { /* keep scanning chain */ } }
+      }
+      if (!x.sig) allSigned = false;
       prevHash = x.entry_hash;
     }
-    return { intact: true, length: log.entries.length, head_hash: prevHash };
-  } catch { return { intact: false, length: 0, head_hash: null }; }
+    const authenticated = wantAuth ? (authOk && allSigned) : false;
+    return { intact: true, authenticated, length: log.entries.length, head_hash: prevHash };
+  } catch { return { intact: false, authenticated: false, length: 0, head_hash: null }; }
 }
 
 /* ---------- self-test: node pqgate.mjs ---------- */
@@ -222,12 +266,35 @@ async function selfTest() {
   let refused = false; try { admit({ cert, certIssuer: tCertIss, policy: polT, policyAuthority: tPolAuth, artifactBytes: fw, gateKeys: gate, now: 1 }); } catch { refused = true; }
   ok(refused, 'fail-dangerous: admit() refuses to act under an UNVERIFIED (tampered) policy');
 
-  // admission log (tamper-evident)
+  // admission log (tamper-evident + authenticity-verifiable)
   const L = createAdmissionLog();
-  appendDecision(L, dec, { at: 1 }); appendDecision(L, admit({ cert: certReady, certIssuer: tCertIss, policy, policyAuthority: tPolAuth, artifactBytes: fw, gateKeys: gate, now: 2 }), { at: 2 });
+  appendDecision(L, dec, { at: 1 }); appendDecision(L, admit({ cert: certReady, certIssuer: tCertIss, policy, policyAuthority: tPolAuth, artifactBytes: fw, gateKeys: gate, now: 2, at: 2 }), { at: 2 });
   ok(L.entries.length === 2 && verifyAdmissionLog(L).intact === true, 'admission log records allow+deny → intact hash-chain');
   const Lt = JSON.parse(JSON.stringify(L)); Lt.entries[0].allow = false;
   ok(verifyAdmissionLog(Lt).intact === false, 'altering a logged decision → log NOT intact (tamper-evident)');
+
+  // AUTHENTICITY (round-2 finding): chain-intact ≠ authentic. An authentic log verifies under the pinned gate; a
+  // fabricated intact-chain of allow:true entries FAILS authentication; and with no gate supplied the verdict is
+  // explicitly UNAUTHENTICATED so .intact can never be mistaken for proof of authentic decisions.
+  ok(verifyAdmissionLog(L, tGate).authenticated === true, 'authentic log → verifies under the pinned gate (carried per-decision signatures re-verify)');
+  const Lna = verifyAdmissionLog(L); // no trusted gate supplied
+  ok(Lna.intact === true && Lna.authenticated === false, 'chain-intact but NO gate pubkey → { intact:true, authenticated:false } (unauthenticated verdict; .intact is NOT authenticity)');
+  // fabricate a perfectly-intact chain of allow:true records the gate NEVER signed (the round-2 attack)
+  const Lforge = createAdmissionLog();
+  { const rec = { seq: 0, prev_hash: null, ts: 9, allow: true, app: 'acme/api', cert_id: 'FORGED', version: '9.9.9', policy_id: policy.policy_id }; rec.entry_hash = h(canon(rec)); Lforge.entries.push(rec); }
+  ok(verifyAdmissionLog(Lforge).intact === true, 'fabricated allow:true log is chain-INTACT (integrity alone cannot catch fabrication)');
+  ok(verifyAdmissionLog(Lforge, tGate).authenticated === false, 'fabricated intact allow:true log → authentication FAILS under the pinned gate (round-2 fix)');
+  // a valid gate signature lifted from a genuine decision but pasted onto a record with FLIPPED fields must not pass
+  const Lsteal = JSON.parse(JSON.stringify(L)); Lsteal.entries[1].allow = true; Lsteal.entries[1].entry_hash = h(canon((({ entry_hash, ...c }) => c)(Lsteal.entries[1])));
+  Lsteal.entries[1].prev_hash = Lsteal.entries[0].entry_hash; Lsteal.entries[1].entry_hash = h(canon((({ entry_hash, ...c }) => c)(Lsteal.entries[1])));
+  ok(verifyAdmissionLog(Lsteal).intact === true && verifyAdmissionLog(Lsteal, tGate).authenticated === false, 'record with a genuine sig but flipped allow → chain re-fixed yet authentication FAILS (sig bound to fields)');
+  // wrong pinned gate → authentication fails even on a genuine log
+  ok(verifyAdmissionLog(L, { ed: ed(9).publicKey, mldsa: ml_dsa87.keygen(new Uint8Array(32).fill(9)).publicKey }).authenticated === false, 'genuine log under a WRONG pinned gate → authentication FAILS');
+  // 3-leg carried signature authenticates too (anti-downgrade preserved through the log)
+  const slhL = slh_dsa_sha2_256f.keygen(new Uint8Array(96).fill(7));
+  const g3 = { ed: gate.ed, mldsa: gate.mldsa, slh: slhL }, tg3 = { ed: tGate.ed, mldsa: tGate.mldsa, slh: slhL.publicKey };
+  const L3 = createAdmissionLog(); appendDecision(L3, admit({ cert, certIssuer: tCertIss, policy, policyAuthority: tPolAuth, artifactBytes: fw, gateKeys: g3, now: 1, at: 1 }), { at: 1 });
+  ok(verifyAdmissionLog(L3, tg3).authenticated === true, '3-leg (Ed25519∧ML-DSA∧SLH) carried signature authenticates through the log');
 
   // 3-leg hybrid
   const slh = slh_dsa_sha2_256f.keygen(new Uint8Array(96).fill(7));
@@ -237,6 +304,9 @@ async function selfTest() {
   ok(typeof dec3.slh_sig === 'string' && verifyDecision(dec3, tGate3).verified === true, '3-leg (Ed25519∧ML-DSA∧SLH) decision verifies');
   const dec3s = JSON.parse(JSON.stringify(dec3)); dec3s.slh_sig = '00';
   ok(verifyDecision(dec3s, tGate3).verified === false, 'stripped SLH leg fails when gate.slh pinned (anti-downgrade)');
+  // sweep-R1 lock: verified:true means AUTHENTIC, not current-policy-valid. current_policy_checked distinguishes them.
+  ok(verifyDecision(dec, tGate).current_policy_checked === false, 'sweep-R1 lock: verifyDecision w/o trustedPolicyId/recompute -> current_policy_checked FALSE (authentic != current)');
+  ok(verifyDecision(dec, tGate, { trustedPolicyId: dec.policy_id }).current_policy_checked === true, 'sweep-R1 lock: pinning the current policy_id -> current_policy_checked TRUE');
 
   // TOTAL fail-closed
   let total = true; for (const bad of [null, undefined, {}, 42, { allow: true }, { ...dec, ed_sig: 'zz' }]) { try { if (verifyDecision(bad, tGate).verified !== false) total = false; } catch { total = false; } }

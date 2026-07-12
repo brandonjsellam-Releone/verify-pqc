@@ -100,8 +100,12 @@ export function verifyAttest(artifactBytes, att, opts = {}) {
     const minTsaOk = Number.isInteger(att.min_tsa) && att.min_tsa >= 1;
     const requireSealTrust = opts.requireSealTrust ?? !!opts.trusted;
     const sealTrustOk = !requireSealTrust || sealRes.fullyAnchored;
-    const freshOk = (opts.now == null || (opts.maxAgeMs == null && opts.minTs == null)) ? true
-      : (att.tst.tsa_time != null
+    // FAIL-CLOSED when a freshness bound is requested but no clock supplied: a caller who set maxAgeMs/minTs WANTS
+    // freshness enforced — silently skipping it (opts.now==null) would pass a STALE attestation. Only when NEITHER bound
+    // is set is a missing clock a legitimate no-op (freshness simply not requested). (apex sweep 1 Jul, fail-open-clock class)
+    const freshRequested = opts.maxAgeMs != null || opts.minTs != null;
+    const freshOk = !freshRequested ? true
+      : (opts.now != null && att.tst.tsa_time != null
          && (opts.maxAgeMs == null || (att.tst.tsa_time >= opts.now - opts.maxAgeMs && att.tst.tsa_time <= opts.now))
          && (opts.minTs == null || att.tst.tsa_time >= opts.minTs));
     const verified = !!(hashOk && tstBindOk && minTsaOk && tstRes.verified && anchorRes.verified && anchorBindOk && witnessRes.verified && sealRes.verified && sealTrustOk && freshOk);

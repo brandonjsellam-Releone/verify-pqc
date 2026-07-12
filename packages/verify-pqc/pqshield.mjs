@@ -106,6 +106,10 @@ export function createShieldReport({ issuerKeys, target, assets, standards, gene
   if (!issuerKeys || !issuerKeys.ed || !issuerKeys.mldsa) throw new Error('issuerKeys must be { ed, mldsa[, slh] }');
   if (!Array.isArray(assets)) throw new Error('assets must be an array');
   if (!target) throw new Error('target (what was scanned) is required');
+  // A posture report MUST carry a finite signed generated_at. It is the anti-replay ordering anchor the pqmonitor ledger
+  // relies on; leaving it optional produced a null-generated_at report that a monitor legitimately rejects (a producer/
+  // consumer disagreement). Fail closed at the source so every report is monitorable + freshness-anchored. (fix-verif 1 Jul)
+  if (!Number.isFinite(generatedAt)) throw new Error('generatedAt (a finite signed report timestamp) is required — an untimestamped posture report cannot anchor freshness/anti-replay when monitored (fail-closed)');
   const agg = aggregate(assets);
   const stds = Array.isArray(standards) && standards.length
     ? standards.reduce((o, s) => { o[String(s)] = { readiness_pct: agg.pqc_pct, note: 'readiness signal, not attestation' }; return o; }, {}) : null;
@@ -194,14 +198,14 @@ function selfTest() {
   ok(verifyShieldReport(r, tIssuer, { expectedAnchor: r.anchor_commitment }).verified === true && verifyShieldReport(r, tIssuer, { expectedAnchor: 'deadbeef' }).verified === false, 'expectedAnchor pin enforced');
 
   // empty estate -> grade A, risk 0
-  const empty = createShieldReport({ issuerKeys: issuer, target: 'greenfield', assets: [] });
+  const empty = createShieldReport({ issuerKeys: issuer, target: 'greenfield', assets: [], generatedAt: 1 });
   ok(empty.grade === 'A' && empty.risk_index === 0 && verifyShieldReport(empty, tIssuer).verified === true, 'empty asset set -> grade A, verifies');
 
   // 3-leg hash-based hardening
   const slh = slh_dsa_sha2_256f.keygen(new Uint8Array(96).fill(5));
   const issuer3 = { ed: issuer.ed, mldsa: issuer.mldsa, slh };
   const tIssuer3 = { ed: tIssuer.ed, mldsa: tIssuer.mldsa, slh: slh.publicKey };
-  const r3 = createShieldReport({ issuerKeys: issuer3, target: 'acme/prod', assets });
+  const r3 = createShieldReport({ issuerKeys: issuer3, target: 'acme/prod', assets, generatedAt: 1 });
   ok(typeof r3.slh_sig === 'string' && verifyShieldReport(r3, tIssuer3).verified === true, '3-leg (Ed25519∧ML-DSA∧SLH-DSA) report verifies');
   const r3s = JSON.parse(JSON.stringify(r3)); r3s.slh_sig = '00';
   ok(verifyShieldReport(r3s, tIssuer3).verified === false, 'stripped SLH leg fails when issuer.slh pinned (anti-downgrade)');

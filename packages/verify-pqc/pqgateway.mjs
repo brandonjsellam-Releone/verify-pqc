@@ -65,9 +65,14 @@ function _negotiate({ localSuites, remoteOffer, policy = {}, trustedPeerPub }) {
   if (policy.expectedChallenge && remoteOffer.challenge !== policy.expectedChallenge) return { ok: false, replay_suspected: true, reason: 'offer challenge mismatch — replayed / cross-session offer' };
   // FRESHNESS (code-security review): without expectedChallenge a signed offer replays across sessions. When the caller
   // wants freshness (policy.now + policy.maxAgeMs) and no challenge pinned the offer, require a recent offer ts.
-  if (!policy.expectedChallenge && policy.now != null && policy.maxAgeMs != null
-      && !(typeof remoteOffer.ts === 'number' && remoteOffer.ts >= policy.now - policy.maxAgeMs && remoteOffer.ts <= policy.now))
-    return { ok: false, replay_suspected: true, reason: 'offer not fresh (no challenge pinned + stale/absent ts) — replay suspected' };
+  if (!policy.expectedChallenge && policy.maxAgeMs != null) {
+    // The caller asked for an age gate but pinned no challenge → the signed offer MUST prove it's fresh. A missing clock
+    // (policy.now == null) can't establish that, so fail CLOSED rather than silently skip — the same fail-open-without-clock
+    // class just closed in verifySession, previously left live here (only fired when BOTH now & maxAgeMs were set). (fix-verif 1 Jul)
+    const freshOk = policy.now != null && typeof remoteOffer.ts === 'number'
+      && remoteOffer.ts >= policy.now - policy.maxAgeMs && remoteOffer.ts <= policy.now;
+    if (!freshOk) return { ok: false, replay_suspected: true, reason: 'offer not fresh (no challenge pinned + missing clock or stale/absent ts) — replay suspected' };
+  }
   const requirePQ = policy.requirePQ ?? true;
   const mutual = SUITES.filter((s) => localSuites.includes(s.id) && remoteOffer.suites.includes(s.id)); // priority order
   const best = mutual[0];
@@ -109,10 +114,11 @@ export function verifySession(att, trustedGatewayPub, opts = {}) {
   let sigOk = false;
   try { sigOk = ml_dsa87.verify(hexToBytes(sig), utf8ToBytes(canon(core)), trustedGatewayPub ? trustedGatewayPub : hexToBytes(gateway_pub), { context: ATT_CTX }); } catch { sigOk = false; }
   const transcriptOk = !opts.expectedTranscript || core.transcript_sha256 === opts.expectedTranscript;
-  // FRESHNESS (code-security review): a static attestation replays forever unless the verifier bounds its age. When
-  // opts.now + opts.maxAgeMs are supplied, require att.ts present + within [now-maxAgeMs, now]. Absent them, no age gate.
-  const freshOk = (opts.now == null || opts.maxAgeMs == null) ? true
-    : (typeof core.ts === 'number' && core.ts >= opts.now - opts.maxAgeMs && core.ts <= opts.now);
+  // FRESHNESS (code-security review): a static attestation replays forever unless the verifier bounds its age. FAIL-CLOSED
+  // when maxAgeMs is set but NO clock (opts.now) — a caller who asked for the age gate must not have it silently skipped
+  // (stale-replay). Only when maxAgeMs is UNSET is there no age gate. (apex sweep 1 Jul, fail-open-without-clock class)
+  const freshOk = opts.maxAgeMs == null ? true
+    : (opts.now != null && typeof core.ts === 'number' && core.ts >= opts.now - opts.maxAgeMs && core.ts <= opts.now);
   return { verified: pinned && sigOk && transcriptOk && freshOk, pinned, sigOk, transcriptOk, freshOk, claims: core };
  } catch { return { verified: false, pinned: false, sigOk: false, transcriptOk: false, claims: null }; }
 }

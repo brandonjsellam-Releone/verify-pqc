@@ -95,7 +95,7 @@ async function run() {
 async function selfTest() {
   let pass = 0, fail = 0; const ok = (c, m) => { if (c) pass++; else { fail++; console.error('FAIL:', m); } };
   const { scanFiles } = await import('./pqcbom.mjs');
-  const scan = scanFiles([{ name: 'legacy.js', text: 'RSA-2048; ECDSA secp256k1; MD5; ml_kem1024;' }]);
+  const scan = scanFiles([{ name: 'legacy.js', text: 'RSA-2048; ECDSA secp256k1; MD5; ml_kem1024;' }]); // pqcbom-ignore: self-test fixture string (scanned at runtime, not crypto use)
   const pack = buildEvidencePack({ scan, meta: { org: 'st', scope: 'unit', generated_ts: 1000 } });
 
   // keyfile round-trip (the CLI's value-add over the module) — ML-DSA only

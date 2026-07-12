@@ -23,11 +23,11 @@ move named modules toward production.
 ## 3. Specific questions the audit must answer
 - Is the RFC-6962 inclusion/consistency implementation faithful, and are proofs bound to (index, tree_size)?
 - Are all signing contexts domain-separated with no cross-protocol reuse? *(We now mechanically DEMONSTRATE this in
-  `domain-separation.mjs`: 0 bare PQ sign/verify across 104 production sites, 25 globally-distinct `trelyan-*` contexts,
+  `domain-separation.mjs`: 0 bare PQ sign/verify across 191 production sites, 65 globally-distinct `trelyan-*` contexts,
   cross-context+bare verification rejected. Auditor to CONFIRM the harness is faithful + assess any residual, e.g. the
   Ed25519 hybrid leg whose context is bound into its pre-image rather than a native ctx param.)*
 - Is every signed field actually BOUND (no signed-vs-checked mismatch)? *(We now demonstrate this in `tamper-binding.mjs`:
-  781 assertions, every leaf flipped across 15 signing verifiers incl. the spine + the paid Evidence Pack. Auditor to
+  1,064 assertions, every leaf flipped across every signed core incl. the spine + the paid Evidence Pack. Auditor to
   CONFIRM coverage is complete vs the signed-object inventory + extend to the tracked follow-ups.)*
 - Is the hybrid KEM/signature composition sound (X-Wing-style combiner; AND-composition certs; PQXDH one-time prekeys
   now signed)?

@@ -1,4 +1,4 @@
-# TRELYAN Quantum-Safe Scan — 60-second runnable demo
+# TRELYAN Post-Quantum Readiness Scan — 60-second runnable demo
 
 Don't trust the claims — **run them.** This scans a synthetic target repo with the real TRELYAN SDK and produces inspectable artifacts. No hosting, no account, no network calls.
 
@@ -33,7 +33,7 @@ node ../../verify-pack.mjs demo-out/evidence-pack.signed.json --mldsa-pub <hex> 
 - **It's not just grep — two layers:** it reads declared crypto **dependencies** from `package.json` (`node-forge` → broken, `@noble/post-quantum` → safe), not only inline strings.
 - **It knows modern from legacy:** `TLSv1.0` is flagged but `TLSv1.3` **on the same line** is not.
 - **It doesn't over-grade docs:** the `RSA`/`3DES` mention inside a **comment** in `pq/handshake.mjs` is tagged *informational* — it does not drag the code grade.
-- **It credits migration:** `ML-KEM-1024`, `ML-DSA-87`, `sntrup761`, `AES-256`, `SHA-512` are recognized as **quantum-safe**.
+- **It credits migration:** `ML-KEM-1024`, `ML-DSA-87`, `sntrup761`, `AES-256`, `SHA-512` are recognized as **quantum-resistant**.
 - **It has an escape hatch:** `sample-repo/.pqcbomignore` accepts the `classical-hybrid-ok` legs → they're **counted (suppressed), not graded**, so a team can turn the gate on.
 
 ## Honest scope (the point of the demo is that you can check it)

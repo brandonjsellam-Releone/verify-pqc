@@ -54,7 +54,7 @@ function renderMarkdown({ summary, grade, findings, meta }) {
     '**Subject:** ' + meta.org + '  ·  **Scope:** ' + meta.scope + '  ·  **Generated (ts):** ' + (meta.generated_ts ?? 'n/a'),
     '**Tool:** ' + meta.tool + ' ' + meta.tool_version + '  ·  **Report format:** v' + meta.report_version,
     '',
-    '## 1. Quantum-Safe Scorecard',
+    '## 1. Post-Quantum Readiness Scorecard',
     '> ## Grade ' + grade.letter + ' — ' + grade.label + '  ·  Score ' + grade.score + '/100',
     '',
     '| Risk class | Occurrences |',
@@ -63,7 +63,7 @@ function renderMarkdown({ summary, grade, findings, meta }) {
     '| 🟠 quantum-broken (Shor) | ' + summary.quantum_broken + ' |',
     '| 🟡 quantum-weakened (Grover) | ' + summary.quantum_weakened + ' |',
     '| 🔵 classical-hybrid-ok | ' + summary.classical_hybrid_ok + ' |',
-    '| 🟢 quantum-safe | ' + summary.quantum_safe + ' |',
+    '| 🟢 quantum-resistant | ' + summary.quantum_safe + ' |',
     '',
     'Files scanned: ' + summary.files_scanned + '  ·  Distinct algorithms: ' + summary.distinct_algorithms,
     bc ? '\n**Triage** (tool-derived; a human assessor confirms): 🟢 likely (declared dependency) ' + bc.likely + '  ·  🟡 lead-to-verify (in code) ' + bc.lead_to_verify + '  ·  ⚪ informational (comment/doc only) ' + bc.informational : '',
@@ -133,7 +133,9 @@ export function verifyEvidencePack(pack, trustedSignerPub, opts = {}) {
     const coreBytes = utf8ToBytes(canon(evidenceCore(pack)));
     // ML-DSA-87 (primary)
     const s = pack.signature;
-    const pinned = !trustedSignerPub || (s && s.signer_pub_hex && s.signer_pub_hex.toLowerCase() === bytesToHex(trustedSignerPub).toLowerCase());
+    // pinOk = "no key supplied, OR the supplied key matched" (internal: don't fail a no-pin verification). The SURFACED
+    // `pinned` (see return) is the honest TRUST flag: a key was supplied AND matched — validity != trust (sweep R1).
+    const pinOk = !trustedSignerPub || (s && s.signer_pub_hex && s.signer_pub_hex.toLowerCase() === bytesToHex(trustedSignerPub).toLowerCase());
     let sigOk = false;
     if (s && s.sig_hex) sigOk = ml_dsa87.verify(hexToBytes(s.sig_hex), coreBytes, trustedSignerPub ? trustedSignerPub : hexToBytes(s.signer_pub_hex), { context: REPORT_CTX });
     // SLH-DSA-256f diversity leg (AND-composition). The core BINDS slh_signer_pub_hex, so a hybrid pack cannot be
@@ -151,14 +153,15 @@ export function verifyEvidencePack(pack, trustedSignerPub, opts = {}) {
     const hybridOk = !hybrid || (slhConsistent && slhValid);          // a present 2nd leg MUST verify
     const meetsHybridReq = !opts.requireHybrid || (hybrid && slhValid); // caller can demand dual-signing
     // authenticity (not just self-consistency): a caller trust anchor was supplied AND matched (both legs, if hybrid)
-    const trustAnchored = !!trustedSignerPub && pinned && sigOk && (!hybrid || (!!opts.trustedSlhPub && slhValid));
+    const trustAnchored = !!trustedSignerPub && pinOk && sigOk && (!hybrid || (!!opts.trustedSlhPub && slhValid));
     // SLH leg trust, surfaced independently (code-security review): requireHybrid ALONE proves a VALID 2nd leg is
     // present, NOT that it is pinned — without trustedSlhPub it's verified under the pack's OWN embedded SLH key.
     // High-assurance callers should combine requireHybrid + trustedSlhPub + requirePinned (which forces this true).
     const slhTrustAnchored = !!opts.trustedSlhPub && hybrid && slhConsistent && slhValid;
-    const selfConsistent = summaryConsistent && gradeConsistent && pinned && sigOk && hybridOk && meetsHybridReq;
+    const selfConsistent = summaryConsistent && gradeConsistent && pinOk && sigOk && hybridOk && meetsHybridReq;
     const verified = !!(selfConsistent && (!opts.requirePinned || trustAnchored));
-    return { verified, trustAnchored, slhTrustAnchored, summaryConsistent, gradeConsistent, pinned, sigOk, hybrid, slhValid, slhConsistent };
+    // surfaced `pinned` = TRUST (key supplied AND matched), not validity; `pinOk` exposes the internal matches-or-no-key.
+    return { verified, trustAnchored, slhTrustAnchored, summaryConsistent, gradeConsistent, pinned: !!trustedSignerPub && !!pinOk, pinOk: !!pinOk, sigOk, hybrid, slhValid, slhConsistent };
   } catch { return { verified: false, trustAnchored: false, slhTrustAnchored: false, summaryConsistent: false, gradeConsistent: false, pinned: false, sigOk: false, hybrid: false, slhValid: false, slhConsistent: false }; }
 }
 
@@ -177,7 +180,7 @@ function selfTest() {
   ok(verifyEvidencePack(signed, ml_dsa87.keygen(new Uint8Array(32).fill(9)).publicKey).verified === false, 'wrong signer key -> NOT verified');
 
   // anti grade-forgery: claim grade A over F findings -> recompute catches it
-  const forged = JSON.parse(JSON.stringify(signed)); forged.grade = { letter: 'A', score: 100, label: 'Quantum-safe', badge: 'Quantum-Safe: A' };
+  const forged = JSON.parse(JSON.stringify(signed)); forged.grade = { letter: 'A', score: 100, label: 'PQ Readiness A', badge: 'PQ Readiness: A' };
   const fv = verifyEvidencePack(forged, signer.publicKey);
   ok(fv.verified === false && (fv.sigOk === false || fv.gradeConsistent === false), 'forged grade A over F findings -> verify FAILS (grade recomputed from findings + sig binds it)');
 
@@ -188,7 +191,7 @@ function selfTest() {
   // forge BOTH summary AND grade to look clean while leaving the bad findings -> recompute-from-findings catches it
   const forgedSummary = JSON.parse(JSON.stringify(signed));
   forgedSummary.summary = { ...forgedSummary.summary, broken_classical: 0, quantum_broken: 0, quantum_weakened: 0, classical_hybrid_ok: 0, quantum_safe: 0 };
-  forgedSummary.grade = { letter: 'A', score: 100, label: 'Quantum-safe', badge: 'Quantum-Safe: A' };
+  forgedSummary.grade = { letter: 'A', score: 100, label: 'PQ Readiness A', badge: 'PQ Readiness: A' };
   const fs2 = verifyEvidencePack(forgedSummary, signer.publicKey);
   ok(fs2.verified === false && fs2.summaryConsistent === false, 'forged clean summary+grade over bad findings -> verify FAILS (tallies recomputed from findings)');
 
@@ -221,6 +224,7 @@ function selfTest() {
   const evil = signEvidencePack(buildEvidencePack({ scan, meta: { org: 'attacker', generated_ts: 1 } }), evilSigner.secretKey, evilSigner.publicKey);
   const eUnpinned = verifyEvidencePack(evil); // no trust anchor
   ok(eUnpinned.verified === true && eUnpinned.trustAnchored === false, 'unpinned verify of a self-signed pack -> self-consistent (verified) but trustAnchored=FALSE (not authentic)');
+  ok(eUnpinned.pinned === false && eUnpinned.pinOk === true, 'sweep-R1 lock: surfaced `pinned` is FALSE with no key supplied (trust, not validity); pinOk exposes the internal matches-or-no-key');
   ok(verifyEvidencePack(evil, undefined, { requirePinned: true }).verified === false, 'requirePinned -> unpinned self-signed pack is NOT verified');
   ok(verifyEvidencePack(signed, signer.publicKey).trustAnchored === true, 'pinned verify under the real key -> trustAnchored=TRUE');
   ok(verifyEvidencePack(evil, signer.publicKey).verified === false, 'attacker pack under the REAL pinned key -> verify FAILS');

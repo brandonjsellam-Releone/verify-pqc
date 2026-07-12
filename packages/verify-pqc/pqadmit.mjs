@@ -133,7 +133,7 @@ export function verifyAdmission(cert, trustedIssuer, opts = {}) {
     if (opts.artifactBytes) artifactOk = bytesToHex(sha256(opts.artifactBytes)).toLowerCase() === cert.artifact_digest;
     else artifactOk = opts.allowUnboundArtifact === true;
     if (!artifactOk) return { verified: false, reason: 'deployed artifact != attested digest (or no artifact bound)' };
-    if (cert.expires_at != null && opts.now == null && opts.allowNoExpiryClock !== true) return { verified: false, reason: 'expires_at declared but no clock (opts.now) supplied — cannot verify freshness' };
+    if (cert.expires_at != null && (opts.now == null || !Number.isFinite(opts.now)) && opts.allowNoExpiryClock !== true) return { verified: false, reason: 'expires_at declared but no finite clock (opts.now) supplied — cannot verify freshness' }; // non-finite now (NaN/''/[]) also can't check expiry (fix-verif sibling of pqmarket, 1 Jul)
     if (cert.expires_at != null && opts.now != null && Number(opts.now) >= Number(cert.expires_at)) return { verified: false, reason: 'expired' };
     if (opts.minCertLevel != null) { const need = CERT_RANK[opts.minCertLevel]; if (!need || CERT_RANK[cert.cert_level] < need) return { verified: false, reason: 'cert level below policy floor' }; }
     // monotonic version floor — refuse a rollback to an older (signed-but-now-vulnerable) version (apex-team fix,

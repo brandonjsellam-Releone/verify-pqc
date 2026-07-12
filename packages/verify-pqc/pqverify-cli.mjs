@@ -121,7 +121,7 @@ async function selfTest() {
   } finally { try { unlinkSync(pubPath); } catch { /* ignore */ } }
 
   // end-to-end through verify(): a real shield-report verifies under the pinned key, and not under a wrong one
-  const rep = createShieldReport({ issuerKeys: k, target: 'cli-st', assets: [{ label: 'x', algorithm: 'RSA-2048', internet_facing: true }] });
+  const rep = createShieldReport({ issuerKeys: k, target: 'cli-st', assets: [{ label: 'x', algorithm: 'RSA-2048', internet_facing: true }], generatedAt: 1 }); // pqcbom-ignore: self-test fixture string (scanned at runtime, not crypto use)
   const good = await verify({ type: 'shield-report', artifact: rep, trust: buildTrust(['--ed', bytesToHex(k.ed.publicKey), '--mldsa', bytesToHex(k.mldsa.publicKey)]) });
   ok(good.ok && good.verdict.verified === true && good.pinned === true, 'end-to-end: shield-report verifies under the pinned key');
   const wrong = ks(1, 2);

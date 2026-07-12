@@ -9,7 +9,7 @@
  *
  * All built on @noble/post-quantum (ML-KEM-1024 / ML-DSA-87) + @noble/hashes/ciphers/curves.
  * Honest posture: hybrid-PQ, fail-closed, FIPS-203/204 algorithms (NOT a FIPS-140-3 validated
- * module — see TRELYAN_PQEF_SPEC §B1). Falcon = on-chain/provenance leg only (draft FIPS 206).
+ * module — see TRELYAN_PQEF_SPEC §B1). Falcon = on-chain/provenance leg only (FIPS 206 in development).
  */
 import * as pqef from './pqef.mjs';
 import * as polarseek from './polarseek.mjs';
@@ -40,20 +40,43 @@ import * as pqx3dh from './pqx3dh.mjs';
 import * as pqmarket from './pqmarket.mjs';
 import * as pqseal from './pqseal.mjs';
 import * as pqattest from './pqattest.mjs';
+import * as pqtrace from './pqtrace.mjs';
+import * as pqeval from './pqeval.mjs';
+import * as pqaibom from './pqaibom.mjs';
+import * as pqgovernanceRecord from './pqgovernance-record.mjs';
+import * as pqgovernanceGate from './pqgovernance-gate.mjs';
+import * as pqgovernPolicy from './pqgovern-policy.mjs';
+import * as pqgovernEvidence from './pqgovern-evidence.mjs';
+import * as qiv from './qiv.mjs';
+import * as qivPin from './qiv-pin.mjs';
+import * as omega from './omega.mjs';
+import * as omegaGov from './omega-gov.mjs';
+import * as omegaBridge from './omega-bridge.mjs';
+import * as omegaEvidence from './omega-evidence.mjs';
+import * as omegaChain from './omega-chain.mjs';
+import * as omegaSentinel from './omega-sentinel.mjs';
+import * as omegaNexus from './omega-nexus.mjs';
+import * as omegaServer from './omega-server.mjs';
+import * as pqmeshServer from './pqmesh-server.mjs';
+import * as pqsearchServer from './pqsearch-server.mjs';
+import * as trelyanConsole from './trelyan-console.mjs';
+import * as crossProductE2E from './cross-product-e2e.mjs';
+import * as demoGateway from './demo-gateway.mjs';
+import * as apiServer from './api-server.mjs';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const verifyPQC = require('./index.js');
 
-export { pqef, polarseek, pqsign, pqtransport, pqanswer, pqcouncil, pqguard, pqinduct, pqmoa, pqclaimgate, pqverify, pqratchet, pqratchetHE, pqx3dh, pqindex, pqassistant, pqcbom, pqcbomReport, pqgateway, pqgatewaySession, pqtsa, pqkt, pqverifyApi, pqpki, pqvault, pqcompliance, pqmarket, pqseal, pqattest, verifyPQC };
-export const SDK_VERSION = '0.16.0-draft';
+export { pqef, polarseek, pqsign, pqtransport, pqanswer, pqcouncil, pqguard, pqinduct, pqmoa, pqclaimgate, pqverify, pqratchet, pqratchetHE, pqx3dh, pqindex, pqassistant, pqcbom, pqcbomReport, pqgateway, pqgatewaySession, pqtsa, pqkt, pqverifyApi, pqpki, pqvault, pqcompliance, pqmarket, pqseal, pqattest, pqtrace, pqaibom, pqeval, pqgovernanceRecord, pqgovernanceGate, pqgovernPolicy, pqgovernEvidence, qiv, qivPin, omega, omegaGov, omegaBridge, omegaEvidence, omegaChain, omegaSentinel, omegaNexus, omegaServer, pqmeshServer, pqsearchServer, trelyanConsole, crossProductE2E, demoGateway, apiServer, verifyPQC };
+export const SDK_VERSION = '0.28.0-draft';
 export const SUITES = {
   kem: 'X25519+ML-KEM-1024',
   signature: 'ML-DSA-87 (FIPS 204)',
   diversity: 'SLH-DSA-256s (FIPS 205)',
   agileSigning: 'pqseal — N-leg AND-composition (ML-DSA-87 ∧ SLH-DSA-256f ∧ Ed25519), crypto-agile + anti-downgrade',
   attestation: 'pqattest — seal ∧ threshold-timestamp ∧ transparency-log; seal countersigns the timestamp+STH (downgrade-detecting under its trust model)',
-  onchain: 'Falcon-1024 (draft FIPS 206 — provenance only)',
+  onchain: 'Falcon-1024 (FIPS 206 in development — provenance only)',
   aead: 'AES-256-GCM',
 };
-export default { pqef, polarseek, pqsign, pqtransport, pqanswer, pqcouncil, pqguard, pqinduct, pqmoa, pqclaimgate, pqverify, pqratchet, pqratchetHE, pqx3dh, pqindex, pqassistant, pqcbom, pqcbomReport, pqgateway, pqgatewaySession, pqtsa, pqkt, pqverifyApi, pqpki, pqvault, pqcompliance, pqmarket, pqseal, pqattest, verifyPQC, SDK_VERSION, SUITES };
+export default { pqef, polarseek, pqsign, pqtransport, pqanswer, pqcouncil, pqguard, pqinduct, pqmoa, pqclaimgate, pqverify, pqratchet, pqratchetHE, pqx3dh, pqindex, pqassistant, pqcbom, pqcbomReport, pqgateway, pqgatewaySession, pqtsa, pqkt, pqverifyApi, pqpki, pqvault, pqcompliance, pqmarket, pqseal, pqattest, pqtrace, pqaibom, pqeval, pqgovernanceRecord, pqgovernanceGate, pqgovernPolicy, pqgovernEvidence, demoGateway, apiServer, verifyPQC, SDK_VERSION, SUITES };

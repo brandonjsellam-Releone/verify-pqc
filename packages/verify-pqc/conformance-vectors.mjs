@@ -23,7 +23,7 @@ import * as P from './pqpay.mjs';
 
 const ks = (e, m) => ({ ed: { secretKey: new Uint8Array(32).fill(e), publicKey: ed25519.getPublicKey(new Uint8Array(32).fill(e)) }, mldsa: ml_dsa87.keygen(new Uint8Array(32).fill(m)) });
 const pub = (k) => ({ ed: k.ed.publicKey, mldsa: k.mldsa.publicKey });
-const ASSETS = [{ label: 'a', algorithm: 'RSA-2048', internet_facing: true, sensitive: true }, { label: 'b', algorithm: 'AES-256' }];
+const ASSETS = [{ label: 'a', algorithm: 'RSA-2048', internet_facing: true, sensitive: true }, { label: 'b', algorithm: 'AES-256' }]; // pqcbom-ignore: self-test fixture string (scanned at runtime, not crypto use)
 const FW = new Uint8Array(256).fill(0x7a);
 
 // ── pinned known-answer values (reproduced from the fixed seeds + inputs above) ──

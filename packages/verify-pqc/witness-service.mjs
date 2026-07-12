@@ -30,7 +30,15 @@ export class WitnessNode {
   }
   cosign(sth, consistencyProof) {
     const r = this.witness.cosign(sth, this.logPub, consistencyProof);
-    if (r.ok) this.store.set(dumpState(this.witness)); // PERSIST after every successful co-sign (durability)
+    if (r.ok) {
+      // sweep R1: a silent persistence failure would make the witness re-sign an already-seen/older head after restart
+      // (stale in-memory reload → equivocation). FAIL-CLOSED: surface a throwing store, and reject an async store (this
+      // sync method cannot confirm its durability) rather than returning ok on unconfirmed persistence.
+      try {
+        const p = this.store.set(dumpState(this.witness));
+        if (p && typeof p.then === 'function') return { ok: false, reason: 'async store unsupported by sync cosign() — durability not confirmed', cosign: r };
+      } catch (e) { return { ok: false, reason: 'co-sign not durably persisted: ' + (e && e.message || e) }; }
+    }
     return r;
   }
   state() { return dumpState(this.witness); }
@@ -97,6 +105,11 @@ async function selfTest() {
   forkBig.sig = bytesToHex(ml_dsa87.sign(sthCoreBytes(forkBig.tree_size, forkBig.root_hex, forkBig.ts), logKey.secretKey, { context: utf8ToBytes('trelyan-pqsign-sth-v1') }));
   const rf = handle(restarted, 'POST', '/cosign', { sth: forkBig, consistencyProof: [] });
   ok(rf.status === 409 && rf.body.fork === true, 'restarted node REFUSES a fork (durable state honored the guarantee)');
+
+  // sweep-R1 lock: a store whose set() THROWS -> cosign FAILS CLOSED (durability not confirmed; no silent state loss)
+  const throwStore = { get: () => null, set: () => { throw new Error('disk full'); } };
+  const wThrow = new WitnessNode({ secretKey: wKey.secretKey, publicKey: wKey.publicKey, logPub: logKey.publicKey, store: throwStore });
+  ok(wThrow.cosign(sth1).ok === false, 'sweep-R1 lock: a throwing store -> cosign fails closed (persistence not confirmed)');
 
   // 3. gossip pool flags a partition (two witnesses, conflicting views at the same size)
   const w2key = ml_dsa87.keygen(new Uint8Array(32).fill(62));

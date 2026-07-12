@@ -47,7 +47,7 @@ function selfTest() {
 
   // pqmonitor
   const mon = ks(1, 2), iss = ks(3, 4);
-  const rep = S.createShieldReport({ issuerKeys: iss, target: 'kat', assets: [{ label: 'a', algorithm: 'RSA-2048', internet_facing: true }], generatedAt: 100 });
+  const rep = S.createShieldReport({ issuerKeys: iss, target: 'kat', assets: [{ label: 'a', algorithm: 'RSA-2048', internet_facing: true }], generatedAt: 100 }); // pqcbom-ignore: self-test fixture string (scanned at runtime, not crypto use)
   const L = M.createLedger(); M.appendSnapshot(L, rep, pub(iss), { at: 100 });
   ok(M.makeMonitorId(mon) === KAT.mon_id, 'pqmonitor monitor id matches KAT');
   ok(M.verifyLedger(L).head_hash === KAT.mon_ledger_head && M.verifyLedger(L).intact === true, 'pqmonitor ledger head matches KAT + intact');

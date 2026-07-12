@@ -108,6 +108,9 @@ function verifyDelegSig(link, delegatorPub) {
 export function verifyDelegationChain(chain, trustedRoot, opts = {}) {
   try {
     if (!Array.isArray(chain) || chain.length === 0) return { verified: false, reason: 'empty chain' };
+    // sweep R1: bound chain depth — each link runs PQ signature verification, so an unbounded chain is a DoS vector.
+    const maxDepth = Number.isFinite(opts.maxDepth) ? opts.maxDepth : 64;
+    if (chain.length > maxDepth) return { verified: false, reason: `delegation chain length ${chain.length} exceeds maxDepth ${maxDepth}` };
     const root = chain[0];
     if (isDelegation(root)) return { verified: false, reason: 'chain[0] must be a root capability, not a delegation' };
     // 1) root capability: authentic under the pinned principal + its own caveats/tool/expiry/audience vs the request
@@ -146,7 +149,7 @@ export function verifyDelegationChain(chain, trustedRoot, opts = {}) {
         if (!cav.ok) return { verified: false, reason: 'caveat at link ' + i + ': ' + cav.reason };
       }
       // expiry conjunction
-      if (d.expires_at != null && opts.now == null && opts.allowNoExpiryClock !== true) return { verified: false, reason: 'delegation ' + i + ' declares expires_at but no clock (opts.now) supplied' };
+      if (d.expires_at != null && (opts.now == null || !Number.isFinite(opts.now)) && opts.allowNoExpiryClock !== true) return { verified: false, reason: 'delegation ' + i + ' declares expires_at but no finite clock (opts.now) supplied' }; // non-finite now (NaN/''/[]) also can't check expiry (fix-verif sibling of pqmarket, 1 Jul)
       if (d.expires_at != null && opts.now != null && Number(opts.now) >= Number(d.expires_at)) return { verified: false, reason: 'delegation ' + i + ' expired' };
       if (d.audience != null && opts.audience !== d.audience) return { verified: false, reason: 'audience mismatch at ' + i };
       parent = d; currentTool = d.tool; currentGrantee = d.delegatee;
@@ -251,6 +254,8 @@ async function selfTest() {
 
   // single-link chain (root only, no delegations) still works
   ok(verifyDelegationChain([root], tRoot, { request: { tool: 'DatabaseQuery', args: { op: 'update', limit: 900 } }, now: 1, audience: 'orch' }).verified === true, 'root-only chain verifies its own caveats (update allowed at root)');
+  // sweep-R1 lock: chain length above maxDepth is REJECTED before the expensive per-link verify loop (DoS bound)
+  ok(verifyDelegationChain(chain, tRoot, { request: okReq, now: 1, audience: 'orch', maxDepth: 1 }).verified === false && /maxDepth/.test(verifyDelegationChain(chain, tRoot, { request: okReq, now: 1, audience: 'orch', maxDepth: 1 }).reason || ''), 'sweep-R1 lock: chain length > maxDepth REJECTED (DoS bound)');
 
   // 3-leg hybrid delegator
   const slh = slh_dsa_sha2_256f.keygen(new Uint8Array(96).fill(11));

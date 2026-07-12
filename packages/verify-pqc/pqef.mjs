@@ -11,7 +11,7 @@
  * profile is deterministic CBOR (RFC 8949 §4.2); `statement.canonicalization` records which.
  * Both are deterministic; a verifier pins the profile per pqef_version.
  *
- * Falcon-1024 is the OPTIONAL on-chain/provenance leg ONLY (draft FIPS 206); the verdict logic
+ * Falcon-1024 is the OPTIONAL on-chain/provenance leg ONLY (FIPS 206 in development); the verdict logic
  * NEVER lets it satisfy a compliance control. ML-DSA-87 (FIPS 204) is the load-bearing leg.
  *
  * Peer deps (present in this package): @noble/post-quantum, @noble/hashes.
@@ -224,7 +224,7 @@ export async function verifyPQEFBundle(bundle, opts = {}) {
           if (!slh) { note = 'SLH leg not available'; }
           else { valid = slh.verify(hexToBytes(s.sig_hex), signedBytes, hexToBytes(s.public_key_hex)); slhValid = valid; }
         } else if (s.alg === 'Falcon-1024') {
-          role = 'provenance/on-chain ONLY (draft FIPS 206 — never a compliance signature)';
+          role = 'provenance/on-chain ONLY (FIPS 206 in development — never a compliance signature)';
           if (!falcon) { note = 'Falcon leg not available; provenance-only regardless'; }
           else { try { valid = falcon.verify(hexToBytes(s.sig_hex), signedBytes, hexToBytes(s.public_key_hex)); } catch { valid = false; note = 'standard falcon1024.verify did not accept (project det-wrapper sigs verify on-chain, not here)'; } }
           if (valid) falconOnlyValid = true;

@@ -19,11 +19,11 @@ const pub = { ed: keys.ed.publicKey, mldsa: keys.mldsa.publicKey };   // hand th
 
 ---
 
-## 1 · Quantum-Safe Scanner (free) — *what crypto am I running, and how exposed am I?*
+## 1 · Post-Quantum Readiness Scanner (free) — *what crypto am I running, and how exposed am I?*
 **CLI** (scan a repo → CycloneDX CBOM + an A–F grade + a README badge + a GitHub code-scanning SARIF + a migration plan):
 ```bash
-npx pqcbom ./your-repo --plan --sarif --min-grade=B
-# writes: cbom.cdx.json · quantum-readiness-report.md · quantum-safe-badge.json · pqcbom.sarif · migration-plan.md
+npx -p @trelyan/verify-pqc pqcbom ./your-repo --plan --sarif --min-grade=B
+# writes: cbom.cdx.json · quantum-readiness-report.md · pq-readiness-badge.json · pqcbom.sarif · migration-plan.md
 ```
 **Or in the browser**: the [PQ Trust Sandbox](https://trelyan.foundation/sandbox) — paste an inventory, get the grade live (nothing leaves your machine). *Lexical scan — findings are leads to verify, not a complete inventory.*
 

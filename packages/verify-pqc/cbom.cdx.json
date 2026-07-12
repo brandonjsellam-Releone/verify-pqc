@@ -1,0 +1,1526 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "metadata": {
+    "tools": [
+      {
+        "vendor": "TRELYAN",
+        "name": "pqcbom",
+        "version": "0.2.0-draft"
+      }
+    ],
+    "properties": [
+      {
+        "name": "trelyan:quantum-grade",
+        "value": "F"
+      },
+      {
+        "name": "trelyan:quantum-score",
+        "value": "0"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "cryptographic-asset",
+      "name": "MD5",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "hash"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "broken-classical"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "REMOVE — collision-broken; use SHA-512 / SHA3-512"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[22,50]},{\"file\":\"assurance-properties.mjs\",\"lines\":[31]},{\"file\":\"cbom.cdx.json\",\"lines\":[27,177,192]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\cbom.cdx.json\",\"lines\":[27]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\evidence-pack.signed.json\",\"lines\":[40,432,907]},{\"file\":\"examples\\\\demo\\\\run-demo.mjs\",\"lines\":[79]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\auth\\\\legacy.js\",\"lines\":[6]},{\"file\":\"gen-sample-pack.mjs\",\"lines\":[17]},{\"file\":\"pqcbom-action\\\\examples\\\\vulnerable\\\\app.js\",\"lines\":[2]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[21,28,36,36,43]},{\"file\":\"pqcbom-action\\\\run.mjs\",\"lines\":[11]},{\"file\":\"pqcbom-plan.mjs\",\"lines\":[19,95]},{\"file\":\"pqcbom-report.mjs\",\"lines\":[171]},{\"file\":\"pqcbom-server.mjs\",\"lines\":[77,90]},{\"file\":\"pqcbom.mjs\",\"lines\":[21,28,36,36,43]},{\"file\":\"pqcompliance.mjs\",\"lines\":[34,107,111,119]},{\"file\":\"pqevidence-cli.mjs\",\"lines\":[98]},{\"file\":\"pqshield.mjs\",\"lines\":[54]},{\"file\":\"pqverify-api.mjs\",\"lines\":[116]},{\"file\":\"tamper-binding.mjs\",\"lines\":[148,177]},{\"file\":\"test-fixtures\\\\structural-corpus.json\",\"lines\":[49,51,54,60,132]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "SHA-1",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "hash"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "broken-classical"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "REMOVE — collision-broken; use SHA-512 / SHA3-512"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[23]},{\"file\":\"cbom.cdx.json\",\"lines\":[52,927,942,942]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\evidence-pack.signed.json\",\"lines\":[907]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[21,36,44,102,105]},{\"file\":\"pqcbom-plan.mjs\",\"lines\":[19]},{\"file\":\"pqcbom.mjs\",\"lines\":[21,36,44,102,105]},{\"file\":\"pqcompliance.mjs\",\"lines\":[34]},{\"file\":\"pqshield.mjs\",\"lines\":[168]},{\"file\":\"test-fixtures\\\\structural-corpus.json\",\"lines\":[19,21,24,30,83]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "3DES/DES",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "cipher"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "broken-classical"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "REMOVE; use AES-256-GCM"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[24,25,59,60,97]},{\"file\":\"assurance-properties.mjs\",\"lines\":[31]},{\"file\":\"cbom.cdx.json\",\"lines\":[77,317]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\cbom.cdx.json\",\"lines\":[52]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\evidence-pack.signed.json\",\"lines\":[55,457,907]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\pq\\\\handshake.mjs\",\"lines\":[2]},{\"file\":\"gen-sample-pack.mjs\",\"lines\":[23]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[27,28,28,29,36]},{\"file\":\"pqcbom-plan.mjs\",\"lines\":[19]},{\"file\":\"pqcbom.mjs\",\"lines\":[27,28,28,29,36]},{\"file\":\"pqcompliance.mjs\",\"lines\":[34]},{\"file\":\"pqshield.mjs\",\"lines\":[54]},{\"file\":\"sandbox-parity.mjs\",\"lines\":[24]},{\"file\":\"test-fixtures\\\\structural-corpus.json\",\"lines\":[4,6,9,15,132]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "RC4",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "cipher"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "broken-classical"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "REMOVE; use AES-256-GCM / ChaCha20-Poly1305"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[26]},{\"file\":\"assurance-properties.mjs\",\"lines\":[31]},{\"file\":\"cbom.cdx.json\",\"lines\":[102,317]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\evidence-pack.signed.json\",\"lines\":[907]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[27,29,29,36,45]},{\"file\":\"pqcbom-plan.mjs\",\"lines\":[19]},{\"file\":\"pqcbom.mjs\",\"lines\":[27,29,29,36,45]},{\"file\":\"pqcompliance.mjs\",\"lines\":[34]},{\"file\":\"pqshield.mjs\",\"lines\":[54]},{\"file\":\"test-fixtures\\\\structural-corpus.json\",\"lines\":[34,39,45,132,162]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "TLS<1.2 / SSL",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "protocol"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "broken-classical"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "REMOVE deprecated TLS/SSL; require TLS 1.2+ (1.3 preferred)"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[27,28]},{\"file\":\"assurance-properties.mjs\",\"lines\":[31,43]},{\"file\":\"examples\\\\demo\\\\run-demo.mjs\",\"lines\":[79]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\tls\\\\nginx.conf\",\"lines\":[4]},{\"file\":\"gen-sample-pack.mjs\",\"lines\":[18]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[120,505,506]},{\"file\":\"pqcbom.mjs\",\"lines\":[120,505,506]},{\"file\":\"pqposture.mjs\",\"lines\":[58,169,175]},{\"file\":\"test-fixtures\\\\structural-corpus.json\",\"lines\":[507,723,750,765,771]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "JWT alg=none",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "token"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "broken-classical"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "CRITICAL — unsigned JWT; never accept alg:none"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[29]},{\"file\":\"cbom.cdx.json\",\"lines\":[152,167]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[30,70,134,555,555]},{\"file\":\"pqcbom.mjs\",\"lines\":[30,70,134,555,555]},{\"file\":\"test-fixtures\\\\structural-corpus.json\",\"lines\":[66,79]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "MD5 (OID)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "hash"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "broken-classical"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "MD5 by OID — REMOVE (collision-broken)"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[50]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[532]},{\"file\":\"pqcbom.mjs\",\"lines\":[532]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "SIKE/SIDH (BROKEN PQ)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "kem"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "broken-classical"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "BROKEN — Castryck-Decru 2022 classical poly-time key recovery; do NOT use; migrate to ML-KEM-1024"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"cbom.cdx.json\",\"lines\":[202]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\evidence-pack.signed.json\",\"lines\":[907]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[17,79,520]},{\"file\":\"pqcbom-plan.mjs\",\"lines\":[19]},{\"file\":\"pqcbom.mjs\",\"lines\":[17,79,520]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "Blowfish/CAST5",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "cipher"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "broken-classical"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "legacy 64-bit-block cipher (Sweet32) — REMOVE; use AES-256-GCM"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"cbom.cdx.json\",\"lines\":[227]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\evidence-pack.signed.json\",\"lines\":[907]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[19,84,116,522]},{\"file\":\"pqcbom-plan.mjs\",\"lines\":[19]},{\"file\":\"pqcbom.mjs\",\"lines\":[19,84,116,522]},{\"file\":\"test-fixtures\\\\structural-corpus.json\",\"lines\":[1220,1223,1233,1233]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "GeMSS (BROKEN PQ)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "signature"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "broken-classical"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "BROKEN multivariate scheme; do NOT use; migrate to ML-DSA-87 / SLH-DSA"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"cbom.cdx.json\",\"lines\":[252]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[17,80]},{\"file\":\"pqcbom.mjs\",\"lines\":[17,80]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "MD4/MD2",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "hash"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "broken-classical"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "REMOVE — badly broken hash; use SHA-512 / SHA3-512"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"cbom.cdx.json\",\"lines\":[277,317]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[19,85,88,522]},{\"file\":\"pqcbom.mjs\",\"lines\":[19,85,88,522]},{\"file\":\"test-fixtures\\\\structural-corpus.json\",\"lines\":[659,662,668]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "NTLM/WEP (legacy)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "protocol"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "broken-classical"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "legacy auth/wireless built on MD4/DES/RC4 — broken; REMOVE"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"cbom.cdx.json\",\"lines\":[302]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[19,88]},{\"file\":\"pqcbom.mjs\",\"lines\":[19,88]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "PBKDF1 (weak KDF)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "keymgmt"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "broken-classical"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "PBKDF1 — deprecated/weak KDF; use PBKDF2/scrypt/Argon2 with SHA-256+"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"cbom.cdx.json\",\"lines\":[327,342]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[37,135,150,579]},{\"file\":\"pqcbom.mjs\",\"lines\":[37,135,150,579]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "GOST cipher/hash (legacy)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "cipher"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "broken-classical"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "GOST 28147/Magma (64-bit) / Kuznyechik / Streebog — non-NIST legacy; migrate to AES-256 / SHA-512 + PQC"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"cbom.cdx.json\",\"lines\":[367,817]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[38,157,158,578]},{\"file\":\"pqcbom.mjs\",\"lines\":[38,157,158,578]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "RC2",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "cipher"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "broken-classical"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "REMOVE — 64-bit legacy cipher; use AES-256-GCM"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[115,558,580]},{\"file\":\"pqcbom.mjs\",\"lines\":[115,558,580]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "Skipjack (broken cipher)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "cipher"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "broken-classical"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "Skipjack — 80-bit NSA-era cipher, below modern security; REMOVE; use AES-256-GCM"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[569,577]},{\"file\":\"pqcbom.mjs\",\"lines\":[569,577]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "IDEA (legacy cipher)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "cipher"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "broken-classical"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "IDEA — 64-bit-block legacy cipher (Sweet32 class); REMOVE; use AES-256-GCM"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[577]},{\"file\":\"pqcbom.mjs\",\"lines\":[577]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "RSA",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "pubkey"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-broken"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "migrate KEM->ML-KEM-1024, sig->ML-DSA-87 (hybrid during transition)"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[20,30,31,32,33]},{\"file\":\"assurance-properties.mjs\",\"lines\":[31,42]},{\"file\":\"cbom.cdx.json\",\"lines\":[452,527,542,577,627]},{\"file\":\"conformance-vectors.mjs\",\"lines\":[26]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\cbom.cdx.json\",\"lines\":[102,127,142,202,242]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\evidence-pack.signed.json\",\"lines\":[85,100,103,115,160]},{\"file\":\"examples\\\\demo\\\\run-demo.mjs\",\"lines\":[79]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\api\\\\jwt.js\",\"lines\":[1]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\auth\\\\legacy.js\",\"lines\":[4]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\infra\\\\sshd_config\",\"lines\":[2]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\pq\\\\handshake.mjs\",\"lines\":[2]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\tls\\\\nginx.conf\",\"lines\":[5]},{\"file\":\"gen-sample-pack.mjs\",\"lines\":[17,18,21]},{\"file\":\"omega-sentinel.mjs\",\"lines\":[9,11]},{\"file\":\"omega.mjs\",\"lines\":[78]},{\"file\":\"platform-conformance-vectors.mjs\",\"lines\":[50]},{\"file\":\"pqanswer.mjs\",\"lines\":[124]},{\"file\":\"pqcbom-action\\\\examples\\\\vulnerable\\\\app.js\",\"lines\":[3]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[16,20,25,27,36]},{\"file\":\"pqcbom-plan.mjs\",\"lines\":[28,96,108,109]},{\"file\":\"pqcbom-report.mjs\",\"lines\":[83,171]},{\"file\":\"pqcbom-server.mjs\",\"lines\":[77]},{\"file\":\"pqcbom.mjs\",\"lines\":[16,20,25,27,36]},{\"file\":\"pqcompliance.mjs\",\"lines\":[107,119]},{\"file\":\"pqevidence-cli.mjs\",\"lines\":[98]},{\"file\":\"pqmonitor.mjs\",\"lines\":[187,188]},{\"file\":\"pqposture.mjs\",\"lines\":[4,50,131,166,173]},{\"file\":\"pqshield.mjs\",\"lines\":[51,54,55,166,168]},{\"file\":\"pqtls.mjs\",\"lines\":[43]},{\"file\":\"pqtransport.mjs\",\"lines\":[186]},{\"file\":\"pqtsa.mjs\",\"lines\":[5]},{\"file\":\"pqverify-api.mjs\",\"lines\":[116,151]},{\"file\":\"pqverify-cli.mjs\",\"lines\":[124]},{\"file\":\"product-flows.mjs\",\"lines\":[35]},{\"file\":\"sandbox-parity.mjs\",\"lines\":[21,23,31]},{\"file\":\"tamper-binding.mjs\",\"lines\":[148,177,236,237,258]},{\"file\":\"test-fixtures\\\\structural-corpus.json\",\"lines\":[83,85,88,98,132]},{\"file\":\"trelyan-console.mjs\",\"lines\":[170]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "ECDSA",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "signature"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-broken"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "migrate to ML-DSA-87 (keep ECDSA only as a HYBRID leg)"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[21,31,32,48]},{\"file\":\"assurance-properties.mjs\",\"lines\":[31]},{\"file\":\"cbom.cdx.json\",\"lines\":[477,492,577,677,692]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\cbom.cdx.json\",\"lines\":[152,167,202]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\evidence-pack.signed.json\",\"lines\":[130,133,175,557,572]},{\"file\":\"examples\\\\demo\\\\run-demo.mjs\",\"lines\":[79]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\auth\\\\legacy.js\",\"lines\":[5]},{\"file\":\"gen-sample-pack.mjs\",\"lines\":[17]},{\"file\":\"pqcbom-action\\\\examples\\\\vulnerable\\\\app.js\",\"lines\":[4]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[20,24,49,50,72]},{\"file\":\"pqcbom-plan.mjs\",\"lines\":[28,98,109]},{\"file\":\"pqcbom-report.mjs\",\"lines\":[171]},{\"file\":\"pqcbom-server.mjs\",\"lines\":[77,92]},{\"file\":\"pqcbom.mjs\",\"lines\":[20,24,49,50,72]},{\"file\":\"pqcompliance.mjs\",\"lines\":[107]},{\"file\":\"pqevidence-cli.mjs\",\"lines\":[98]},{\"file\":\"pqposture.mjs\",\"lines\":[4,51,167]},{\"file\":\"pqshield.mjs\",\"lines\":[51,56,169]},{\"file\":\"pqtls.mjs\",\"lines\":[43]},{\"file\":\"pqtsa.mjs\",\"lines\":[5]},{\"file\":\"tamper-binding.mjs\",\"lines\":[148,177]},{\"file\":\"test-fixtures\\\\structural-corpus.json\",\"lines\":[102,104,107,117,230]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "EC curve",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "pubkey"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-broken"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "EC curve is Shor-broken; move to ML-KEM/ML-DSA (hybrid)"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[21,49]},{\"file\":\"assurance-properties.mjs\",\"lines\":[31]},{\"file\":\"cbom.cdx.json\",\"lines\":[702,717]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\auth\\\\legacy.js\",\"lines\":[5]},{\"file\":\"gen-sample-pack.mjs\",\"lines\":[17]},{\"file\":\"pqcbom-action\\\\examples\\\\vulnerable\\\\app.js\",\"lines\":[4]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[29,52,97,98,119]},{\"file\":\"pqcbom-report.mjs\",\"lines\":[171]},{\"file\":\"pqcbom-server.mjs\",\"lines\":[92]},{\"file\":\"pqcbom.mjs\",\"lines\":[29,52,97,98,119]},{\"file\":\"pqcompliance.mjs\",\"lines\":[107]},{\"file\":\"pqevidence-cli.mjs\",\"lines\":[98]},{\"file\":\"pqposture.mjs\",\"lines\":[165,167]},{\"file\":\"pqshield.mjs\",\"lines\":[51,56]},{\"file\":\"pqtls.mjs\",\"lines\":[22,23]},{\"file\":\"tamper-binding.mjs\",\"lines\":[148,177]},{\"file\":\"test-fixtures\\\\structural-corpus.json\",\"lines\":[232,241,599,599,602]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "JWT RSA (RS/PS)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "signature"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-broken"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "RSA-signed JWT — plan ML-DSA-87 (hybrid)"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[30]},{\"file\":\"assurance-properties.mjs\",\"lines\":[31]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\api\\\\jwt.js\",\"lines\":[3]},{\"file\":\"gen-sample-pack.mjs\",\"lines\":[19]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[71]},{\"file\":\"pqcbom.mjs\",\"lines\":[71]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "DSA",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "signature"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-broken"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "migrate to ML-DSA-87 / SLH-DSA"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[31,32,55,56,97]},{\"file\":\"assurance-properties.mjs\",\"lines\":[31]},{\"file\":\"cbom.cdx.json\",\"lines\":[552,577]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\cbom.cdx.json\",\"lines\":[202]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\evidence-pack.signed.json\",\"lines\":[175,607,907]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[20,29,49,73,96]},{\"file\":\"pqcbom.mjs\",\"lines\":[20,29,49,73,96]},{\"file\":\"pqposture.mjs\",\"lines\":[49]},{\"file\":\"pqshield.mjs\",\"lines\":[50,51,55]},{\"file\":\"test-fixtures\\\\structural-corpus.json\",\"lines\":[784,806,877,880,890]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "SSH RSA/DSA/ECDSA key",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "signature"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-broken"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "SSH key Shor-broken; add sntrup761x25519 KEX + plan PQ"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[31,32]},{\"file\":\"assurance-properties.mjs\",\"lines\":[31]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\infra\\\\sshd_config\",\"lines\":[2]},{\"file\":\"gen-sample-pack.mjs\",\"lines\":[21]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[73,512]},{\"file\":\"pqcbom.mjs\",\"lines\":[73,512]},{\"file\":\"test-fixtures\\\\structural-corpus.json\",\"lines\":[777,784,788,806]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "finite-field DH",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "kem"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-broken"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "migrate to ML-KEM-1024"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[33]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[53,149,513,575]},{\"file\":\"pqcbom.mjs\",\"lines\":[53,149,513,575]},{\"file\":\"pqposture.mjs\",\"lines\":[44]},{\"file\":\"test-fixtures\\\\structural-corpus.json\",\"lines\":[723,738,777]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "RSA (OID rsaEncryption)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "pubkey"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-broken"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "RSA key by OID — migrate KEM->ML-KEM-1024, sig->ML-DSA-87 (hybrid)"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[47]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[530]},{\"file\":\"pqcbom.mjs\",\"lines\":[530]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "RSA/EC ASN.1 identifier (fused)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "pubkey"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-broken"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "standard ASN.1 algorithm name (fused token) — RSA/EC is Shor-broken; migrate to ML-KEM/ML-DSA"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[47,53]},{\"file\":\"cbom.cdx.json\",\"lines\":[627,692,892,942]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[24,36,92,93,95]},{\"file\":\"pqcbom.mjs\",\"lines\":[24,36,92,93,95]},{\"file\":\"test-fixtures\\\\structural-corpus.json\",\"lines\":[211,213,226,232,241]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "ECDSA sig (OID)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "signature"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-broken"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "ECDSA-with-SHA2 by OID — migrate to ML-DSA-87 (keep ECDSA only as a hybrid leg)"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[48]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[531]},{\"file\":\"pqcbom.mjs\",\"lines\":[531]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "P-256/prime256v1 curve (OID)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "pubkey"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-broken"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "P-256 by OID — Shor-broken EC curve"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[49]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[531]},{\"file\":\"pqcbom.mjs\",\"lines\":[531]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "RSA (encoded/PEM)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "pubkey"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-broken"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "RSA key/cert in an encoded blob (DER OID) — migrate KEM->ML-KEM-1024, sig->ML-DSA-87"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[]},{\"file\":\"pqcbom.mjs\",\"lines\":[]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "ECDH",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "kem"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-broken"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "migrate to ML-KEM-1024 (+ X25519 in HYBRID)"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"assurance-properties.mjs\",\"lines\":[31]},{\"file\":\"cbom.cdx.json\",\"lines\":[752]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\cbom.cdx.json\",\"lines\":[252]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\evidence-pack.signed.json\",\"lines\":[233,657,907]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\tls\\\\nginx.conf\",\"lines\":[5]},{\"file\":\"gen-sample-pack.mjs\",\"lines\":[18]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[27,51,133,154,517]},{\"file\":\"pqcbom-plan.mjs\",\"lines\":[97,108]},{\"file\":\"pqcbom.mjs\",\"lines\":[27,51,133,154,517]},{\"file\":\"pqmonitor.mjs\",\"lines\":[188]},{\"file\":\"pqposture.mjs\",\"lines\":[43,165]},{\"file\":\"pqshield.mjs\",\"lines\":[51,56,178]},{\"file\":\"product-flows.mjs\",\"lines\":[36]},{\"file\":\"sandbox-parity.mjs\",\"lines\":[22]},{\"file\":\"tamper-binding.mjs\",\"lines\":[237]},{\"file\":\"test-fixtures\\\\structural-corpus.json\",\"lines\":[530,537,602,723,726]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "JWT ECDSA (ES)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "signature"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-broken"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "ECDSA-signed JWT — plan ML-DSA-87 (hybrid)"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"assurance-properties.mjs\",\"lines\":[31]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[72]},{\"file\":\"pqcbom.mjs\",\"lines\":[72]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "GOST R 34.10/34.11 (legacy)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "signature"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-broken"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "GOST R 34.10 (EC/DLP sig, Shor-broken) / 34.11 (Streebog) — non-NIST; migrate to ML-DSA-87 / SHA-512"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"cbom.cdx.json\",\"lines\":[802,817]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[157,578]},{\"file\":\"pqcbom.mjs\",\"lines\":[157,578]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "lib:node-forge",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "library"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-broken"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "JS crypto lib (RSA/ECC by default) — plan ML-KEM/ML-DSA"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"examples\\\\demo\\\\sample-repo\\\\package.json\",\"lines\":[]},{\"file\":\"pqcbom-action\\\\examples\\\\vulnerable\\\\package.json\",\"lines\":[]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "EC curve (legacy)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "pubkey"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-broken"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "short/legacy EC curve — Shor-broken + classically weak; move to ML-KEM/ML-DSA"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[37,87,523,579]},{\"file\":\"pqcbom.mjs\",\"lines\":[37,87,523,579]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "RSA-SHA256 sig (OID)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "signature"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-broken"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "sha256WithRSA cert/sig by OID — RSA is Shor-broken; plan ML-DSA-87"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[533]},{\"file\":\"pqcbom.mjs\",\"lines\":[533]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "SM2 (GM EC)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "signature"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-broken"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "SM2 — GM/T elliptic-curve, Shor-broken; migrate to ML-DSA-87"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[576]},{\"file\":\"pqcbom.mjs\",\"lines\":[576]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "RSA-SHA1 sig (OID)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "signature"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-broken"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "sha1WithRSAEncryption by OID — RSA Shor-broken + SHA-1 collision-broken; plan ML-DSA-87"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"test-fixtures\\\\structural-corpus.json\",\"lines\":[839,852]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "AES-128/192",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "cipher"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-weakened"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "use AES-256 (Grover halves the key strength)"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[35,42,61]},{\"file\":\"assurance-properties.mjs\",\"lines\":[31]},{\"file\":\"cbom.cdx.json\",\"lines\":[952]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\cbom.cdx.json\",\"lines\":[302]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\evidence-pack.signed.json\",\"lines\":[261,707,907]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\tls\\\\nginx.conf\",\"lines\":[5]},{\"file\":\"gen-sample-pack.mjs\",\"lines\":[18]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[36,58,142,142,451]},{\"file\":\"pqcbom-plan.mjs\",\"lines\":[32,99]},{\"file\":\"pqcbom-report.mjs\",\"lines\":[171]},{\"file\":\"pqcbom-server.mjs\",\"lines\":[77]},{\"file\":\"pqcbom.mjs\",\"lines\":[36,58,142,142,451]},{\"file\":\"pqcompliance.mjs\",\"lines\":[107]},{\"file\":\"pqtls.mjs\",\"lines\":[40]},{\"file\":\"tamper-binding.mjs\",\"lines\":[148,177]},{\"file\":\"test-fixtures\\\\structural-corpus.json\",\"lines\":[121,123,126,132,324]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "SHA-256/384",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "hash"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-weakened"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "use SHA-512 / SHA3-512 for >=256-bit quantum security"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[36]},{\"file\":\"assurance-properties.mjs\",\"lines\":[31]},{\"file\":\"cbom.cdx.json\",\"lines\":[342,877,977]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\cbom.cdx.json\",\"lines\":[327]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\evidence-pack.signed.json\",\"lines\":[276,732,907]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\tls\\\\nginx.conf\",\"lines\":[5]},{\"file\":\"gen-sample-pack.mjs\",\"lines\":[23]},{\"file\":\"kat-conformance.mjs\",\"lines\":[4,14,17]},{\"file\":\"mldsa.mjs\",\"lines\":[13,16,60,70]},{\"file\":\"omega-bridge.mjs\",\"lines\":[7,25,89,95,125]},{\"file\":\"omega-evidence.mjs\",\"lines\":[69,70]},{\"file\":\"omega-gov.mjs\",\"lines\":[24,92,113,186]},{\"file\":\"polarseek.mjs\",\"lines\":[25,51,60]},{\"file\":\"pqadmit.mjs\",\"lines\":[23,39,49,65,70]},{\"file\":\"pqanchor.mjs\",\"lines\":[26,32,54]},{\"file\":\"pqanswer.mjs\",\"lines\":[23,27]},{\"file\":\"pqattest.mjs\",\"lines\":[24,54,81]},{\"file\":\"pqauditlog.mjs\",\"lines\":[19,24,51,56]},{\"file\":\"pqcap.mjs\",\"lines\":[20,36]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[59,93,124,135,150]},{\"file\":\"pqcbom-plan.mjs\",\"lines\":[32]},{\"file\":\"pqcbom.mjs\",\"lines\":[59,93,124,135,150]},{\"file\":\"pqclaimgate.mjs\",\"lines\":[20,24]},{\"file\":\"pqconsent.mjs\",\"lines\":[24,40,55,72]},{\"file\":\"pqconsentflow.mjs\",\"lines\":[26,40,44]},{\"file\":\"pqcouncil.mjs\",\"lines\":[21,25]},{\"file\":\"pqdelegate.mjs\",\"lines\":[28,43]},{\"file\":\"pqef.mjs\",\"lines\":[21,44,272]},{\"file\":\"pqfirmware-cli.mjs\",\"lines\":[103]},{\"file\":\"pqfirmware.mjs\",\"lines\":[15,21,36,47,87]},{\"file\":\"pqflow.mjs\",\"lines\":[22,36,40]},{\"file\":\"pqgate.mjs\",\"lines\":[23,39,45]},{\"file\":\"pqgateway-session.mjs\",\"lines\":[29,34,174,200]},{\"file\":\"pqgateway.mjs\",\"lines\":[26,182,204,221]},{\"file\":\"pqguard.mjs\",\"lines\":[25,28,58]},{\"file\":\"pqinduct.mjs\",\"lines\":[36,44,57,62]},{\"file\":\"pqkt.mjs\",\"lines\":[33,39,342,343,377]},{\"file\":\"pqmesh-server.mjs\",\"lines\":[19,23]},{\"file\":\"pqmoa.mjs\",\"lines\":[26,30]},{\"file\":\"pqmonitor.mjs\",\"lines\":[22,36,41]},{\"file\":\"pqpay.mjs\",\"lines\":[19,25,40]},{\"file\":\"pqposture.mjs\",\"lines\":[19,26,37]},{\"file\":\"pqratchet-he.mjs\",\"lines\":[28,42,43,44,53]},{\"file\":\"pqratchet.mjs\",\"lines\":[6,18,30,31,32]},{\"file\":\"pqredact.mjs\",\"lines\":[20,24,42,44]},{\"file\":\"pqsearch-server.mjs\",\"lines\":[22,26]},{\"file\":\"pqshield.mjs\",\"lines\":[24,39,93,118]},{\"file\":\"pqsign.mjs\",\"lines\":[14,21,33,124,248]},{\"file\":\"pqtls.mjs\",\"lines\":[29]},{\"file\":\"pqtransport.mjs\",\"lines\":[22,43,44]},{\"file\":\"pqvc.mjs\",\"lines\":[16,22,41,42]},{\"file\":\"product-flows.mjs\",\"lines\":[16]},{\"file\":\"qiv-cli.mjs\",\"lines\":[23,53]},{\"file\":\"qiv-pin.mjs\",\"lines\":[4,19,25,30,44]},{\"file\":\"qiv.mjs\",\"lines\":[36,78,82,102,104]},{\"file\":\"spine-vectors.mjs\",\"lines\":[4,28]},{\"file\":\"test-fixtures\\\\structural-corpus.json\",\"lines\":[69,104,111,117,401]},{\"file\":\"test-slh-pins.mjs\",\"lines\":[5,19]},{\"file\":\"test_rekeying.mjs\",\"lines\":[3,6]},{\"file\":\"trelyan-console.mjs\",\"lines\":[31,39]},{\"file\":\"vectors-crosscheck.mjs\",\"lines\":[16,20,23,54,62]},{\"file\":\"witness-service.mjs\",\"lines\":[81,104,117]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "RIPEMD",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "hash"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-weakened"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "legacy hash; prefer SHA-512 / SHA3-512"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"cbom.cdx.json\",\"lines\":[1002]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[19,86]},{\"file\":\"pqcbom.mjs\",\"lines\":[19,86]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "SHA-224",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "hash"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-weakened"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "SHA-224 ~112-bit collision strength (sub-128); use SHA-512 / SHA3-512"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"cbom.cdx.json\",\"lines\":[1027,1042]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[37,151,579]},{\"file\":\"pqcbom.mjs\",\"lines\":[37,151,579]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "lib:crypto-js",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "library"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-weakened"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "symmetric/hash JS lib — verify AES-256/SHA-512; no PQ"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"examples\\\\demo\\\\sample-repo\\\\package.json\",\"lines\":[]},{\"file\":\"pqcbom-action\\\\examples\\\\vulnerable\\\\package.json\",\"lines\":[]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "SEED (legacy cipher)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "cipher"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-weakened"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "SEED — 128-bit Korean legacy block cipher; prefer AES-256-GCM"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[576]},{\"file\":\"pqcbom.mjs\",\"lines\":[576]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "X25519/X448",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "kem"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "classical-hybrid-ok"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "OK only inside a HYBRID with ML-KEM-768/1024"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[38]},{\"file\":\"assurance-properties.mjs\",\"lines\":[31]},{\"file\":\"cbom.cdx.json\",\"lines\":[767,1102]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\cbom.cdx.json\",\"lines\":[267]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\evidence-pack.signed.json\",\"lines\":[236,672,907]},{\"file\":\"fuzz-robustness.mjs\",\"lines\":[105]},{\"file\":\"omega-nexus.mjs\",\"lines\":[4,5,6,10,22]},{\"file\":\"polarseek.mjs\",\"lines\":[5,11,22,30,38]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[16,20,51,55,75]},{\"file\":\"pqcbom-plan.mjs\",\"lines\":[24,35,100]},{\"file\":\"pqcbom-report.mjs\",\"lines\":[83]},{\"file\":\"pqcbom-server.mjs\",\"lines\":[78]},{\"file\":\"pqcbom.mjs\",\"lines\":[16,20,51,55,75]},{\"file\":\"pqgateway-session.mjs\",\"lines\":[6,46,156,175,180]},{\"file\":\"pqgateway.mjs\",\"lines\":[39,40,41,156,166]},{\"file\":\"pqindex.mjs\",\"lines\":[5,17,38,39,43]},{\"file\":\"pqmesh-server.mjs\",\"lines\":[112]},{\"file\":\"pqmonitor.mjs\",\"lines\":[189]},{\"file\":\"pqposture.mjs\",\"lines\":[43,164,174,175,183]},{\"file\":\"pqratchet-he.mjs\",\"lines\":[4,25,39,40]},{\"file\":\"pqratchet.mjs\",\"lines\":[4,6,15,28,29]},{\"file\":\"pqsearch-server.mjs\",\"lines\":[108]},{\"file\":\"pqshield.mjs\",\"lines\":[51,56,173,174,180]},{\"file\":\"pqtls.mjs\",\"lines\":[6,8,13,17,22]},{\"file\":\"pqtransport.mjs\",\"lines\":[4,5,19,26,50]},{\"file\":\"pqvault.mjs\",\"lines\":[5,12]},{\"file\":\"pqx3dh.mjs\",\"lines\":[6,18,25,30,31]},{\"file\":\"product-flows.mjs\",\"lines\":[48]},{\"file\":\"sandbox-parity.mjs\",\"lines\":[28,29,34]},{\"file\":\"sbom.cdx.json\",\"lines\":[18]},{\"file\":\"sdk.mjs\",\"lines\":[7,64]},{\"file\":\"tamper-binding.mjs\",\"lines\":[114,139]},{\"file\":\"trelyan-console.mjs\",\"lines\":[170]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "Ed25519/Ed448",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "signature"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "classical-hybrid-ok"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "OK only inside a HYBRID with ML-DSA-87"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[39]},{\"file\":\"assurance-properties.mjs\",\"lines\":[31]},{\"file\":\"cbom.cdx.json\",\"lines\":[1127,1177,1227]},{\"file\":\"conformance-vectors.mjs\",\"lines\":[4,14,24]},{\"file\":\"domain-separation.mjs\",\"lines\":[7,8,93]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\attestation.json\",\"lines\":[8,95,111]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\evidence-pack.signed.json\",\"lines\":[907]},{\"file\":\"examples\\\\demo\\\\run-demo.mjs\",\"lines\":[19,60,69]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\infra\\\\sshd_config\",\"lines\":[3]},{\"file\":\"fuzz-robustness.mjs\",\"lines\":[39,98]},{\"file\":\"omega-bridge.mjs\",\"lines\":[9,140,199,246,248]},{\"file\":\"omega-chain.mjs\",\"lines\":[4,12,78,81]},{\"file\":\"omega-evidence.mjs\",\"lines\":[9,32,36,75,116]},{\"file\":\"omega-gov.mjs\",\"lines\":[9,19,56,66,209]},{\"file\":\"omega-sentinel.mjs\",\"lines\":[10,78,81]},{\"file\":\"omega-server.mjs\",\"lines\":[18,24,27,29,33]},{\"file\":\"omega.mjs\",\"lines\":[34,43,121,195,199]},{\"file\":\"platform-conformance-vectors.mjs\",\"lines\":[12,25]},{\"file\":\"polarseek.mjs\",\"lines\":[22]},{\"file\":\"pqadmit.mjs\",\"lines\":[15,20,26,81,93]},{\"file\":\"pqanchor.mjs\",\"lines\":[18,26,29,36,76]},{\"file\":\"pqattest.mjs\",\"lines\":[3,23,123,131]},{\"file\":\"pqauditlog.mjs\",\"lines\":[4,8,19,21,27]},{\"file\":\"pqcap.mjs\",\"lines\":[17,23,123,133,151]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[16,20,56,74,99]},{\"file\":\"pqcbom-plan.mjs\",\"lines\":[35]},{\"file\":\"pqcbom-report.mjs\",\"lines\":[83]},{\"file\":\"pqcbom.mjs\",\"lines\":[16,20,56,74,99]},{\"file\":\"pqconsent.mjs\",\"lines\":[13,21,27,77,90]},{\"file\":\"pqconsentflow.mjs\",\"lines\":[23,30,52,60,198]},{\"file\":\"pqdelegate.mjs\",\"lines\":[25,32,81,91,99]},{\"file\":\"pqfirmware-cli.mjs\",\"lines\":[13,49]},{\"file\":\"pqfirmware.mjs\",\"lines\":[5,15,18,24,54]},{\"file\":\"pqflow.mjs\",\"lines\":[19,26,78,86,174]},{\"file\":\"pqgate.mjs\",\"lines\":[20,62,76,107,121]},{\"file\":\"pqgateway-session.mjs\",\"lines\":[180]},{\"file\":\"pqgateway.mjs\",\"lines\":[41,156,178,193]},{\"file\":\"pqindex.mjs\",\"lines\":[17]},{\"file\":\"pqmonitor.mjs\",\"lines\":[19,26,120,133,148]},{\"file\":\"pqpay.mjs\",\"lines\":[5,19,22,28,57]},{\"file\":\"pqpki.mjs\",\"lines\":[5,6,16,21,27]},{\"file\":\"pqposture.mjs\",\"lines\":[8,19,24,91,100]},{\"file\":\"pqratchet-he.mjs\",\"lines\":[25]},{\"file\":\"pqratchet.mjs\",\"lines\":[15]},{\"file\":\"pqseal.mjs\",\"lines\":[14,27,31,116,119]},{\"file\":\"pqshield.mjs\",\"lines\":[14,21,27,51,56]},{\"file\":\"pqtls.mjs\",\"lines\":[17,43]},{\"file\":\"pqtransport.mjs\",\"lines\":[19]},{\"file\":\"pqtsa.mjs\",\"lines\":[5,21,25,81,91]},{\"file\":\"pqvc-cli.mjs\",\"lines\":[13,37]},{\"file\":\"pqvc.mjs\",\"lines\":[4,16,19,26,48]},{\"file\":\"pqverify-api.mjs\",\"lines\":[138,146]},{\"file\":\"pqverify-cli.mjs\",\"lines\":[101,104]},{\"file\":\"pqx3dh.mjs\",\"lines\":[18]},{\"file\":\"product-flows.mjs\",\"lines\":[13,22,38]},{\"file\":\"qiv-cli.mjs\",\"lines\":[19,55,60,69,81]},{\"file\":\"qiv-pin.mjs\",\"lines\":[83,106,108]},{\"file\":\"qiv.mjs\",\"lines\":[8,13,33,116,221]},{\"file\":\"sandbox-parity.mjs\",\"lines\":[13,16,25]},{\"file\":\"sbom.cdx.json\",\"lines\":[18]},{\"file\":\"sdk.mjs\",\"lines\":[67]},{\"file\":\"tamper-binding.mjs\",\"lines\":[29,101,139,165,169]},{\"file\":\"trelyan-console.mjs\",\"lines\":[15,30,41,140]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "managed KMS/HSM",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "keymgmt"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "classical-hybrid-ok"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "managed crypto — verify the provider PQ roadmap + key-type support"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[58,97]},{\"file\":\"assurance-properties.mjs\",\"lines\":[31,44]},{\"file\":\"cbom.cdx.json\",\"lines\":[1152]},{\"file\":\"omega.mjs\",\"lines\":[56]},{\"file\":\"pqauditlog.mjs\",\"lines\":[6]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[12,48,76,510]},{\"file\":\"pqcbom-plan.mjs\",\"lines\":[35,36]},{\"file\":\"pqcbom.mjs\",\"lines\":[12,48,76,510]},{\"file\":\"pqcompliance.mjs\",\"lines\":[32,35]},{\"file\":\"pqevidence-cli.mjs\",\"lines\":[13,30,56]},{\"file\":\"pqfirmware-cli.mjs\",\"lines\":[10,26,90]},{\"file\":\"pqguard.mjs\",\"lines\":[19,93]},{\"file\":\"pqvc-cli.mjs\",\"lines\":[10,27,70]},{\"file\":\"witness-service.mjs\",\"lines\":[136]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "SSH Ed25519 key",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "signature"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "classical-hybrid-ok"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "OK as the classical leg; pair with PQ KEX (sntrup761x25519)"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"assurance-properties.mjs\",\"lines\":[31]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\infra\\\\sshd_config\",\"lines\":[3]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "lib:JWT/JOSE",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "library"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "classical-hybrid-ok"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "JWT/JOSE lib — RS*/ES* algs are quantum-broken; verify the alg + plan ML-DSA"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"examples\\\\demo\\\\sample-repo\\\\package.json\",\"lines\":[]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "Ed25519/Ed448 (OID)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "signature"
+        },
+        "nistQuantumSecurityLevel": 0
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "classical-hybrid-ok"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "EdDSA by OID — OK only as the classical leg of a HYBRID with ML-DSA-87"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[532]},{\"file\":\"pqcbom.mjs\",\"lines\":[532]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "AES-256",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "cipher"
+        },
+        "nistQuantumSecurityLevel": 5
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-safe"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "OK — 256-bit (128-bit quantum)"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[35,42,61]},{\"file\":\"assurance-properties.mjs\",\"lines\":[31]},{\"file\":\"cbom.cdx.json\",\"lines\":[92,117,242,367,392]},{\"file\":\"conformance-vectors.mjs\",\"lines\":[26]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\cbom.cdx.json\",\"lines\":[67,292,317,477]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\evidence-pack.signed.json\",\"lines\":[58,251,264,379,472]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\pq\\\\handshake.mjs\",\"lines\":[9]},{\"file\":\"gen-sample-pack.mjs\",\"lines\":[22,23]},{\"file\":\"polarseek.mjs\",\"lines\":[5,11,30]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[45,46,58,65,84]},{\"file\":\"pqcbom-plan.mjs\",\"lines\":[20,32]},{\"file\":\"pqcbom-server.mjs\",\"lines\":[78]},{\"file\":\"pqcbom.mjs\",\"lines\":[45,46,58,65,84]},{\"file\":\"pqcompliance.mjs\",\"lines\":[29,36,46,52,108]},{\"file\":\"pqindex.mjs\",\"lines\":[55]},{\"file\":\"pqmonitor.mjs\",\"lines\":[187,188,189]},{\"file\":\"pqshield.mjs\",\"lines\":[179]},{\"file\":\"pqtransport.mjs\",\"lines\":[10,26]},{\"file\":\"product-flows.mjs\",\"lines\":[37]},{\"file\":\"sandbox-parity.mjs\",\"lines\":[30,36]},{\"file\":\"sbom.cdx.json\",\"lines\":[17]},{\"file\":\"sdk.mjs\",\"lines\":[70]},{\"file\":\"tamper-binding.mjs\",\"lines\":[258]},{\"file\":\"test-fixtures\\\\structural-corpus.json\",\"lines\":[335]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "ML-KEM/Kyber",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "kem"
+        },
+        "nistQuantumSecurityLevel": 5
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-safe"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "OK — NIST FIPS 203"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[41]},{\"file\":\"assurance-properties.mjs\",\"lines\":[31]},{\"file\":\"cbom.cdx.json\",\"lines\":[217,467,517,617,642]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\cbom.cdx.json\",\"lines\":[117,192,242,267,452]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\evidence-pack.signed.json\",\"lines\":[88,118,148,163,193]},{\"file\":\"examples\\\\demo\\\\run-demo.mjs\",\"lines\":[84]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\pq\\\\handshake.mjs\",\"lines\":[4]},{\"file\":\"fips-conformance.mjs\",\"lines\":[3,7,37,39,41]},{\"file\":\"fuzz-robustness.mjs\",\"lines\":[191]},{\"file\":\"gen-sample-pack.mjs\",\"lines\":[22]},{\"file\":\"kat-conformance.mjs\",\"lines\":[2,4,12,39,41]},{\"file\":\"omega-nexus.mjs\",\"lines\":[5,6,10]},{\"file\":\"omega.mjs\",\"lines\":[55]},{\"file\":\"polarseek.mjs\",\"lines\":[5,11,13,16,20]},{\"file\":\"pqassistant.mjs\",\"lines\":[68,69,73,84]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[9,48,51,52,53]},{\"file\":\"pqcbom-plan.mjs\",\"lines\":[24,101,114]},{\"file\":\"pqcbom-report.mjs\",\"lines\":[35]},{\"file\":\"pqcbom-server.mjs\",\"lines\":[78]},{\"file\":\"pqcbom.mjs\",\"lines\":[9,48,51,52,53]},{\"file\":\"pqclaimgate.mjs\",\"lines\":[163,187]},{\"file\":\"pqcompliance.mjs\",\"lines\":[29,32,46,52,108]},{\"file\":\"pqgateway-session.mjs\",\"lines\":[6]},{\"file\":\"pqgateway.mjs\",\"lines\":[4,11,39,40]},{\"file\":\"pqindex.mjs\",\"lines\":[5,18,38,197]},{\"file\":\"pqmesh-server.mjs\",\"lines\":[112]},{\"file\":\"pqmonitor.mjs\",\"lines\":[189]},{\"file\":\"pqposture.mjs\",\"lines\":[3,11,42,76,87]},{\"file\":\"pqratchet-he.mjs\",\"lines\":[4,6,26]},{\"file\":\"pqratchet.mjs\",\"lines\":[4,6,7,12,16]},{\"file\":\"pqsearch-server.mjs\",\"lines\":[106,108,132]},{\"file\":\"pqshield.mjs\",\"lines\":[50,167,174,180,192]},{\"file\":\"pqtls.mjs\",\"lines\":[5,20,41]},{\"file\":\"pqtransport.mjs\",\"lines\":[4,5,17,26]},{\"file\":\"pqvault.mjs\",\"lines\":[5,12]},{\"file\":\"pqverify.mjs\",\"lines\":[84,91]},{\"file\":\"pqx3dh.mjs\",\"lines\":[7,19,25]},{\"file\":\"product-flows.mjs\",\"lines\":[48]},{\"file\":\"qiv.mjs\",\"lines\":[329]},{\"file\":\"sandbox-parity.mjs\",\"lines\":[28,29,34]},{\"file\":\"sbom.cdx.json\",\"lines\":[14]},{\"file\":\"sdk.mjs\",\"lines\":[7,10,64]},{\"file\":\"tamper-binding.mjs\",\"lines\":[214,218]},{\"file\":\"vectors-crosscheck.mjs\",\"lines\":[12]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "SHA-512/SHA3-512",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "hash"
+        },
+        "nistQuantumSecurityLevel": 5
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-safe"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "OK"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[43,45]},{\"file\":\"assurance-properties.mjs\",\"lines\":[31]},{\"file\":\"cbom.cdx.json\",\"lines\":[42,67,292,367,817]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\cbom.cdx.json\",\"lines\":[42,292,342,377]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\evidence-pack.signed.json\",\"lines\":[43,251,279,306,394]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\infra\\\\sshd_config\",\"lines\":[4]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\pq\\\\handshake.mjs\",\"lines\":[10]},{\"file\":\"gen-sample-pack.mjs\",\"lines\":[21,22]},{\"file\":\"omega-evidence.mjs\",\"lines\":[23,56,61,89]},{\"file\":\"package-lock.json\",\"lines\":[24,37,53,66,79]},{\"file\":\"pqattest.mjs\",\"lines\":[24,33,40,55,82]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[43,44,59,66,85]},{\"file\":\"pqcbom-plan.mjs\",\"lines\":[20,32]},{\"file\":\"pqcbom-report.mjs\",\"lines\":[17,95,171]},{\"file\":\"pqcbom-server.mjs\",\"lines\":[78]},{\"file\":\"pqcbom.mjs\",\"lines\":[43,44,59,66,85]},{\"file\":\"pqcompliance.mjs\",\"lines\":[15,66,108,115,116]},{\"file\":\"pqef.mjs\",\"lines\":[21,44]},{\"file\":\"pqindex.mjs\",\"lines\":[5,6,21,28,38]},{\"file\":\"pqmarket.mjs\",\"lines\":[17,23]},{\"file\":\"pqpki.mjs\",\"lines\":[22,36]},{\"file\":\"pqseal.mjs\",\"lines\":[15,49,69,153]},{\"file\":\"pqtsa.mjs\",\"lines\":[26,31]},{\"file\":\"pqvault.mjs\",\"lines\":[25]},{\"file\":\"pqx3dh.mjs\",\"lines\":[9,22,37,39]},{\"file\":\"qiv-cli.mjs\",\"lines\":[98]},{\"file\":\"qiv-pin.mjs\",\"lines\":[19,26,30]},{\"file\":\"qiv.mjs\",\"lines\":[36,67,69]},{\"file\":\"tamper-binding.mjs\",\"lines\":[148]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "ChaCha20-Poly1305",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "cipher"
+        },
+        "nistQuantumSecurityLevel": 5
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-safe"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "OK — 256-bit stream AEAD"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[44]},{\"file\":\"assurance-properties.mjs\",\"lines\":[31]},{\"file\":\"cbom.cdx.json\",\"lines\":[117,1327]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[45,67,113,114,130]},{\"file\":\"pqcbom.mjs\",\"lines\":[45,67,113,114,130]},{\"file\":\"pqindex.mjs\",\"lines\":[11,23,55,58,63]},{\"file\":\"pqratchet-he.mjs\",\"lines\":[30,45,49,50]},{\"file\":\"pqratchet.mjs\",\"lines\":[7,20,33]},{\"file\":\"pqshield.mjs\",\"lines\":[57]},{\"file\":\"pqtls.mjs\",\"lines\":[40]},{\"file\":\"sbom.cdx.json\",\"lines\":[17]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "sntrup761 (SSH PQ KEX)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "kem"
+        },
+        "nistQuantumSecurityLevel": 5
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-safe"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "OK — PQ-hybrid SSH key exchange"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[45]},{\"file\":\"assurance-properties.mjs\",\"lines\":[31]},{\"file\":\"cbom.cdx.json\",\"lines\":[592,1192,1352]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\cbom.cdx.json\",\"lines\":[217,402]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\evidence-pack.signed.json\",\"lines\":[178,321,622,807,907]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\infra\\\\sshd_config\",\"lines\":[4]},{\"file\":\"gen-sample-pack.mjs\",\"lines\":[21]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[73,74,75]},{\"file\":\"pqcbom.mjs\",\"lines\":[73,74,75]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "ML-DSA/Dilithium",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "signature"
+        },
+        "nistQuantumSecurityLevel": 5
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-safe"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "OK — NIST FIPS 204"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[55,97]},{\"file\":\"assurance-properties.mjs\",\"lines\":[23,31,44]},{\"file\":\"build-pin.mjs\",\"lines\":[1,9,17,46]},{\"file\":\"cbom.cdx.json\",\"lines\":[267,467,492,517,542]},{\"file\":\"conformance-vectors.mjs\",\"lines\":[4,15]},{\"file\":\"deploy\\\\worker.mjs\",\"lines\":[14,46]},{\"file\":\"domain-separation.mjs\",\"lines\":[18,74]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\attestation.json\",\"lines\":[8,17,95,99]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\cbom.cdx.json\",\"lines\":[117,142,167,192,242]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\evidence-pack.signed.json\",\"lines\":[88,103,118,133,148]},{\"file\":\"examples\\\\demo\\\\run-demo.mjs\",\"lines\":[3,17,58,69,84]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\api\\\\jwt.js\",\"lines\":[1]},{\"file\":\"examples\\\\demo\\\\sample-repo\\\\pq\\\\handshake.mjs\",\"lines\":[5]},{\"file\":\"fips-conformance.mjs\",\"lines\":[3,6,18,20,23]},{\"file\":\"fuzz-robustness.mjs\",\"lines\":[38]},{\"file\":\"gen-sample-pack.mjs\",\"lines\":[7,22,27,37]},{\"file\":\"kat-conformance.mjs\",\"lines\":[2,11,30,32,34]},{\"file\":\"mldsa.mjs\",\"lines\":[2,7,12,15,69]},{\"file\":\"omega-bridge.mjs\",\"lines\":[9,140,197,244,248]},{\"file\":\"omega-chain.mjs\",\"lines\":[4,12,77]},{\"file\":\"omega-evidence.mjs\",\"lines\":[9,32,34,74,114]},{\"file\":\"omega-gov.mjs\",\"lines\":[9,19,55,66,207]},{\"file\":\"omega-nexus.mjs\",\"lines\":[4,5,22]},{\"file\":\"omega-sentinel.mjs\",\"lines\":[10,77]},{\"file\":\"omega-server.mjs\",\"lines\":[16,29,31,43,65]},{\"file\":\"omega.mjs\",\"lines\":[34,121,193,197,200]},{\"file\":\"package.json\",\"lines\":[4,16]},{\"file\":\"platform-conformance-vectors.mjs\",\"lines\":[4,13]},{\"file\":\"polarseek.mjs\",\"lines\":[6,12,21,30,44]},{\"file\":\"pqadmit.mjs\",\"lines\":[15,21,26]},{\"file\":\"pqanchor.mjs\",\"lines\":[5,6,18,26,30]},{\"file\":\"pqanswer.mjs\",\"lines\":[6,20,22,111,114]},{\"file\":\"pqassistant.mjs\",\"lines\":[8,28,66]},{\"file\":\"pqattest.mjs\",\"lines\":[3,21,121,131,161]},{\"file\":\"pqauditlog.mjs\",\"lines\":[4,8,19,22,27]},{\"file\":\"pqcap.mjs\",\"lines\":[18,23]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[9,48,49,50,52]},{\"file\":\"pqcbom-plan.mjs\",\"lines\":[28,118]},{\"file\":\"pqcbom-report.mjs\",\"lines\":[5,15,24,35,87]},{\"file\":\"pqcbom-server.mjs\",\"lines\":[11]},{\"file\":\"pqcbom.mjs\",\"lines\":[9,48,49,50,52]},{\"file\":\"pqclaimgate.mjs\",\"lines\":[6,17,19,165]},{\"file\":\"pqcompliance.mjs\",\"lines\":[6,12,14,29,32]},{\"file\":\"pqconsent.mjs\",\"lines\":[13,22,27]},{\"file\":\"pqconsentflow.mjs\",\"lines\":[24,30,307]},{\"file\":\"pqcouncil.mjs\",\"lines\":[6,20]},{\"file\":\"pqdelegate.mjs\",\"lines\":[26,32,266]},{\"file\":\"pqef.mjs\",\"lines\":[15,20,214,259,266]},{\"file\":\"pqevidence-cli.mjs\",\"lines\":[5,15,24,57,75]},{\"file\":\"pqfirmware-cli.mjs\",\"lines\":[14]},{\"file\":\"pqfirmware.mjs\",\"lines\":[5,15,19,24,144]},{\"file\":\"pqflow.mjs\",\"lines\":[20,26,250]},{\"file\":\"pqgate.mjs\",\"lines\":[21,297,304]},{\"file\":\"pqgateway-session.mjs\",\"lines\":[6,19,28]},{\"file\":\"pqgateway.mjs\",\"lines\":[4,11,25,39,40]},{\"file\":\"pqguard.mjs\",\"lines\":[9,24]},{\"file\":\"pqindex.mjs\",\"lines\":[7,19,136,221]},{\"file\":\"pqinduct.mjs\",\"lines\":[8,13,14,34,88]},{\"file\":\"pqkt.mjs\",\"lines\":[6,32,49,57]},{\"file\":\"pqmarket.mjs\",\"lines\":[4,16]},{\"file\":\"pqmoa.mjs\",\"lines\":[6,25,51]},{\"file\":\"pqmonitor.mjs\",\"lines\":[20,26,120,247]},{\"file\":\"pqpay.mjs\",\"lines\":[5,19,23,28,159]},{\"file\":\"pqpki.mjs\",\"lines\":[5,6,16,20,29]},{\"file\":\"pqposture.mjs\",\"lines\":[8,19,25,49,91]},{\"file\":\"pqredact.mjs\",\"lines\":[5,13,20,22,27]},{\"file\":\"pqseal.mjs\",\"lines\":[4,12,29,57,114]},{\"file\":\"pqsearch-server.mjs\",\"lines\":[21,101]},{\"file\":\"pqshield.mjs\",\"lines\":[14,22,27,50,209]},{\"file\":\"pqsign.mjs\",\"lines\":[5,7,13,124,191]},{\"file\":\"pqtransport.mjs\",\"lines\":[11,18,26]},{\"file\":\"pqtsa.mjs\",\"lines\":[4,15,21,24,42]},{\"file\":\"pqvault.mjs\",\"lines\":[84]},{\"file\":\"pqvc-cli.mjs\",\"lines\":[14]},{\"file\":\"pqvc.mjs\",\"lines\":[4,16,20,26,49]},{\"file\":\"pqverify-api.mjs\",\"lines\":[107]},{\"file\":\"pqverify-cli.mjs\",\"lines\":[102]},{\"file\":\"pqx3dh.mjs\",\"lines\":[8,20,25]},{\"file\":\"product-flows.mjs\",\"lines\":[14]},{\"file\":\"qiv-cli.mjs\",\"lines\":[20,67,81,113,144]},{\"file\":\"qiv-pin.mjs\",\"lines\":[81,104,108]},{\"file\":\"qiv.mjs\",\"lines\":[8,13,34,116,117]},{\"file\":\"sandbox-parity.mjs\",\"lines\":[14,35]},{\"file\":\"sbom.cdx.json\",\"lines\":[14]},{\"file\":\"sdk.mjs\",\"lines\":[10,65,67]},{\"file\":\"slhdsa.mjs\",\"lines\":[3,5,7,11,35]},{\"file\":\"spine-vectors.mjs\",\"lines\":[4,13]},{\"file\":\"tamper-binding.mjs\",\"lines\":[16,101,146,152,153]},{\"file\":\"test-kat.mjs\",\"lines\":[1,5,15,19,20]},{\"file\":\"test-mldsa.mjs\",\"lines\":[1,9]},{\"file\":\"test-slh-pins.mjs\",\"lines\":[3,16,71]},{\"file\":\"throndar-slh-key.mjs\",\"lines\":[2,3]},{\"file\":\"throndar-sth-key.mjs\",\"lines\":[1,8]},{\"file\":\"trelyan-console.mjs\",\"lines\":[16,29,48,59,140]},{\"file\":\"vectors-crosscheck.mjs\",\"lines\":[12]},{\"file\":\"verify-pack.mjs\",\"lines\":[39,42]},{\"file\":\"verify.mjs\",\"lines\":[5,8,9,10]},{\"file\":\"witness-service.mjs\",\"lines\":[79,136]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "SLH-DSA/SPHINCS+",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "signature"
+        },
+        "nistQuantumSecurityLevel": 5
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-safe"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "OK — NIST FIPS 205"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"accuracy-benchmark.mjs\",\"lines\":[56,97]},{\"file\":\"assurance-properties.mjs\",\"lines\":[31,44]},{\"file\":\"build-pin.mjs\",\"lines\":[2,30,38]},{\"file\":\"cbom.cdx.json\",\"lines\":[267,567,1402]},{\"file\":\"conformance-vectors.mjs\",\"lines\":[4]},{\"file\":\"domain-separation.mjs\",\"lines\":[6,27,74]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\attestation.json\",\"lines\":[8,95,105]},{\"file\":\"examples\\\\demo\\\\demo-out\\\\evidence-pack.signed.json\",\"lines\":[907,915]},{\"file\":\"examples\\\\demo\\\\run-demo.mjs\",\"lines\":[4,18,59,69,85]},{\"file\":\"fips-conformance.mjs\",\"lines\":[8,47,49,50]},{\"file\":\"gen-sample-pack.mjs\",\"lines\":[8,27]},{\"file\":\"kat-conformance.mjs\",\"lines\":[3,13,46,48,50]},{\"file\":\"mldsa.mjs\",\"lines\":[78,91,92]},{\"file\":\"omega-bridge.mjs\",\"lines\":[9,140,198,245,248]},{\"file\":\"omega-chain.mjs\",\"lines\":[4]},{\"file\":\"omega-evidence.mjs\",\"lines\":[9,32,35,74,115]},{\"file\":\"omega-gov.mjs\",\"lines\":[9,58,67,208]},{\"file\":\"omega-sentinel.mjs\",\"lines\":[10]},{\"file\":\"omega-server.mjs\",\"lines\":[17,29,32,43,65]},{\"file\":\"omega.mjs\",\"lines\":[121,194,198,200]},{\"file\":\"package.json\",\"lines\":[16]},{\"file\":\"pqadmit.mjs\",\"lines\":[16,22]},{\"file\":\"pqanchor.mjs\",\"lines\":[31,37,152,273,278]},{\"file\":\"pqattest.mjs\",\"lines\":[3,22,122,131]},{\"file\":\"pqauditlog.mjs\",\"lines\":[23,28,58,59,131]},{\"file\":\"pqcap.mjs\",\"lines\":[19]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[9,49,63,80,96]},{\"file\":\"pqcbom-plan.mjs\",\"lines\":[28]},{\"file\":\"pqcbom-report.mjs\",\"lines\":[16,23,104,112,123]},{\"file\":\"pqcbom.mjs\",\"lines\":[9,49,63,80,96]},{\"file\":\"pqcompliance.mjs\",\"lines\":[29,52]},{\"file\":\"pqconsent.mjs\",\"lines\":[13,23]},{\"file\":\"pqconsentflow.mjs\",\"lines\":[25]},{\"file\":\"pqdelegate.mjs\",\"lines\":[27]},{\"file\":\"pqef.mjs\",\"lines\":[27,222]},{\"file\":\"pqevidence-cli.mjs\",\"lines\":[5,16,24,57,75]},{\"file\":\"pqfirmware-cli.mjs\",\"lines\":[15]},{\"file\":\"pqfirmware.mjs\",\"lines\":[5,15,20,25,144]},{\"file\":\"pqflow.mjs\",\"lines\":[21]},{\"file\":\"pqgate.mjs\",\"lines\":[22]},{\"file\":\"pqinduct.mjs\",\"lines\":[14,35,148,286,330]},{\"file\":\"pqmonitor.mjs\",\"lines\":[21,120,247]},{\"file\":\"pqpay.mjs\",\"lines\":[5,19,24,29,159]},{\"file\":\"pqposture.mjs\",\"lines\":[49]},{\"file\":\"pqredact.mjs\",\"lines\":[6,20,23,28,75]},{\"file\":\"pqseal.mjs\",\"lines\":[4,13,30,57,115]},{\"file\":\"pqsearch-server.mjs\",\"lines\":[109]},{\"file\":\"pqshield.mjs\",\"lines\":[14,23,28,50,209]},{\"file\":\"pqvc-cli.mjs\",\"lines\":[15]},{\"file\":\"pqvc.mjs\",\"lines\":[4,16,21,51,163]},{\"file\":\"product-flows.mjs\",\"lines\":[15]},{\"file\":\"qiv-cli.mjs\",\"lines\":[21,68,81,113,144]},{\"file\":\"qiv-pin.mjs\",\"lines\":[82,105,108]},{\"file\":\"qiv.mjs\",\"lines\":[8,13,35,116,221]},{\"file\":\"sandbox-parity.mjs\",\"lines\":[37]},{\"file\":\"sbom.cdx.json\",\"lines\":[14]},{\"file\":\"sdk.mjs\",\"lines\":[66,67]},{\"file\":\"slhdsa.mjs\",\"lines\":[2,5,7,18,21]},{\"file\":\"tamper-binding.mjs\",\"lines\":[17,152,157,168,171]},{\"file\":\"test-kat.mjs\",\"lines\":[1,6,26,30,31]},{\"file\":\"test-slh-pins.mjs\",\"lines\":[1,4,55]},{\"file\":\"throndar-slh-key.mjs\",\"lines\":[1,2]},{\"file\":\"vectors-crosscheck.mjs\",\"lines\":[12]},{\"file\":\"verify-pack.mjs\",\"lines\":[40,42]},{\"file\":\"verify.mjs\",\"lines\":[6,8,9]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "Falcon/FN-DSA",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "signature"
+        },
+        "nistQuantumSecurityLevel": 5
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-safe"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "OK — FIPS 206 in development (diversity/on-chain leg)"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"assurance-properties.mjs\",\"lines\":[31]},{\"file\":\"cbom.cdx.json\",\"lines\":[1427]},{\"file\":\"index.js\",\"lines\":[2,5,7,34,41]},{\"file\":\"omega-chain.mjs\",\"lines\":[11]},{\"file\":\"omega-evidence.mjs\",\"lines\":[13]},{\"file\":\"omega-gov.mjs\",\"lines\":[18,19]},{\"file\":\"omega-server.mjs\",\"lines\":[125]},{\"file\":\"omega.mjs\",\"lines\":[41,43,49,50,135]},{\"file\":\"package.json\",\"lines\":[4,16]},{\"file\":\"pqanchor.mjs\",\"lines\":[3,40,164,165]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[64,185]},{\"file\":\"pqcbom.mjs\",\"lines\":[64,185]},{\"file\":\"pqclaimgate.mjs\",\"lines\":[166]},{\"file\":\"pqef.mjs\",\"lines\":[14,28,203,226,228]},{\"file\":\"pqposture.mjs\",\"lines\":[49]},{\"file\":\"pqsearch-server.mjs\",\"lines\":[102,107,133,154,155]},{\"file\":\"pqshield.mjs\",\"lines\":[50]},{\"file\":\"qiv.mjs\",\"lines\":[21,22,27,47,57]},{\"file\":\"sbom.cdx.json\",\"lines\":[14]},{\"file\":\"sdk.mjs\",\"lines\":[5,12,69]},{\"file\":\"slhdsa.mjs\",\"lines\":[5,6,7]},{\"file\":\"test.js\",\"lines\":[28]},{\"file\":\"throndar-slh-key.mjs\",\"lines\":[3]},{\"file\":\"verify.mjs\",\"lines\":[8,9]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "XMSS (stateful hash sig)",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "signature"
+        },
+        "nistQuantumSecurityLevel": 5
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-safe"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "OK — stateful hash-based sig (NIST SP 800-208); NEVER reuse one-time key state"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"cbom.cdx.json\",\"lines\":[1452]},{\"file\":\"pqanchor.mjs\",\"lines\":[41,166]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[18,82,521]},{\"file\":\"pqcbom.mjs\",\"lines\":[18,82,521]},{\"file\":\"pqtsa.mjs\",\"lines\":[17]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "Classic McEliece / Frodo / NTRU",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "kem"
+        },
+        "nistQuantumSecurityLevel": 5
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-safe"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "OK — PQ KEM (NIST round/alternate)"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"cbom.cdx.json\",\"lines\":[1477]},{\"file\":\"pqcbom-action\\\\pqcbom.mjs\",\"lines\":[77]},{\"file\":\"pqcbom.mjs\",\"lines\":[77]}]"
+        }
+      ]
+    },
+    {
+      "type": "cryptographic-asset",
+      "name": "lib:@noble/post-quantum",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "library"
+        },
+        "nistQuantumSecurityLevel": 5
+      },
+      "properties": [
+        {
+          "name": "trelyan:quantumRisk",
+          "value": "quantum-safe"
+        },
+        {
+          "name": "trelyan:recommendation",
+          "value": "OK — PQ primitives (FIPS 203/204/205)"
+        },
+        {
+          "name": "trelyan:occurrences",
+          "value": "[{\"file\":\"examples\\\\demo\\\\sample-repo\\\\package.json\",\"lines\":[]},{\"file\":\"package-lock.json\",\"lines\":[]},{\"file\":\"package.json\",\"lines\":[]},{\"file\":\"pqcbom-action\\\\examples\\\\clean\\\\package.json\",\"lines\":[]}]"
+        }
+      ]
+    }
+  ]
+}
