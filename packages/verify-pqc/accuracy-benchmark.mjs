@@ -122,8 +122,15 @@ export function run() {
   ].join('\n');
 
   const here = dirname(fileURLToPath(import.meta.url));
-  writeFileSync(join(here, '..', '..', '..', 'program', 'products', 'BENCHMARK.md'), md);
-  console.log(`accuracy-benchmark: precision ${pct(precision)} · recall ${pct(recall)} · F1 ${pct(f1)} · ${failures.length} labeled error(s) · ${CORPUS.length} cases · ${confirmedBlind}/${BLIND_SPOTS.length} blind spots confirmed`);
+  // BEST-EFFORT report write: publish the human-readable report into the PRIVATE program/ product docs when that
+  // tree is present (dev box). In the PUBLIC repo / CI, program/ is intentionally absent — so a failed write is a
+  // SKIP, not a test failure. The verdict depends ONLY on labeled regressions (failures.length), never on whether
+  // this byproduct could be written outside the repo. (Previously an unconditional write threw ENOENT in CI, turning
+  // a passing benchmark into a red module — "passes on the author's machine" only.)
+  let reportNote;
+  try { writeFileSync(join(here, '..', '..', '..', 'program', 'products', 'BENCHMARK.md'), md); reportNote = 'report written to program/products/BENCHMARK.md'; }
+  catch (e) { reportNote = 'report NOT written (program/ absent — public repo/CI): ' + ((e && e.code) || 'skipped'); }
+  console.log(`accuracy-benchmark: precision ${pct(precision)} · recall ${pct(recall)} · F1 ${pct(f1)} · ${failures.length} labeled error(s) · ${CORPUS.length} cases · ${confirmedBlind}/${BLIND_SPOTS.length} blind spots confirmed · ${reportNote}`);
   if (failures.length) failures.forEach((f) => console.error('  FAIL: ' + f));
   if (typeof process !== 'undefined' && process.exit) process.exit(failures.length ? 1 : 0);
 }
