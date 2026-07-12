@@ -72,6 +72,13 @@ export function verifyAnchoredAdmission(anchor, opts = {}) {
     const base = { admit: !!ev.admit, integrityOk: ev.integrityOk, artifactsVerified: ev.artifactsVerified, evidence: ev };
     // 2. the anchored entry must refer to THIS pack + be its canonical projection.
     if (entry.kind !== ANCHOR_KIND || entry.v !== V || entry.pack_hash !== pack.pack_hash) return { ...base, anchored: false, why: 'the log entry does not refer to this pack', anchoredAt: null };
+    // the entry must be the CANONICAL PROJECTION of the pack — bind its convenience metadata (model_hash /
+    // subject / policy_id / policy_version) to the verified pack, so a downstream log INDEXER reading those
+    // fields can't be poisoned by a hand-crafted entry that carries a valid pack_hash but false metadata
+    // (cross-module review: previously only pack_hash was load-bearing, leaving the index fields unbound).
+    const expect = admissionEntry(pack, { anchored_ts: entry.anchored_ts });
+    if (entry.policy_id !== expect.policy_id || entry.policy_version !== expect.policy_version || entry.model_hash !== expect.model_hash || entry.subject !== expect.subject)
+      return { ...base, anchored: false, why: 'the log entry metadata does not match the verified pack (poisoned index field)', anchoredAt: null };
     // index must be in range for the STH's tree (council: explicit bound, don't rely on the RFC walker alone).
     if (!isInt(inclusion.index) || !isInt(sth.tree_size) || inclusion.index < 0 || inclusion.index >= sth.tree_size) return { ...base, anchored: false, why: 'inclusion index out of range for the STH tree size', anchoredAt: null };
     // 3. INCLUSION: the entry is a leaf of the tree the pinned STH commits to (RFC-6962).
@@ -171,6 +178,15 @@ async function selfTest() {
   // 4. entry for a DIFFERENT pack -> rejected (entry.pack_hash mismatch)
   const other = evidence.buildEvidencePack({ record, signedPolicy }, { packager: 'x', created_ts: 9999 });
   ok(verifyAnchoredAdmission({ ...anchor, pack: other }, vopts).anchored === false, 'the log entry must refer to THIS pack (pack_hash bind) -> mismatch REJECTED');
+
+  // 4b. POISONED INDEX FIELD (cross-module review): a log commits an entry with the CORRECT pack_hash but a
+  //     WRONG model_hash — its inclusion proof is valid FOR THAT ENTRY, yet the metadata doesn't match the
+  //     verified pack -> REJECTED (so downstream log indexers reading entry.model_hash can't be poisoned).
+  const plog = new PQTransparencyLog();
+  const poisonEntry = { ...admissionEntry(pack, { anchored_ts: 1300 }), model_hash: 'e'.repeat(64) };
+  const pidx = plog.append(poisonEntry);
+  const psth = plog.signedTreeHead(logKey.secretKey, { ts: 5000 });
+  ok(verifyAnchoredAdmission({ pack, entry: plog.entries[pidx], inclusion: plog.inclusion(pidx), sth: psth, logPub: logKey.publicKey }, vopts).anchored === false, 'a log entry with a valid pack_hash but WRONG model_hash (poisoned index) -> REJECTED despite a valid inclusion proof');
 
   // 5. TAMPERED inclusion proof (forged index) -> inclusion fails
   const badInc = { ...anchor, inclusion: { ...anchor.inclusion, index: 5 } };

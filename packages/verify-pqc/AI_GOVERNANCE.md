@@ -25,10 +25,12 @@ independently re-verifiable, and a **transparency anchor** makes admissions publ
 | *admission* | `pqgovernance-gate` | fail-closed CI gate over the record (grade/drift/distinct-signer policy) | 25 |
 | **GOVERN** | `pqgovern-policy` | the **compliance owner** → a signed, versioned admission **policy** the gate enforces | 37 |
 | *deliverable* | `pqgovern-evidence` | a self-contained **Evidence Pack** — the whole admission, independently re-verifiable | 15 |
-| *transparency* | `pqgovern-anchor` | binds an admission into an **append-only RFC-6962 log** (public accountability) | 17 |
+| *transparency* | `pqgovern-anchor` | binds an admission into an **append-only RFC-6962 log** (public accountability) | 18 |
+| *transparency* | `pqgovern-monitor` | a **fork-refusing** watcher: holds the log append-only across the STHs it sees | 20 |
+| *transparency* | `pqgovern-witness` | a **multi-party quorum** that detects a log **equivocating** (split-view) | 18 |
 | *CI command* | `pqgovern-cli` | a drop-in pipeline gate: pack + pins → **exit 0 (ADMIT) / 1 (BLOCK)** | 8 |
 
-Composition is proven end-to-end two ways: **`pqgovern-e2e`** (by invocation, all nine modules through
+Composition is proven end-to-end two ways: **`pqgovern-e2e`** (by invocation, the governance modules through
 their public APIs) and **`formal/pqgovern_admission_z3.py`** (a machine-checked Z3 proof of admission
 soundness). See *Machine-checked proofs* below.
 
@@ -48,7 +50,10 @@ the admission gets, fail-closed:
   admission is **always re-derived** under the verifier's own pins (`pqgovern-evidence`, `pqgovern-cli`).
 - **Public accountability (optional).** An admission can be anchored into an append-only transparency
   log; anyone with the pinned log key can prove it was recorded and detect a log that rewrites history
-  (`pqgovern-anchor`).
+  (`pqgovern-anchor`). A **fork-refusing monitor** holds the log append-only across the heads it observes
+  (`pqgovern-monitor`), and a **multi-party witness quorum** detects a log that presents *different*
+  histories to different parties — a split-view/equivocation a single monitor is structurally blind to
+  (`pqgovern-witness`).
 
 ### What it is **not** (the load-bearing limits)
 
@@ -60,7 +65,10 @@ the admission gets, fail-closed:
   deterministic functions of the *declared* artifacts; the admission floor is whatever the owner *signed* —
   neither is a statement of adequacy for any regime.
 - **Inclusion ≠ completeness.** A transparency anchor proves an admission was *recorded*, not that the log
-  is *complete* (a withholding log can omit entries — completeness needs a witness/gossip quorum).
+  is *complete*. The witness quorum (`pqgovern-witness`) detects **equivocation** (the log showing conflicting
+  histories) — a **safety** property, proven only among witnesses that gossip into the same reconcile; it does
+  **not** prove **completeness/liveness** (a log that simply *withholds* an entry from everyone equally is a
+  separate, unsolved-here availability problem).
 - **Symbolic proofs.** The Z3 proofs are in a symbolic (Dolev-Yao / EUF-CMA) model of the decision logic;
   they are not computational reductions and do not prove the primitives themselves (those rest on
   FIPS 204/205; FIPS 206 is draft). They complement — never replace — tests, fuzzing, and external audit.
@@ -127,7 +135,7 @@ window/version pins. See `pqgovern-cli.mjs` for the config shape.
 ## Reproducibility
 
 ```bash
-node test-all.mjs                 # every module self-test (89 modules, expect ALL MODULES PASS)
+node test-all.mjs                 # every module self-test (91 modules, expect ALL MODULES PASS)
 python formal/run_all.py          # the machine-checked proof suite (expect 15/15)
 ```
 

@@ -80,12 +80,14 @@ council-reviewed; the design + spec each had a downgrade caught and closed). Hon
 | `pqgovernance-gate` | **CI admission gate** over the record — fail-closed; letter-floor / distinct-signer / fully-pinned-drift policy; `allowUnpinnedSeal` forced off | 25 |
 | `pqgovern-policy` | **Governance Policy (GOVERN)** — a signed, versioned admission policy the gate enforces (criteria become verifiable evidence); replay/window pins; caller can't shadow the signed criteria; Z3 admission-soundness proof | 37 |
 | `pqgovern-evidence` | **AI Governance Evidence Pack** — one self-contained, independently-verifiable artifact; re-derives the whole admission under the verifier's own pins (no embedded verdict); domain-separated packager seal | 15 |
-| `pqgovern-anchor` | **Transparency-anchored admissions** — bind an admission into an append-only RFC-6962 log; prove inclusion under a pinned STH + detect history-rewrite (consistency proofs); inclusion ≠ completeness | 17 |
+| `pqgovern-anchor` | **Transparency-anchored admissions** — bind an admission into an append-only RFC-6962 log; prove inclusion under a pinned STH + detect history-rewrite (consistency proofs); the log entry is the canonical projection of the pack (poisoned-index-safe); inclusion ≠ completeness | 18 |
+| `pqgovern-monitor` | **Fork-refusing transparency monitor** — a stateful watcher that holds the log append-only across the STHs it observes (checkpoint bootstrap, freshness, bounded history); on equivocation/rewrite it alerts + keeps the last-good head | 20 |
+| `pqgovern-witness` | **Multi-party witness/gossip quorum** — independent witnesses co-sign the heads they accept; `gossipReconcile` cross-checks their signed tree heads to detect a **split-view/equivocation** a single monitor is blind to (exact-size fork + proof-checked prefix violation); `consistent` = proven append-only, never "no fork yet"; safety-not-liveness | 18 |
 | `pqgovern-cli` | **CI admission command** — `node pqgovern-cli.mjs <pack.json> <config.json>` → exit 0 (ADMIT) / 1 (BLOCK) | 8 |
 
 ### AI Governance layer (NIST AI RMF) — see [AI_GOVERNANCE.md](./AI_GOVERNANCE.md)
 
-The nine modules above (`pqaibom`/`pqeval`/`pqtrace` + `pqgovern*`) compose **MAP ∧ MEASURE ∧ MANAGE ∧
+The eleven modules above (`pqaibom`/`pqeval`/`pqtrace` + `pqgovern*`) compose **MAP ∧ MEASURE ∧ MANAGE ∧
 GOVERN** into one cross-bound, fail-closed AI-governance admission — with a self-verifiable Evidence Pack,
 transparency anchoring, a CI command, an end-to-end composition test (`pqgovern-e2e`, 15), and a
 machine-checked Z3 admission-soundness proof (`formal/pqgovern_admission_z3.py`). Self-attested pre-audit;
