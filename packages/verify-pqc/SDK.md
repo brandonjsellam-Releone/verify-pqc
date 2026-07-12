@@ -83,11 +83,12 @@ council-reviewed; the design + spec each had a downgrade caught and closed). Hon
 | `pqgovern-anchor` | **Transparency-anchored admissions** — bind an admission into an append-only RFC-6962 log; prove inclusion under a pinned STH + detect history-rewrite (consistency proofs); the log entry is the canonical projection of the pack (poisoned-index-safe); inclusion ≠ completeness | 18 |
 | `pqgovern-monitor` | **Fork-refusing transparency monitor** — a stateful watcher that holds the log append-only across the STHs it observes (checkpoint bootstrap, freshness, bounded history); on equivocation/rewrite it alerts + keeps the last-good head | 20 |
 | `pqgovern-witness` | **Multi-party witness/gossip quorum** — independent witnesses co-sign the heads they accept; `gossipReconcile` cross-checks their signed tree heads to detect a **split-view/equivocation** a single monitor is blind to (exact-size fork + proof-checked prefix violation); `consistent` = proven append-only, never "no fork yet"; safety-not-liveness | 18 |
+| `pqgovern-witness-service` | **Runnable witness node + gossip reconciler** (deploy-ready reference) — durable fork-refusing witness (atomic persist + sig-verified state restore) + a bounded/deduped reconciler over HTTP; total handler + body cap; owner adds auth/TLS/durable store | 17 |
 | `pqgovern-cli` | **CI admission command** — `node pqgovern-cli.mjs <pack.json> <config.json>` → exit 0 (ADMIT) / 1 (BLOCK) | 8 |
 
 ### AI Governance layer (NIST AI RMF) — see [AI_GOVERNANCE.md](./AI_GOVERNANCE.md)
 
-The eleven modules above (`pqaibom`/`pqeval`/`pqtrace` + `pqgovern*`) compose **MAP ∧ MEASURE ∧ MANAGE ∧
+The twelve modules above (`pqaibom`/`pqeval`/`pqtrace` + `pqgovern*`) compose **MAP ∧ MEASURE ∧ MANAGE ∧
 GOVERN** into one cross-bound, fail-closed AI-governance admission — with a self-verifiable Evidence Pack,
 transparency anchoring, a CI command, an end-to-end composition test (`pqgovern-e2e`, 15), and a
 machine-checked Z3 admission-soundness proof (`formal/pqgovern_admission_z3.py`). Self-attested pre-audit;
