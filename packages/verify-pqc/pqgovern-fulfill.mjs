@@ -26,23 +26,62 @@ const DISCLAIMER =
   'model is adequate, safe, or compliant. Supports (does not constitute) NIST AI RMF / EU AI Act preparation; not\n' +
   'legal or compliance advice.';
 
+// RE-ATTESTATION CADENCE (advisory). An attestation is point-in-time: it reflects the model / evaluation / policy
+// state AS OF the pack's issuance time (created_ts), which is hash-bound into the pack (tamper-evident; also under
+// the packager signature when sealed). The "recommended next re-attestation" date is DERIVED from that bound time +
+// an interval — a verifier can recompute it from the pack, so it needs no separate binding. Claim-hygiene: it is
+// ADVISORY, not an expiry — the attestation does NOT become invalid after it; re-attest after any MATERIAL change,
+// or after the recommended date, whichever comes first.
+const REATTEST_DEFAULT_DAYS = 365;
+const DAY_SECONDS = 86400;
+const MAX_TS = 253402300799; // 9999-12-31T23:59:59Z in epoch SECONDS. Above this, Date.toISOString() switches to the
+                             // signed 6-digit-year extended format ("+057971-...") and slice(0,10) yields a malformed,
+                             // dayless string — so a seconds-vs-milliseconds fat-finger must NOT invent a garbage date.
+const fmtDay = (ts) => {
+  if (!Number.isInteger(ts) || ts <= 0 || ts > MAX_TS) return null;   // out of range -> no cadence (never invent a date)
+  const d = new Date(ts * 1000);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+};
+const reattestDays = (meta) => (Number.isInteger(meta && meta.reattest_interval_days) && meta.reattest_interval_days > 0 ? meta.reattest_interval_days : REATTEST_DEFAULT_DAYS);
+/** Human lines for the re-attestation cadence, anchored to the pack's BOUND created_ts. Empty if unstamped. */
+function reattestLines(pack, meta) {
+  const asOf = fmtDay(pack && pack.created_ts);
+  if (!asOf) return [];   // no stamped issuance time -> emit no cadence (never invent a date)
+  const days = reattestDays(meta);
+  return [
+    `**Self-attested as-of:** ${asOf} (the pack's issuance time, hash-bound into the pack — tamper-evident; also covered by the packager signature when the pack is sealed).`,
+    `**Recommended next re-attestation after:** ${fmtDay(pack.created_ts + days * DAY_SECONDS)} (advisory — ${days} days after issuance).`,
+  ];
+}
+const REATTEST_ADVISORY =
+  'RE-ATTESTATION (advisory): this self-attestation is point-in-time — it reflects the model, evaluation, and\n' +
+  'policy state as of the issuance date above and does NOT expire. Re-attest after any material change to the\n' +
+  'model, its evaluation, or the governing policy — or after the recommended date, whichever comes first.';
+
 /** governanceReport(pack, decision, meta) — the auditor-facing REPORT.md (wraps evidenceReport with a header + the
  *  honest disclaimer). meta = { org?, order_id?, produced_ts? }. */
 export function governanceReport(pack, decision, meta = {}) {
+  const rl = reattestLines(pack, meta);   // dated cadence lines (empty when issuance time is unstamped)
   const head = [
     '# AI-Governance Evidence Pack',
     '',
     meta.org ? `**Prepared for:** ${String(meta.org)}` : null,
     meta.order_id ? `**Order:** ${String(meta.order_id)}` : null,
     `**Verdict:** ${decision && decision.admit ? 'ADMIT' : 'BLOCK'} — re-derived under the verifier's pinned keys (the pack carries no verdict).`,
+    ...rl,
     '',
   ].filter((x) => x !== null).join('\n');
   const body = evidence.evidenceReport(pack, decision);
-  return head + body + '\n\n---\n' + DISCLAIMER + '\nTRELYAN Inc.\n';
+  // the advisory only rides along when there IS a dated cadence (it references "the issuance date above").
+  const advisory = rl.length ? `\n\n---\n${REATTEST_ADVISORY}` : '';
+  return head + body + advisory + '\n\n---\n' + DISCLAIMER + '\nTRELYAN Inc.\n';
 }
 
 /** verifyInstructions(meta) — the VERIFY.md the customer follows to re-derive the verdict OFFLINE. */
 export function verifyInstructions(meta = {}) {
+  // cadence anchored to the SAME created_ts bound into the pack (produceDeliverable passes it via opts).
+  const rl = reattestLines({ created_ts: meta.created_ts }, meta);
+  const reattestBlock = rl.length ? `\n${rl.join('\n')}\n\n${REATTEST_ADVISORY}\n` : '';
   return `# Verifying your AI-Governance Evidence Pack (offline)
 
 Your pack carries NO verdict — you re-derive it yourself under the PUBLIC pinned keys in \`config.json\`
@@ -57,7 +96,7 @@ cross-binding invalidates a signature and the pack BLOCKS.
 confirm each pin matches the expected signer's *independently published* key (declarant / evaluator / runner /
 compliance owner) out of band. Optionally, transparency-log inclusion (if the admission was anchored) verifies
 programmatically via \`pqgovern-anchor\` — a separate step this base pack does not require.
-
+${reattestBlock}
 ${meta.order_id ? `Order: ${String(meta.order_id)} · ` : ''}${DISCLAIMER}
 `;
 }
@@ -150,6 +189,17 @@ async function selfTest() {
   ok(d.ok === true && d.decision.admit === true, 'produceDeliverable: builds a pack that SELF-VERIFIES to ADMIT under the config pins');
   ok(/ADMIT/.test(d.report) && /A \(Bound\)/.test(d.report) && /Acme Inc/.test(d.report) && /ord_001/.test(d.report), 'REPORT.md carries the ADMIT verdict, the AIBOM grade, the org, and the order id');
   ok(/NOT a\ncertification/.test(d.report) && /pqgovern-cli\.mjs evidence-pack\.json config\.json/.test(d.verifyMd), 'the honest disclaimer + the offline re-verify command are in the deliverable');
+
+  // 1c. RE-ATTESTATION CADENCE (advisory, anchored to the BOUND created_ts). Unstamped -> invent NO date; stamped ->
+  //     as-of + recommended-by derived from the bound issuance time; ADVISORY (does-not-expire) in BOTH deliverable docs.
+  ok(!/re-attestation after/.test(d.report) && !/Self-attested as-of/.test(d.report), 'no created_ts -> the report invents NO re-attestation date (only a stamped issuance yields a cadence)');
+  const dTs = produceDeliverable({ record: recordJ, signedPolicy: policyJ }, cfgJ, { org: 'Acme Inc', order_id: 'ord_003', created_ts: 1767225600 });
+  ok(dTs.ok === true && /\*\*Self-attested as-of:\*\* 2026-01-01/.test(dTs.report) && /\*\*Recommended next re-attestation after:\*\* 2027-01-01/.test(dTs.report), 'a stamped created_ts (2026-01-01) -> self-attested as-of 2026-01-01 + recommended next re-attestation after 2027-01-01 (365d, derived from the bound issuance time)');
+  ok(/advisory/i.test(dTs.report) && /does NOT expire/.test(dTs.report) && /Self-attested as-of:\*\* 2026-01-01/.test(dTs.verifyMd), 'the cadence is ADVISORY (does-not-expire) and appears in BOTH REPORT.md and VERIFY.md');
+  ok(/181 days after issuance/.test(produceDeliverable({ record: recordJ, signedPolicy: policyJ }, cfgJ, { created_ts: 1767225600, reattest_interval_days: 181 }).report), 'a custom reattest_interval_days (181) flows into the cadence text');
+  // out-of-range created_ts (a seconds-vs-MILLISECONDS fat-finger -> Gregorian year 57971) must NOT invent a garbage date.
+  const dMs = produceDeliverable({ record: recordJ, signedPolicy: policyJ }, cfgJ, { created_ts: 1767225600000 });
+  ok(dMs.ok === true && !/Self-attested as-of/.test(dMs.report) && !/\+0\d{5}/.test(dMs.report) && !/\+0\d{5}/.test(dMs.verifyMd), 'an out-of-range created_ts (ms-epoch fat-finger, year>9999) yields NO cadence + NO malformed date (fmtDay range-guarded)');
 
   // 2. the produced pack re-verifies through the CLI path too (pack carries no verdict; re-derived under the pins)
   const { runAdmission } = await import('./pqgovern-cli.mjs');
