@@ -24,3 +24,7 @@ packages/verify-pqc/_*.mjs
 # Internal audit-strategy / budget docs — keep LOCAL, never publish (standing constraint: business docs stay out of the public repo)
 packages/verify-pqc/AUDIT_OUTREACH.md
 packages/verify-pqc/AUDIT_ENGAGEMENT_KIT.md
+# Local autopilot governance file (approval ladder + owner gates + bridge refs) — NEVER publish to the public MIT repo
+CLAUDE.md
+# Local dev/demo generator (mints the DEMO governance pack into the PRIVATE jarvis-web tree) — keep local
+packages/verify-pqc/gen-sample-governance-pack.mjs
