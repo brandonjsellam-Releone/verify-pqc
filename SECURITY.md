@@ -8,7 +8,7 @@ care about most is **soundness** — anything that makes the tool show a false *
 
 Please report privately — **do not** open a public issue for a security bug:
 - open a **GitHub private security advisory** on this repo (Security → Advisories → Report a vulnerability), **or**
-- email **security@trelyan.foundation** *(ensure this routes to a monitored inbox, or replace with your address)*.
+- email **fondation@trelyan.ch**, subject `SECURITY: verify-pqc`.
 
 Include: what you found, the file/line, a reproduction, and the impact — especially **any path to a
 false-positive verification** (a green verdict an attacker can earn without breaking the intended keys).
