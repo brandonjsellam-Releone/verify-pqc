@@ -11,11 +11,15 @@ on:
     paths: ['packages/verify-pqc/pqcbom-action/**', '.github/workflows/pqcbom-action-selftest.yml']
   workflow_dispatch:
 
+# Least privilege: the self-test only reads the repo and runs the vendored local action.
+permissions:
+  contents: read
+
 jobs:
   selftest:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Scan the vulnerable fixture (grade only, no gate)
         id: vuln
