@@ -1,0 +1,38 @@
+# gitleaks suppressions — FINGERPRINTS ONLY, never file or rule exclusions.
+#
+# A fingerprint pins `commit:path:rule:line`, so a REAL secret added to any of these files
+# tomorrow still fails the scan. Excluding a path or a rule would produce a check that no input
+# could defeat — the defect class this package's own scanner exists to find elsewhere.
+#
+# Describe the trigger; never paste it. Quoting the offending text reproduces the pattern that
+# fired the rule and turns the suppression file into a finding of its own.
+
+# ── The scanner's own detection patterns ──────────────────────────────────────────────────────
+# pqcbom.mjs:94 defines the regex this package uses to RECOGNISE an OpenSSH private key header.
+# A secret scanner reading a secret scanner will always find "secrets"; that is inherent to both
+# tools being correct, not a defect in either.
+#
+# Listed twice because pqcbom.mjs is vendored into pqcbom-action/ as a byte-identical copy. That
+# duplication is tracked separately as TCE-34 — if the copies are ever collapsed, one of these
+# two fingerprints becomes stale and should be deleted rather than left behind.
+bae59e1ff3627d91336706d654403e0eed1eabc4:packages/verify-pqc/pqcbom.mjs:private-key:94
+bae59e1ff3627d91336706d654403e0eed1eabc4:packages/verify-pqc/pqcbom-action/pqcbom.mjs:private-key:94
+
+# pqcbom.mjs:838 sits in a comment block explaining why signature and transport findings are kept
+# in separate buckets. Prose about key material, not key material.
+bae59e1ff3627d91336706d654403e0eed1eabc4:packages/verify-pqc/pqcbom.mjs:private-key:838
+bae59e1ff3627d91336706d654403e0eed1eabc4:packages/verify-pqc/pqcbom-action/pqcbom.mjs:private-key:838
+
+# ── Crypto-inspection code, which necessarily handles crypto-shaped values ────────────────────
+# pqtls.mjs:127 is a self-test assertion pinning the IANA group code and name for the X25519 +
+# ML-KEM-768 hybrid. Fixed public protocol constants.
+27fc7cb14fc580772d5bcc63d398b1b5978bd517:packages/verify-pqc/pqtls.mjs:generic-api-key:127
+
+# pqposture.mjs:131 branches on parsed X.509 fields to classify a certificate's key type. It reads
+# public certificate structure; no private material is present.
+a6a5be8f4ed52cc6acf71ea0a9b75ddff9c434c9:packages/verify-pqc/pqposture.mjs:generic-api-key:131
+
+# ── Documentation ─────────────────────────────────────────────────────────────────────────────
+# API_SERVER_DEPLOY.md:43 is a curl example against a PLACEHOLDER host showing an unauthenticated
+# health endpoint. The rule fires on the shape of a curl invocation; there is no header value.
+a0de639a5d8cb34a01c92c4054f3a789d074deae:packages/verify-pqc/API_SERVER_DEPLOY.md:curl-auth-header:43
