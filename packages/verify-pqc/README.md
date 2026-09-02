@@ -42,8 +42,9 @@ The pack's grade is recomputed from the findings at verify time, so an altered g
 ```js
 const { verifyOnChain } = require('@trelyan/verify-pqc');
 const r = await verifyOnChain('763809096'); // Algorand TestNet app
-// { verified: true, signature: { headerHex:'0xba', totalLen:1236, deterministic:true, fmt:'compressed', logn:10 },
+// { verified: false, heuristicMatch: true, signature: { headerHex:'0xba', totalLen:1236, deterministic:true, fmt:'compressed', logn:10 },
 //   inscriptionBox: true, sigTxid: 'SQEPDOZ4…' }
+// heuristicMatch only; this function does not run falcon_verify
 ```
 
 In the browser, drop in `index.js` and call `verifyPQC.verifyOnChain(appId)` (public CORS-enabled algonode indexer
@@ -80,8 +81,9 @@ compareSigs(sigA, sigB);      // localizes the first divergence to header / salt
 
 `0xBA` = the standard Falcon-1024 compressed header `0x3A` OR'd with a `0x80` bit and a `0x00` version byte that are
 **trelyan-pq's deterministic-wrapper convention — not NIST Round-3 Falcon or FIPS-206 (FN-DSA) fields.**
-`verifyOnChain` trusts the single indexer you point at and reads the contract's write-once `i_` box as proof that
-`falcon_verify` accepted the signature; it does not re-run the opcode locally. Targets Algorand **TestNet**; the
+`verifyOnChain` trusts the single indexer you point at and reports a **heuristic** (Falcon-shaped compressed header +
+write-once `i_` box + allowlist). `heuristicMatch` is not `falcon_verify`; this function does not run the opcode
+locally (no WASM). `verified` is false on this path. Targets Algorand **TestNet**; the
 reference system is **unaudited**. Nothing here is "quantum-safe" or a certification — it's post-quantum tooling you
 can read and re-run yourself.
 

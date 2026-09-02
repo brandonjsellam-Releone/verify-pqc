@@ -64,7 +64,8 @@
   ],
   "scripts": {
     "test": "node test.js",
-    "test:kat": "node test-kat.mjs"
+    "test:kat": "node test-kat.mjs",
+    "test:g2-readme-honesty": "node g2-readme-honesty.mjs"
   },
   "optionalDependencies": {
     "@noble/post-quantum": "^0.6.1",

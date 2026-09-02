@@ -1,0 +1,21 @@
+# Independent of test-all.mjs (that file is also edited by draft PRs #28/#29/#30).
+# Locks the npm/GitHub README so verifyOnChain is not documented as { verified: true }
+# / "i_ box as proof that falcon_verify accepted" from the heuristic.
+name: g2-readme-honesty
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '20'
+      - name: README falcon_verify claim gate
+        run: node packages/verify-pqc/g2-readme-honesty.mjs
