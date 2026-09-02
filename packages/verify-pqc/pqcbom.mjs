@@ -698,14 +698,19 @@ async function selfTest() {
   ok(scanFiles([{ name: 'modern.mjs', text: safe }]).grade.letter === 'A', 'all-PQ-safe file -> grade A');
 
   // G1 / FAIL-TEST: a zero-file or all-zero summary must REFUSE to grade — never A/100.
-  // This assertion FAILs if gradeOf regresses to the vacuous default (score=100, letter A).
+  // A/100 here is a DEFECT (the suite fails). Observed refuse = ungraded + not A + not 100.
   {
+    const defect = (g, m) => {
+      if (g.letter === 'A' || g.score === 100) { fail++; console.error('DEFECT A/100:', m, g); return; }
+      ok(g.ungraded === true && g.letter !== 'A' && g.score !== 100, m);
+    };
     const z0 = gradeOf({ files_scanned: 0, broken_classical: 0, quantum_broken: 0, quantum_weakened: 0, classical_hybrid_ok: 0, quantum_safe: 0 });
-    ok(z0.letter !== 'A' && z0.score !== 100 && z0.ungraded === true, 'FAIL-TEST: gradeOf(zero-file summary) must refuse — not A/100');
+    defect(z0, 'FAIL-TEST: gradeOf(zero-file summary) must refuse — not A/100');
     const zEmpty = gradeOf({});
-    ok(zEmpty.letter !== 'A' && zEmpty.score !== 100 && zEmpty.ungraded === true, 'FAIL-TEST: gradeOf({}) all-zero summary must refuse — not A/100');
+    defect(zEmpty, 'FAIL-TEST: gradeOf({}) all-zero summary must refuse — not A/100');
     const zScan = scanFiles([]);
-    ok(zScan.summary.files_scanned === 0 && zScan.grade.letter !== 'A' && zScan.grade.score !== 100 && zScan.grade.ungraded === true, 'FAIL-TEST: scanFiles([]) must refuse to grade — not A/100');
+    ok(zScan.summary.files_scanned === 0, 'scanFiles([]) files_scanned===0');
+    defect(zScan.grade, 'FAIL-TEST: scanFiles([]) must refuse to grade — not A/100');
     ok(scanFiles([{ name: 'ok.js', text: 'const x = 1;' }]).grade.letter === 'A', 'one examined file with no crypto still grades A (not a false refuse)');
   }
 
