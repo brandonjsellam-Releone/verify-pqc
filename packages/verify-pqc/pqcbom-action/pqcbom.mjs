@@ -481,18 +481,50 @@ export function scanFiles(files, opts = {}) {
   return { summary, grade, findings: findings.sort((a, b) => RISK_ORDER.indexOf(a.risk) - RISK_ORDER.indexOf(b.risk)) };
 }
 
-// A–F Post-Quantum Readiness Scorecard (the viral badge) + a 0–100 score
+// A–F Post-Quantum Readiness Scorecard (the viral badge) + a 0–100 score.
+// Vacuous / zero-file summaries MUST NOT grade A/100 — a scan that examined
+// nothing cannot attest readiness (README + CLI already refuse; gradeOf is the
+// shared source of truth so the Action and scanFiles cannot emit a false A).
+const UNGRADED = Object.freeze({
+  letter: null,
+  score: null,
+  ungraded: true,
+  label: 'Ungraded — no files examined',
+  badge: 'PQ Readiness: ungraded',
+});
+function tallyN(s, k) {
+  const v = s && s[k];
+  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+}
+function isVacuousSummary(s) {
+  if (!s || typeof s !== 'object') return true;
+  const hasFiles = Object.prototype.hasOwnProperty.call(s, 'files_scanned');
+  const files = hasFiles ? tallyN(s, 'files_scanned') : null;
+  const tallies = tallyN(s, 'broken_classical') + tallyN(s, 'quantum_broken') + tallyN(s, 'quantum_weakened') + tallyN(s, 'classical_hybrid_ok') + tallyN(s, 'quantum_safe');
+  // files_scanned === 0 always refuses (even if tallies were stuffed).
+  // all-zero / empty summary (no files_scanned, every tally 0) also refuses —
+  // that is the default-A/100 hole: gradeOf({}) used to return A.
+  // files_scanned missing + non-zero tallies still grades (Evidence-Pack
+  // recompute path: riskTally has no files_scanned).
+  return files === 0 || (tallies === 0 && files == null);
+}
 export function gradeOf(s) {
+  if (isVacuousSummary(s)) return { ...UNGRADED };
+  const broken_classical = tallyN(s, 'broken_classical');
+  const quantum_broken = tallyN(s, 'quantum_broken');
+  const quantum_weakened = tallyN(s, 'quantum_weakened');
+  const classical_hybrid_ok = tallyN(s, 'classical_hybrid_ok');
+  const quantum_safe = tallyN(s, 'quantum_safe');
   let score = 100;
-  score -= 40 * Math.min(s.broken_classical, 2);
-  score -= 12 * Math.min(s.quantum_broken, 5);
-  score -= 4 * Math.min(s.quantum_weakened, 5);
-  score -= 1 * Math.min(s.classical_hybrid_ok, 5);
+  score -= 40 * Math.min(broken_classical, 2);
+  score -= 12 * Math.min(quantum_broken, 5);
+  score -= 4 * Math.min(quantum_weakened, 5);
+  score -= 1 * Math.min(classical_hybrid_ok, 5);
   score = Math.max(0, score);
   let letter;
-  if (s.broken_classical > 0) letter = 'F';
-  else if (s.quantum_broken > 0) letter = s.quantum_safe >= s.quantum_broken ? 'C' : 'D';
-  else if (s.quantum_weakened > 0) letter = 'B';
+  if (broken_classical > 0) letter = 'F';
+  else if (quantum_broken > 0) letter = quantum_safe >= quantum_broken ? 'C' : 'D';
+  else if (quantum_weakened > 0) letter = 'B';
   else letter = 'A';
   const labels = { A: 'Post-Quantum Readiness', B: 'Quantum-weakened (Grover)', C: 'Migrating (hybrid present)', D: 'Quantum-vulnerable — migrate', F: 'Critical — broken crypto in use' };
   return { letter, score, label: labels[letter], badge: 'PQ Readiness: ' + letter };
@@ -664,6 +696,23 @@ async function selfTest() {
   // grading: the vulnerable file -> F (MD5 broken); the safe file -> A
   ok(scanFiles([{ name: 'legacy.js', text: vulnerable }]).grade.letter === 'F', 'vulnerable file -> grade F (critical)');
   ok(scanFiles([{ name: 'modern.mjs', text: safe }]).grade.letter === 'A', 'all-PQ-safe file -> grade A');
+
+  // G1 / FAIL-TEST: a zero-file or all-zero summary must REFUSE to grade — never A/100.
+  // A/100 here is a DEFECT (the suite fails). Observed refuse = ungraded + not A + not 100.
+  {
+    const defect = (g, m) => {
+      if (g.letter === 'A' || g.score === 100) { fail++; console.error('DEFECT A/100:', m, g); return; }
+      ok(g.ungraded === true && g.letter !== 'A' && g.score !== 100, m);
+    };
+    const z0 = gradeOf({ files_scanned: 0, broken_classical: 0, quantum_broken: 0, quantum_weakened: 0, classical_hybrid_ok: 0, quantum_safe: 0 });
+    defect(z0, 'FAIL-TEST: gradeOf(zero-file summary) must refuse — not A/100');
+    const zEmpty = gradeOf({});
+    defect(zEmpty, 'FAIL-TEST: gradeOf({}) all-zero summary must refuse — not A/100');
+    const zScan = scanFiles([]);
+    ok(zScan.summary.files_scanned === 0, 'scanFiles([]) files_scanned===0');
+    defect(zScan.grade, 'FAIL-TEST: scanFiles([]) must refuse to grade — not A/100');
+    ok(scanFiles([{ name: 'ok.js', text: 'const x = 1;' }]).grade.letter === 'A', 'one examined file with no crypto still grades A (not a false refuse)');
+  }
 
   // CycloneDX CBOM shape
   const cbom = toCycloneDX(scanFiles([{ name: 'legacy.js', text: vulnerable }]));

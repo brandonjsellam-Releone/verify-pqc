@@ -17,6 +17,9 @@ export const PREVIEW_NOTICE = 'PREVIEW — built on @trelyan/verify-pqc (UNAUDIT
 
 // shields.io endpoint schema — README badge via https://img.shields.io/endpoint?url=<this JSON>. JSON only, no SVG.
 export function scorecardBadge(grade) {
+  if (!grade || grade.ungraded || grade.letter == null) {
+    return { schemaVersion: 1, label: 'PQ Readiness', message: 'ungraded', color: 'lightgrey' };
+  }
   return { schemaVersion: 1, label: 'PQ Readiness', message: grade.letter + ' (' + grade.score + ')', color: GRADE_COLOR[grade.letter] || 'lightgrey' };
 }
 
@@ -85,6 +88,9 @@ function selfTest() {
   const rS = handleScan(safe, { full: true });
   ok(rS.scorecard.grade === 'A' && rS.badge.color === 'brightgreen', 'all-PQ-safe scan -> grade A, brightgreen badge');
   ok(rS.cbom && rS.cbom.bomFormat === 'CycloneDX' && Array.isArray(rS.findings), 'paid tier (full) includes the CycloneDX CBOM + findings');
+
+  const rEmpty = handleScan([]);
+  ok(rEmpty.scorecard.grade == null && rEmpty.scorecard.score == null && rEmpty.badge.message === 'ungraded', 'empty file list -> ungraded (never A/100)');
 
   // CI policy gate
   ok(handleScan(vuln, { policy: { failOn: ['broken-classical'] } }).gate.pass === false, 'policy gate fails the build on broken-classical (MD5)');

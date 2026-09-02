@@ -2,16 +2,27 @@
  *  writes the shields badge endpoint, sets outputs/step-summary, and fails the build per policy. */
 import { scanDirectory, toCycloneDX, toSARIF } from './pqcbom.mjs';      // vendored (zero-dep) — see vendor.sh
 import { scorecardBadge, policyGate } from './action-lib.mjs';           // zero-dep subset of pqcbom-server (no @noble)
-import { writeFileSync, appendFileSync } from 'fs';
+import { writeFileSync, appendFileSync, existsSync, statSync } from 'fs';
 
 const path = process.env.INPUT_PATH || '.';
 const failOn = (process.env['INPUT_FAIL-ON'] ?? 'broken-classical').split(',').map((s) => s.trim()).filter(Boolean);
 const minGrade = (process.env['INPUT_MIN-GRADE'] || '').trim();
 const excludePaths = (process.env.INPUT_EXCLUDE || '').split(',').map((s) => s.trim()).filter(Boolean); // v0.10 path excludes (also honored from .pqcbomignore path lines)
 
+// FAIL CLOSED on a bad target — same as pqcbom-cli (a missing path must never scan nothing and emit A).
+if (!existsSync(path) || !statSync(path).isDirectory()) {
+  console.error(`pqcbom: '${path}' is not a directory. Usage: path input defaults to '.', there is no 'scan' subcommand.`);
+  process.exit(2);
+}
+
 // CI gate grades on CODE occurrences (a comment that mentions "MD5" should not fail a build); the full report still
 // lists comment/doc mentions as 'informational'. (A one-time assessment uses the conservative total-count default.)
 const r = await scanDirectory(path, { gradeContext: 'code', excludePaths });
+// Align with CLI: a scan that examined ZERO files cannot attest readiness — refuse (exit 2), never emit A/100.
+if (r.summary.files_scanned === 0 || r.grade.ungraded) {
+  console.error(`pqcbom: scanned 0 files under '${path}' — no readiness grade emitted (nothing was examined). Check the path points at source code.`);
+  process.exit(2);
+}
 writeFileSync('cbom.cdx.json', JSON.stringify(toCycloneDX(r), null, 2));
 writeFileSync('pq-readiness-badge.json', JSON.stringify(scorecardBadge(r.grade)));
 // SARIF for GitHub code-scanning — findings appear in the Security tab + as inline PR annotations (paths repo-relative)

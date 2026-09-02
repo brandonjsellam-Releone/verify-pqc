@@ -1,0 +1,1 @@
+# Empty fixture: no scannable source. A zero-file scan must refuse to grade (never A).

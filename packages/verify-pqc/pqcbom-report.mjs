@@ -128,7 +128,9 @@ export function verifyEvidencePack(pack, trustedSignerPub, opts = {}) {
     const rt = riskTally(pack.findings || [], ctx);
     const keys = ['broken_classical', 'quantum_broken', 'quantum_weakened', 'classical_hybrid_ok', 'quantum_safe'];
     const summaryConsistent = !!pack.summary && keys.every((k) => rt[k] === pack.summary[k]);
-    const recomputed = gradeOf(rt); // grade from the FINDINGS-derived tallies, not the (untrusted) stated summary
+    // Pass files_scanned so a real clean scan (files>0, no findings) still grades A, while a
+    // zero-file pack claiming A is caught (gradeOf refuses when files_scanned===0).
+    const recomputed = gradeOf({ ...rt, files_scanned: pack.summary && pack.summary.files_scanned });
     const gradeConsistent = summaryConsistent && recomputed.letter === pack.grade.letter && recomputed.score === pack.grade.score;
     const coreBytes = utf8ToBytes(canon(evidenceCore(pack)));
     // ML-DSA-87 (primary)
@@ -228,6 +230,17 @@ function selfTest() {
   ok(verifyEvidencePack(evil, undefined, { requirePinned: true }).verified === false, 'requirePinned -> unpinned self-signed pack is NOT verified');
   ok(verifyEvidencePack(signed, signer.publicKey).trustAnchored === true, 'pinned verify under the real key -> trustAnchored=TRUE');
   ok(verifyEvidencePack(evil, signer.publicKey).verified === false, 'attacker pack under the REAL pinned key -> verify FAILS');
+
+  // zero-file / clean-scan grade recompute: a real 1-file no-crypto pack still verifies as A;
+  // a signed zero-file pack that claims A is caught by gradeOf refuse.
+  const cleanScan = scanFiles([{ name: 'ok.js', text: 'const x = 1;' }]);
+  const cleanSigned = signEvidencePack(buildEvidencePack({ scan: cleanScan, meta: { org: 'clean', generated_ts: 1 } }), signer.secretKey, signer.publicKey);
+  ok(cleanScan.grade.letter === 'A' && cleanScan.summary.files_scanned === 1, 'one examined file with no crypto grades A');
+  ok(verifyEvidencePack(cleanSigned, signer.publicKey).verified === true, 'clean-scan evidence pack still verifies after zero-file refuse');
+  const emptyScan = scanFiles([]);
+  ok(emptyScan.grade.ungraded === true && emptyScan.grade.letter !== 'A', 'empty scan is ungraded (not A)');
+  const claimedA = signEvidencePack(buildEvidencePack({ scan: { ...emptyScan, grade: { letter: 'A', score: 100, label: 'x', badge: 'x' } }, meta: { org: 'empty', generated_ts: 1 } }), signer.secretKey, signer.publicKey);
+  ok(verifyEvidencePack(claimedA, signer.publicKey).verified === false, 'signed zero-file pack claiming A fails grade recompute');
 
   console.log('pqcbom-report self-test: ' + pass + ' pass, ' + fail + ' fail');
   if (typeof process !== 'undefined' && process.exit) process.exit(fail ? 1 : 0);
