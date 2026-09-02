@@ -1,8 +1,8 @@
 var INDEXER="/api/pq/idx";
 var THRONDAR="/api/pq/throndar";
-// TRELYAN inscription contracts whose TEAL gates the write-once i_ box on falcon_verify.
-// App-ids are chain-assigned + unforgeable, so a box / Falcon-shaped arg on any OTHER app
-// proves nothing about falcon_verify — the green "verified" verdict is gated on this set.
+// Local allowlist for the heuristic only. This page does not run falcon_verify
+// (no opcode, no WASM) and must not paint a green "verified" verdict from
+// header nibble + i_ box + allowlist.
 var RECOGNIZED_APPS=new Set(["763809096","764917520"]);
 var out=document.getElementById("out"), kind=document.getElementById("kind"), note=document.getElementById("note"), btn=document.getElementById("go"), q=document.getElementById("q");
 
@@ -36,7 +36,7 @@ async function verifyOnChain(app){
   });
   var insc=false;try{var bx=await fetch(INDEXER+"/v2/applications/"+encodeURIComponent(app)+"/boxes?limit=100").then(function(r){return r.json();});insc=(bx.boxes||[]).some(function(x){var n=b64(x.name);return n.length>=2&&n[0]===0x69&&n[1]===0x5f;});}catch(e){}
   var recognized=RECOGNIZED_APPS.has(String(app));
-  return {app:app,sig:sig,txid:txid,pub:pub,insc:insc,recognized:recognized,verified:!!(sig&&insc&&recognized)};
+  return {app:app,sig:sig,txid:txid,pub:pub,insc:insc,recognized:recognized,heuristicMatch:!!(sig&&insc&&recognized)};
 }
 
 async function verifyThrondar(input,isBundle){
@@ -55,11 +55,11 @@ function light(state,title,sub){
 }
 
 function renderOnChain(r){
-  var pq = r.sig ? "on" : "warn";
-  var anchor = r.verified ? "on" : "warn";
-  var anchorSub = r.verified ? "write-once inscription on a recognized TRELYAN app"
-    : (r.insc && !r.recognized) ? "i_ box present, but NOT a recognized TRELYAN app — self-reported, not verified"
-    : (r.sig ? "signature on chain, box unconfirmed" : "none");
+  var pq = r.sig ? "warn" : "warn";
+  var anchor = "warn";
+  var anchorSub = r.heuristicMatch ? "heuristic: shape + i_ box + allowlist — this page does not run falcon_verify"
+    : (r.insc && !r.recognized) ? "i_ box present, not on allowlist — still not falcon_verify"
+    : (r.sig ? "Falcon-shaped arg; i_ box missing — not falcon_verify" : "none");
   out.innerHTML =
     '<div class="lights">'
     + light("warn","Provenance","on-chain mode — no AI receipt provided")
@@ -75,7 +75,7 @@ function renderOnChain(r){
     + '<div class="links">'
     + (r.txid?'<a target="_blank" rel="noopener" href="https://lora.algokit.io/testnet/transaction/'+esc(r.txid)+'">Signing txn ↗</a>':"")
     + '<a target="_blank" rel="noopener" href="https://lora.algokit.io/testnet/application/'+esc(r.app)+'">App '+esc(r.app)+' ↗</a></div>';
-  note.innerHTML='<b class="gold">Reading.</b> On-chain turns green only for a <b>recognized TRELYAN app</b> ('+Array.from(RECOGNIZED_APPS).join(", ")+') whose contract writes the <code>i_</code> box only after <code>falcon_verify</code> passes — a box on any other app does not imply that, so it shows as self-reported. <code>0xBA</code> is trelyan-pq\'s deterministic-wrapper convention, not a NIST/FIPS field. TestNet, unaudited; reflects one indexer.';
+  note.innerHTML='<b class="gold">Reading.</b> On-chain here is a heuristic only (Falcon-shaped header + <code>i_</code> box + allowlist '+Array.from(RECOGNIZED_APPS).join(", ")+'). This page does not run <code>falcon_verify</code> (no opcode, no WASM) and does not paint a verified / opcode-accepted verdict. <code>0xBA</code> is trelyan-pq\'s deterministic-wrapper convention, not a NIST/FIPS field. TestNet, unaudited; reflects one indexer.';
 }
 
 function renderThrondar(input, t){

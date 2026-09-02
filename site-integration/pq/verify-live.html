@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>TRELYAN — Live post-quantum verifier</title>
-<meta name="description" content="Enter an Algorand application id; this page queries a public indexer in your browser, decodes the on-chain Falcon-1024 signature, and shows whether falcon_verify accepted it. TestNet, unaudited. No backend, no trust in us — the bytes come straight from the chain." />
+<meta name="description" content="Enter an Algorand application id. This page queries a public indexer, looks for a Falcon-shaped application-arg (header nibble / length), an i_ box, and whether the app-id is on a local allowlist. It does not run falcon_verify (no opcode, no WASM). TestNet, unaudited." />
 <meta name="theme-color" content="#0A0E1F" />
 <style>
   :root{ --bg:#0A0E1F; --panel:#10162E; --line:rgba(217,198,144,.18); --gold:#D9C690; --txt:#E8EAF2; --mut:#9AA0B6; --ok:#5DCAA5; --warn:#EF9F27; --bad:#E24B4A; --mono:'JetBrains Mono',ui-monospace,Menlo,monospace; }
@@ -42,7 +42,7 @@
 <div class="wrap">
   <p class="eyebrow">Reproducibility · live</p>
   <h1>Verify a post-quantum signature, <em>from the chain.</em></h1>
-  <p class="lede">Enter an Algorand application id. Your browser queries a public indexer directly, ABI-decodes the on-chain Falcon-1024 signature, and checks whether <code>falcon_verify</code> accepted it. No backend of ours sits in the middle — the bytes come straight from Algorand.</p>
+  <p class="lede">Enter an Algorand application id. Your browser queries a public indexer, looks for a Falcon-shaped application-arg (header nibble / length), an <code>i_</code> box, and whether the app-id is on this page's allowlist. This page does not run <code>falcon_verify</code> (no opcode, no WASM) and does not invent a TestNet result.</p>
 
   <div class="badges">
     <span>NETWORK · ALGORAND TESTNET</span>

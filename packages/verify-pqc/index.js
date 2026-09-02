@@ -69,9 +69,9 @@
     return { identical: identical, lenA: a.length, lenB: b.length, firstDiffOffset: first, diffRegion: region, summary: summary };
   }
 
-  // Verify an Algorand app's post-quantum inscription straight from a public indexer.
-  // NOTE: trusts the single indexer you point at; it does not re-run falcon_verify locally.
-  // The write-once `i_` box is the contract's own proof that falcon_verify accepted the sig.
+  // Inspect an Algorand app from a public indexer.
+  // NOTE: trusts the single indexer you point at. Does not run falcon_verify
+  // (no opcode, no WASM) and must not report verified:true from the heuristic.
   async function verifyOnChain(appId, opts) {
     opts = opts || {};
     var indexer = (opts.indexer || 'https://testnet-idx.algonode.cloud').replace(/\/$/, '');
@@ -94,25 +94,25 @@
       boxes = (bx.boxes || []).map(function (b) { return b64ToBytes(b.name); });
     } catch (e) { /* boxes optional */ }
     var inscription = boxes.some(function (n) { return n.length >= 2 && n[0] === 0x69 && n[1] === 0x5f; }); // "i_"
-    // Only recognized TRELYAN contracts gate their i_ box on falcon_verify. App-ids are
-    // chain-assigned and unforgeable, so a box / Falcon-shaped arg on ANY OTHER app proves
-    // nothing about falcon_verify — the "verified" verdict is gated on this set.
+    // Allowlist scopes the heuristic only. This function does not run falcon_verify.
     var recognizedApps = (opts.recognizedApps || ['763809096', '764917520']).map(String);
     var recognized = recognizedApps.indexOf(String(appId)) !== -1;
-    var verified = !!(sigInfo && sigInfo.fmt === 'compressed' && sigInfo.logn === 10 && inscription && recognized);
+    var heuristicMatch = !!(sigInfo && sigInfo.fmt === 'compressed' && sigInfo.logn === 10 && inscription && recognized);
+    var verified = false; // G2: heuristic conjuncts are not a falcon_verify result
     return {
       appId: String(appId), indexer: indexer, verified: verified, recognized: recognized,
+      heuristicMatch: heuristicMatch,
       signature: sigInfo, signatureHex: sig ? bytesToHex(sig) : null,
       sigTxid: sigTxid, sigRound: sigRound, pubkey: pubkey, pubkeyTxid: pubTxid,
       inscriptionBox: inscription, boxCount: boxes.length,
-      claim: verified
-        ? 'App ' + appId + ' is a recognized TRELYAN inscription contract with a Falcon-1024 signature and a write-once box (written only after falcon_verify passes), so the opcode accepted this signature.'
+      claim: heuristicMatch
+        ? 'Heuristic match only (Falcon-shaped compressed header, i_ box, recognized app-id). This function does not run falcon_verify (no opcode, no WASM) and does not invent an on-chain opcode result.'
         : (inscription && !recognized
-          ? 'App ' + appId + ' has an i_ box and a Falcon-shaped arg, but it is NOT a recognized TRELYAN contract — on an arbitrary app a box does not imply falcon_verify ran, so this is self-reported, not verified.'
+          ? 'App ' + appId + ' has an i_ box and a Falcon-shaped arg, but it is not on the local allowlist. A box is not falcon_verify; this function does not run the opcode.'
           : (sigInfo
-            ? 'A Falcon-1024 signature is on chain, but no write-once inscription box on a recognized app confirms the verify path ran.'
-            : 'No Falcon-1024 signature found in the last 100 application calls.')),
-      disclaimer: 'Reflects one indexer\'s view of Algorand TestNet; unaudited. "verified" requires a recognized TRELYAN app-id (' + recognizedApps.join(', ') + '). 0xBA is trelyan-pq\'s deterministic-wrapper convention, not a NIST/FIPS field.'
+            ? 'A Falcon-shaped arg is on chain; no i_ box on an allowlisted app. This function does not run falcon_verify.'
+            : 'No Falcon-shaped application-arg found in the last 100 application calls.')),
+      disclaimer: 'Reflects one indexer\'s view of Algorand TestNet; unaudited. verified is never true here — this library does not run falcon_verify. Heuristic conjuncts: header shape + i_ box + allowlist (' + recognizedApps.join(', ') + '). 0xBA is trelyan-pq\'s deterministic-wrapper convention, not a NIST/FIPS field.'
     };
   }
 

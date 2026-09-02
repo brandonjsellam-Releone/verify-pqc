@@ -22,8 +22,7 @@ ok(dec.length === 1236 && dec[0] === 0xBA, 'abiDecodeBytes');
 ok(F.compareSigs(det, det).identical, 'compare identical');
 ok(F.compareSigs(det, rnd).diffRegion === 'header', 'compare header diff');
 
-// --- false-verify regression (offline, mocked indexer): a sig + i_ box on an UNRECOGNIZED
-//     app must NOT verify; the same on a recognized app must verify. Guards the soundness fix. ---
+// --- G2: heuristic-only is never falcon_verify-accepted (offline, mocked indexer). ---
 function mockFetch() {
   const sig = new Uint8Array(1236); sig[0] = 0xBA;            // Falcon-shaped arg
   const sigB64 = Buffer.from(sig).toString('base64');
@@ -35,10 +34,13 @@ function mockFetch() {
 
 (async function () {
   const attacker = await F.verifyOnChain('999999999', { fetch: mockFetch() });
-  ok(attacker.verified === false && attacker.recognized === false && attacker.inscriptionBox === true,
-     'unrecognized app with sig+box is NOT verified (false-verify guard)');
+  ok(attacker.verified === false && attacker.recognized === false && attacker.inscriptionBox === true && attacker.heuristicMatch === false,
+     'unrecognized app with sig+box is NOT falcon_verify-accepted');
   const legit = await F.verifyOnChain('763809096', { fetch: mockFetch() });
-  ok(legit.verified === true && legit.recognized === true, 'recognized app with sig+box verifies');
+  ok(legit.verified === false && legit.heuristicMatch === true && legit.recognized === true,
+     'recognized app with sig+box is heuristic-only — not falcon_verify-accepted');
+  ok(!/opcode accepted|falcon_verify accepted/i.test(legit.claim || ''),
+     'SDK claim does not paint falcon_verify-accepted from the heuristic');
 
   console.log('unit:', pass, 'pass,', fail, 'fail');
 
@@ -54,7 +56,8 @@ function mockFetch() {
       verified: r.verified, header: r.signature && r.signature.headerHex,
       len: r.signature && r.signature.totalLen, box: r.inscriptionBox, pubkey: r.pubkey, txid: r.sigTxid
     }, null, 2));
-    ok(r.verified === true, 'live verified');
+    ok(r.verified === false, 'live does not paint falcon_verify-accepted from the heuristic');
+    ok(r.heuristicMatch === true, 'live heuristic conjuncts may match; that is not an opcode result');
     ok(r.signature && r.signature.headerHex === '0xba' && r.signature.totalLen === 1236, 'live 0xBA/1236');
     ok(r.inscriptionBox === true && r.pubkey === true, 'live box+pubkey');
     console.log(fail === 0 ? 'ALL SDK TESTS PASS (' + pass + ')' : 'SOME TESTS FAILED (' + fail + ')');

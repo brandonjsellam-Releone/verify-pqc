@@ -7,10 +7,10 @@
 <section class="field" aria-labelledby="liveTitle">
   <div class="section-label">Live <span class="num">§ I·b</span></div>
   <h2 id="liveTitle">Don't take our word — <em>check it now.</em></h2>
-  <p>This runs entirely in your browser. It queries a public Algorand indexer directly,
-     ABI-decodes the on-chain Falcon-1024 signature, and confirms the write-once inscription
-     box exists — the box the contract writes only after <code>falcon_verify</code> succeeds.
-     No server of ours sits in the middle.</p>
+  <p>This runs entirely in your browser. It queries a public Algorand indexer and
+     reports a heuristic: Falcon-shaped application-arg (header nibble / length),
+     an <code>i_</code> box, and this snippet's allowlist. It does not run
+     <code>falcon_verify</code> (no opcode, no WASM) and does not invent an opcode result.</p>
 
   <style>
     .tlv-card{background:rgba(255,255,255,.02);border:1px solid rgba(217,198,144,.18);border-radius:14px;padding:18px;margin-top:18px}
@@ -53,13 +53,13 @@
         });
       });
       var insc=false;try{var bx=await fetch(IDX+"/v2/applications/"+encodeURIComponent(app)+"/boxes?limit=100").then(function(r){return r.json();});insc=(bx.boxes||[]).some(function(x){var n=b64(x.name);return n.length>=2&&n[0]===0x69&&n[1]===0x5f;});}catch(e){}
-      return {sig:sig,txid:txid,pub:pub,insc:insc,verified:!!(sig&&insc)};
+      return {sig:sig,txid:txid,pub:pub,insc:insc,heuristicMatch:!!(sig&&insc)};
     }
     function render(app,r){
       if(!r.sig){out.innerHTML='<div class="tlv-verdict"><span class="tlv-dot" style="background:#EF9F27"></span><span class="tlv-warn">No Falcon signature found</span></div>';return;}
-      var ok=r.verified,color=ok?"#5DCAA5":"#EF9F27";
-      out.innerHTML='<div class="tlv-verdict"><span class="tlv-dot" style="background:'+color+'"></span><span class="'+(ok?"tlv-ok":"tlv-warn")+'">'+(ok?"Post-quantum signature accepted on-chain":"Falcon signature found — acceptance unconfirmed")+'</span></div>'
-        +'<p class="tlv-mut" style="margin:0">'+(ok?"The write-once inscription box exists, so falcon_verify accepted this signature.":"A Falcon-1024 signature is on chain, but no write-once box confirmed the verify path.")+'</p>'
+      var hit=r.heuristicMatch,color="#EF9F27";
+      out.innerHTML='<div class="tlv-verdict"><span class="tlv-dot" style="background:'+color+'"></span><span class="tlv-warn">'+(hit?"Heuristic match — this snippet does not run falcon_verify":"Falcon-shaped arg — i_ box missing")+'</span></div>'
+        +'<p class="tlv-mut" style="margin:0">'+(hit?"Header nibble/length plus an i_ box matched. That is not an opcode result — no falcon_verify, no WASM.":"A Falcon-shaped arg is on chain; no i_ box. This snippet does not run falcon_verify.")+'</p>'
         +'<div class="tlv-grid">'
         +'<div class="tlv-stat"><div class="k">Header</div><div class="v tlv-gold">'+r.sig.h+'</div></div>'
         +'<div class="tlv-stat"><div class="k">Size</div><div class="v">'+r.sig.len+' B</div></div>'
