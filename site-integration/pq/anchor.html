@@ -43,7 +43,7 @@
   <div class="layers">
     <div class="layer"><div class="t">Layer 1 · THRONDAR</div><h3>Signed tree head</h3><p>RFC-6962 log of post-quantum-signed AI answers, tree head signed with ML-DSA-87.</p></div>
     <div class="link-mid" aria-hidden="true">⟶</div>
-    <div class="layer"><div class="t">Layer 2 · Algorand</div><h3>Falcon inscription</h3><p>The tree-head commitment, write-once on a public chain, verified by <code>falcon_verify</code>.</p></div>
+    <div class="layer"><div class="t">Layer 2 · Algorand</div><h3>Falcon inscription</h3><p>The tree-head commitment, write-once on a public chain. This page checks a recognized app-id, the <code>inscribe()</code> selector, and a 32-byte commit match. It does not run <code>falcon_verify</code>.</p></div>
   </div>
 
   <h2>Live signed tree head</h2>
@@ -55,7 +55,7 @@
   <h2>Inscribed anchors</h2>
   <div class="panel" id="anchorsPanel"><p class="mut">checking…</p></div>
 
-  <p class="note" id="note"><b class="gold">Honest scope.</b> Algorand <b>TestNet</b>, unaudited. The commitment is <code>sha512_256("TRELYAN-ANCHOR-v1" ‖ log ‖ tree_size ‖ root ‖ timestamp)</code> — recomputed here in your browser and identical to <code>anchor_sth.py</code>. Inscribing an anchor is a gated owner step (it Falcon-signs + spends); this page never holds a key. A compromise of one layer alone cannot rewrite an anchored tree head.</p>
+  <p class="note" id="note"><b class="gold">Honest scope.</b> Algorand <b>TestNet</b>, unaudited. The commitment is <code>sha512_256("TRELYAN-ANCHOR-v1" ‖ log ‖ tree_size ‖ root ‖ timestamp)</code> — recomputed here in your browser and identical to <code>anchor_sth.py</code>. This UI does not run <code>falcon_verify</code> and does not verify ML-DSA: a Layer 2 match is recognized app-id + <code>inscribe()</code> selector + 32-byte commit; a truthy sig field is presence only. Layer 1 verify lives at <a class="gold" href="./sth-verify.html">sth-verify.html</a>. Inscribing an anchor is a gated owner step; this page never holds a key. A compromise of one layer alone cannot rewrite an anchored tree head.</p>
 </div>
 
 <script src="vendor/sha512.min.js"></script>
