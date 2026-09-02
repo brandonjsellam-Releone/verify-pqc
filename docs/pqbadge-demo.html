@@ -16,8 +16,8 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>pqBadge — <em>verified on-chain, live.</em></h1>
-  <p class="mut">One attribute + one script. Each pill queries Algorand in your browser and proves the post-quantum signature was accepted on-chain. TestNet, unaudited.</p>
+  <h1>pqBadge — <em>heuristic, not falcon_verify.</em></h1>
+  <p class="mut">One attribute + one script. Each pill queries Algorand in your browser and reports a Falcon-shaped header, an <code>i_</code> box, and allowlist membership. It does not run <code>falcon_verify</code>. TestNet, unaudited.</p>
 
   <div class="row"><span class="lbl">Live inscription (app 763809096)</span><span data-pq-app="763809096"></span></div>
   <div class="row"><span class="lbl">App with no inscription</span><span data-pq-app="1"></span></div>
@@ -26,7 +26,7 @@
   <h2 style="font-weight:500;font-size:18px">Embed</h2>
   <pre>&lt;span data-pq-app="763809096"&gt;&lt;/span&gt;
 &lt;script src="https://trelyan.foundation/pqbadge.js"&gt;&lt;/script&gt;</pre>
-  <p class="mut">Options: <code>data-pq-indexer</code>, <code>data-pq-network</code> (default <code>testnet</code>). States: verifying · verified · unconfirmed · error.</p>
+  <p class="mut">Options: <code>data-pq-indexer</code>, <code>data-pq-network</code> (default <code>testnet</code>). States: checking heuristic · heuristic match · no i_ box · error. Never paints an opcode-accepted verdict.</p>
 </div>
 <script src="./pqbadge.js"></script>
 </body>

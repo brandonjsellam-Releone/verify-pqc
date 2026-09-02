@@ -1,8 +1,7 @@
 const INDEXER = "/api/pq/idx";
-// Only these app-ids are TRELYAN inscription contracts whose TEAL gates the write-once
-// i_ box on falcon_verify. App-ids are chain-assigned and unforgeable, so an attacker
-// cannot present their own app as one of these. A box / Falcon-shaped arg on ANY OTHER
-// app proves nothing about falcon_verify — so the "accepted" verdict is gated on this set.
+// Allowlist for the local heuristic only. This page does not run falcon_verify
+// (no opcode, no WASM) and must not paint an "accepted" / "verified" verdict
+// from header nibble + i_ box + allowlist.
 const RECOGNIZED_APPS = new Set(["763809096","764917520"]);
 const out = document.getElementById("out");
 const note = document.getElementById("note");
@@ -32,28 +31,28 @@ async function verify(app){
 function render(app, r){
   if(!r.sig){
     out.innerHTML = `<div class="verdict"><span class="dot" style="background:var(--warn)"></span><span class="warn">No Falcon signature found</span></div>
-      <p class="muted">No application-arg in the last 100 calls decodes as a Falcon-1024 signature. Check the app id, or this app may not use <code>falcon_verify</code>.</p>`;
+      <p class="muted">No application-arg in the last 100 calls matches this page's Falcon-shaped length/header heuristic. This page does not run <code>falcon_verify</code>.</p>`;
     return;
   }
   const s=r.sig;
   const recognized = RECOGNIZED_APPS.has(String(app));
   const standard = s.compressed && s.logn===10;
-  const verified = standard && r.insc && recognized; // only a recognized TRELYAN contract gates its i_ box on falcon_verify
+  const heuristicMatch = standard && r.insc && recognized; // header nibble/length + i_ box + allowlist — not falcon_verify
   const selfReported = standard && r.insc && !recognized;
-  const dot = verified ? "var(--ok)" : "var(--warn)";
-  const headline = verified
-    ? `<span class="ok">Post-quantum signature accepted on-chain</span>`
+  const dot = "var(--warn)";
+  const headline = heuristicMatch
+    ? `<span class="warn">Heuristic match — this page does not run falcon_verify</span>`
     : selfReported
-      ? `<span class="warn">Unrecognized app — self-reported, not verified</span>`
-      : `<span class="warn">Falcon signature found — acceptance not confirmed</span>`;
+      ? `<span class="warn">Unrecognized app — shape + i_ box only</span>`
+      : `<span class="warn">Falcon-shaped arg — i_ box or allowlist missing</span>`;
   const detTxt = s.det ? `deterministic (0x80 wrapper bit set)` : `randomized`;
   out.innerHTML = `
     <div class="verdict"><span class="dot" style="background:${dot}"></span>${headline}</div>
-    <p class="muted" style="margin:0 0 4px">${verified
-      ? `App ${esc(app)} is a recognized TRELYAN inscription contract — it writes the write-once box only after <code>falcon_verify</code> succeeds, so the opcode accepted this signature.`
+    <p class="muted" style="margin:0 0 4px">${heuristicMatch
+      ? `App ${esc(app)} matched this page's heuristic: Falcon-shaped header (nibble/length), an <code>i_</code> box, and the local allowlist. That is not an opcode result — no <code>falcon_verify</code>, no WASM.`
       : selfReported
-        ? `This app has an <code>i_</code> box and a Falcon-shaped arg, but it is <b>not</b> a recognized TRELYAN contract. On an arbitrary app a box does <b>not</b> imply <code>falcon_verify</code> ran — treat this as the app's self-report, not a verified acceptance.`
-        : `A Falcon-1024 signature is on chain, but no write-once inscription box was found to confirm the verify path ran.`}</p>
+        ? `This app has an <code>i_</code> box and a Falcon-shaped arg, but it is <b>not</b> on this page's allowlist. A box does <b>not</b> imply <code>falcon_verify</code> ran — and this page does not run the opcode.`
+        : `A Falcon-shaped application-arg is on chain, but this page did not find an <code>i_</code> box. That absence is not an opcode result either.`}</p>
     <div class="grid">
       <div class="stat"><div class="k">Header byte</div><div class="v gold">${s.hex}</div></div>
       <div class="stat"><div class="k">Format</div><div class="v">${s.compressed?"compressed":"?"} · logn ${s.logn}</div></div>
@@ -66,7 +65,7 @@ function render(app, r){
       ${r.sigTxid?`<a href="https://lora.algokit.io/testnet/transaction/${esc(r.sigTxid)}" target="_blank" rel="noopener">Signing txn ↗</a>`:""}
       <a href="https://lora.algokit.io/testnet/application/${esc(app)}" target="_blank" rel="noopener">App ${esc(app)} ↗</a>
     </div>`;
-  note.innerHTML = `<b class="gold">How to read this.</b> <code>0xBA</code> = standard Falcon-1024 compressed header <code>0x3A</code> (high-nibble compressed, low-nibble logn 10) OR'd with a <code>0x80</code> bit and a <code>0x00</code> version byte that are <em>trelyan-pq's deterministic wrapper convention — not a NIST Falcon / FIPS-206 field</em>. The AVM <code>falcon_verify</code> opcode accepts it because it length-checks only the 1793-byte public key, not the signature. Algorand TestNet, unaudited.`;
+  note.innerHTML = `<b class="gold">How to read this.</b> This page reports three conjuncts only: Falcon-shaped header (nibble/length), an <code>i_</code> box, and allowlist membership (${Array.from(RECOGNIZED_APPS).join(", ")}). It does not run <code>falcon_verify</code> (no opcode, no WASM) and does not invent an on-chain opcode result. <code>0xBA</code> is trelyan-pq's deterministic-wrapper convention, not a NIST/FIPS field. Algorand TestNet, unaudited.`;
 }
 
 async function run(){

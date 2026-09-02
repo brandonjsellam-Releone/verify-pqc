@@ -1,18 +1,16 @@
 /*!
- * pqBadge — drop-in live "post-quantum verified on-chain" pill. MIT.
+ * pqBadge — drop-in pill for the public heuristic (shape + i_ box + allowlist). MIT.
  * Usage:  <span data-pq-app="763809096"></span>  then  <script src="pqbadge.js"></script>
  * Options (data-attrs): data-pq-app, data-pq-indexer, data-pq-network (default testnet).
- * Honest by design: says "verified on-chain" only for a RECOGNIZED TRELYAN inscription app
- * (app-ids are unforgeable; extend via data-pq-recognized="id,id") with a Falcon-1024 signature
- * AND the write-once i_ box — on any other app a box does not prove falcon_verify ran, so it
- * shows "self-reported". Trusts the single indexer it queries. TestNet, unaudited.
+ * This embed does not run falcon_verify (no opcode, no WASM). It must not paint
+ * a PQ-verified or opcode-accepted verdict. A match is header nibble/length
+ * + i_ box + allowlist only. Trusts the single indexer it queries. TestNet, unaudited.
  */
 (function () {
   'use strict';
   var DEF_INDEXER = '/api/pq/idx';
-  // TRELYAN inscription contracts whose TEAL gates the i_ box on falcon_verify (app-ids are
-  // unforgeable). A box on any OTHER app does not imply falcon_verify ran. Extend per-embed
-  // with data-pq-recognized="id,id" for your own TRELYAN-contract deployment.
+  // Local allowlist for the heuristic only. A box on any other app is still only a box.
+  // This script does not run falcon_verify. Extend via data-pq-recognized="id,id".
   var RECOGNIZED_APPS = ['763809096', '764917520'];
 
   function b64(b) { var s = atob(b), u = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
@@ -59,19 +57,19 @@
     var extra = (el.getAttribute('data-pq-recognized') || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
     var recognized = RECOGNIZED_APPS.concat(extra).indexOf(String(app)) !== -1;
     css();
-    render(el, 'pqb-p', 'verifying…', 'Checking the post-quantum signature on-chain…', null);
+    render(el, 'pqb-p', 'checking heuristic…', 'Checking Falcon-shaped header, i_ box, and allowlist. This embed does not run falcon_verify.', null);
     if (!app) { render(el, 'pqb-w', 'no app id', 'Set data-pq-app to an Algorand application id.', null); return; }
     var base = 'https://lora.algokit.io/' + net;
     verify(app, indexer).then(function (r) {
-      if (r.sig && r.insc && recognized) render(el, 'pqb-v', 'post-quantum verified on-chain',
-        'Falcon-1024 ' + (r.sig.det ? '(deterministic) ' : '') + r.sig.len + 'B, header ' + r.sig.header + '; write-once inscription on a recognized TRELYAN app. ' + net + ', unaudited.',
+      if (r.sig && r.insc && recognized) render(el, 'pqb-w', 'PQ heuristic · not falcon_verify',
+        'Heuristic only: Falcon-shaped header ' + r.sig.header + ', ' + r.sig.len + 'B, i_ box, allowlisted app. This embed does not run falcon_verify (no opcode, no WASM). ' + net + ', unaudited.',
         base + '/transaction/' + r.txid);
-      else if (r.sig && r.insc && !recognized) render(el, 'pqb-w', 'PQ inscription · self-reported',
-        'A Falcon-1024 signature and i_ box are present, but app ' + app + ' is not a recognized TRELYAN contract — a box does not prove falcon_verify ran here. ' + net + ', unaudited.',
+      else if (r.sig && r.insc && !recognized) render(el, 'pqb-w', 'PQ heuristic · not on allowlist',
+        'A Falcon-shaped arg and i_ box are present, but app ' + app + ' is not on this embed\'s allowlist. A box is not falcon_verify. ' + net + ', unaudited.',
         base + '/application/' + app);
-      else if (r.sig) render(el, 'pqb-w', 'PQ signature · unconfirmed',
-        'A Falcon-1024 signature is on chain, but no write-once box confirmed acceptance.', base + '/application/' + app);
-      else render(el, 'pqb-w', 'no PQ signature', 'No Falcon-1024 signature found for this app.', base + '/application/' + app);
+      else if (r.sig) render(el, 'pqb-w', 'PQ shape · no i_ box',
+        'A Falcon-shaped arg is on chain; no i_ box. This embed does not run falcon_verify.', base + '/application/' + app);
+      else render(el, 'pqb-w', 'no PQ-shaped arg', 'No Falcon-shaped application-arg found for this app. This embed does not run falcon_verify.', base + '/application/' + app);
     }).catch(function (e) { render(el, 'pqb-e', 'verify error', 'Indexer lookup failed: ' + (e.message || e), null); });
   }
 
