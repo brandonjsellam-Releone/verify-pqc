@@ -56,6 +56,31 @@ try {
   ok(good.code === 0, 'valid dir with source scans successfully (exit 0)');
   ok(/files/.test(good.out) && !/0 files/.test(good.out), 'real source: >0 files scanned');
   ok(!/Scorecard: A/.test(good.out), 'source with RSA/MD5 is NOT graded A');
+
+  // 4. GitHub Action runner — same refuse as the CLI (G1: Action used to emit grade A on 0 files)
+  const ACTION = join(here, 'pqcbom-action', 'run.mjs');
+  const runAction = (inputPath, cwd) => {
+    try {
+      const out = execFileSync('node', [ACTION], {
+        cwd,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, INPUT_PATH: inputPath, 'INPUT_FAIL-ON': '' },
+      });
+      return { code: 0, out };
+    } catch (e) {
+      return { code: e.status ?? 1, out: (e.stdout || '') + (e.stderr || '') };
+    }
+  };
+  const actEmpty = runAction(empty, work);
+  ok(actEmpty.code === 2, 'Action: empty directory (0 files) exits 2');
+  ok(!/Scorecard: A/.test(actEmpty.out) && !/grade=A/.test(actEmpty.out), 'Action: empty directory emits NO grade-A');
+  const actBad = runAction('this-path-does-not-exist', work);
+  ok(actBad.code === 2, 'Action: non-existent path exits 2');
+  ok(!/Scorecard: A/.test(actBad.out), 'Action: non-existent path emits NO grade-A');
+  const actGood = runAction(src, work);
+  ok(actGood.code === 0, 'Action: valid dir with source scans successfully (exit 0)');
+  ok(!/Scorecard: A/.test(actGood.out), 'Action: source with RSA/MD5 is NOT graded A');
 } finally {
   rmSync(work, { recursive: true, force: true });
 }

@@ -57,3 +57,17 @@ jobs:
         run: |
           test "${{ steps.gate.outcome }}" = "failure" || { echo "::error::the policy gate should have failed the build"; exit 1; }
           echo "OK — the gate correctly failed the build on banned crypto"
+
+      - name: Empty fixture must refuse (not grade A)
+        id: empty
+        continue-on-error: true
+        uses: ./packages/verify-pqc/pqcbom-action
+        with:
+          path: packages/verify-pqc/pqcbom-action/examples/empty
+          fail-on: ''
+
+      - name: Assert empty scan refused (no grade A)
+        run: |
+          test "${{ steps.empty.outcome }}" = "failure" || { echo "::error::zero-file scan must fail the Action, not emit A"; exit 1; }
+          test "${{ steps.empty.outputs.grade }}" != "A" || { echo "::error::zero-file scan must not emit grade A"; exit 1; }
+          echo "OK — zero-file scan refused (no grade A)"

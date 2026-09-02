@@ -10,6 +10,9 @@ const VALID_GRADES = new Set(['A', 'B', 'C', 'D', 'F']);
 
 // shields.io endpoint schema — README badge via https://img.shields.io/endpoint?url=<this JSON>. JSON only, no SVG.
 export function scorecardBadge(grade) {
+  if (!grade || grade.ungraded || grade.letter == null) {
+    return { schemaVersion: 1, label: 'PQ Readiness', message: 'ungraded', color: 'lightgrey' };
+  }
   return { schemaVersion: 1, label: 'PQ Readiness', message: grade.letter + ' (' + grade.score + ')', color: GRADE_COLOR[grade.letter] || 'lightgrey' };
 }
 
