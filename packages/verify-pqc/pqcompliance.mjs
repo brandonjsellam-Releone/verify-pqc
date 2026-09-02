@@ -85,8 +85,8 @@ export function verifyComplianceReport(report, trustedPub, opts = {}) {
     const rt = riskTally(report.findings || [], ctx);
     const tallyKeys = ['broken_classical', 'quantum_broken', 'quantum_weakened', 'classical_hybrid_ok', 'quantum_safe'];
     const summaryOk = !!report.summary && tallyKeys.every((k) => rt[k] === report.summary[k]);
-    const recomputed = gradeOf({ ...rt, files_scanned: report.summary && report.summary.files_scanned });
-    const gradeOk = !!(report.grade && summaryOk && recomputed.letter === report.grade.letter);
+    const recomputedGrade = gradeOf({ ...rt, files_scanned: report.summary && report.summary.files_scanned });
+    const gradeOk = !!(report.grade && summaryOk && recomputedGrade.letter === report.grade.letter);
     const consistent = fhOk && gradeOk && JSON.stringify(recomputed.controls) === JSON.stringify(report.controls) && recomputed.control_gaps === report.control_gaps;
     const s = report.signature;
     // pinOk = "no key supplied OR the supplied key matched" (internal; keeps the self-consistency-only mode working). The
