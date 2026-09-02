@@ -26,7 +26,8 @@ async function main(){
     +'<div class="k">Tree size</div><div class="v">'+sth.tree_size+'</div>'
     +'<div class="k">Root hash</div><div class="v">'+esc(sth.root_hash)+'</div>'
     +'<div class="k">Timestamp</div><div class="v">'+sth.timestamp+' <span class="mut">('+new Date(sth.timestamp*1000).toISOString()+')</span></div>'
-    +'<div class="k">STH signature</div><div class="v '+(sig?"ok":"warn")+'">'+(sig?"ML-DSA-87 present ✓ ("+sig.length/2+" B)":"none")+'</div>'
+    +'<div class="k">STH signature</div><div class="v mut">'+(sig?"sig field present ("+sig.length/2+" B) — not verified on this page":"none")+'</div>'
+    +'<div class="k">Layer 1 verify</div><div class="v mut">This page does not verify ML-DSA. Use <a class="gold" href="./sth-verify.html">sth-verify.html</a> (pinned key; that page can fail).</div>'
     +'</div>';
 
   var commit=commitment(sth);
@@ -66,6 +67,6 @@ async function main(){
       +'<div class="v" style="font:500 12px/1.5 var(--mono);word-break:break-all">'+esc(want)+'</div></div>'
       +'<div style="text-align:right"><span class="pill" style="color:'+(ok?"var(--ok)":"var(--warn)")+'">'+(ok?label:esc("unverified: "+reason))+'</span><div style="margin-top:8px"><a class="gold" target="_blank" rel="noopener" href="https://lora.algokit.io/testnet/transaction/'+esc(m.txid)+'">txn ↗</a></div></div></div>');
   }
-  ap.innerHTML=rows.join("")+'<p class="mut" style="margin:14px 0 0;font-size:13px">A ✓ confirms <b>Layer 2</b> only: a <b>recognized</b> TRELYAN contract inscribed this exact tree-head commitment via a <code>falcon_verify</code>-gated <code>inscribe()</code> call (app-id, method selector, and commit arg all checked). It does <b>not</b> re-run the <b>Layer 1</b> ML-DSA-87 STH signature in your browser — that is shown above as THRONDAR\'s claim; cross-check it independently at <code>'+THRONDAR+'/api/transparency/ledger</code>.</p>';
+  ap.innerHTML=rows.join("")+'<p class="mut" style="margin:14px 0 0;font-size:13px">A match confirms <b>Layer 2</b> only: a <b>recognized</b> TRELYAN app-id, the <code>inscribe()</code> selector, and a 32-byte commit arg matching the recomputed <code>sha512_256</code> commitment. This UI does not run <code>falcon_verify</code> and does not verify ML-DSA. Layer 1 verify lives at <a class="gold" href="./sth-verify.html">sth-verify.html</a>.</p>';
 }
 main();

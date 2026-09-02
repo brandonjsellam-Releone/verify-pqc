@@ -43,7 +43,7 @@
   <div class="layers">
     <div class="layer"><div class="t">Layer 1 · THRONDAR</div><h3>Signed tree head</h3><p>RFC-6962 log of post-quantum-signed AI answers, tree head signed with ML-DSA-87.</p></div>
     <div class="link-mid" aria-hidden="true">⟶</div>
-    <div class="layer"><div class="t">Layer 2 · Algorand</div><h3>Falcon inscription</h3><p>The tree-head commitment, write-once on a public chain, verified by <code>falcon_verify</code>.</p></div>
+    <div class="layer"><div class="t">Layer 2 · Algorand</div><h3>Falcon inscription</h3><p>The tree-head commitment, write-once on a public chain. This page checks a recognized app-id, the <code>inscribe()</code> selector, and a 32-byte commit match. It does not run <code>falcon_verify</code>.</p></div>
   </div>
 
   <h2>Live signed tree head</h2>
@@ -55,7 +55,7 @@
   <h2>Inscribed anchors</h2>
   <div class="panel" id="anchorsPanel"><p class="mut">checking…</p></div>
 
-  <p class="note" id="note"><b class="gold">Honest scope.</b> Algorand <b>TestNet</b>, unaudited. The commitment is <code>sha512_256("TRELYAN-ANCHOR-v1" ‖ log ‖ tree_size ‖ root ‖ timestamp)</code> — recomputed here in your browser and identical to <code>anchor_sth.py</code>. Inscribing an anchor is a gated owner step (it Falcon-signs + spends); this page never holds a key. A compromise of one layer alone cannot rewrite an anchored tree head.</p>
+  <p class="note" id="note"><b class="gold">Honest scope.</b> Algorand <b>TestNet</b>, unaudited. The commitment is <code>sha512_256("TRELYAN-ANCHOR-v1" ‖ log ‖ tree_size ‖ root ‖ timestamp)</code> — recomputed here in your browser and identical to <code>anchor_sth.py</code>. This UI does not run <code>falcon_verify</code> and does not verify ML-DSA: a Layer 2 match is recognized app-id + <code>inscribe()</code> selector + 32-byte commit; a truthy sig field is presence only. Layer 1 verify lives at <a class="gold" href="./sth-verify.html">sth-verify.html</a>. Inscribing an anchor is a gated owner step; this page never holds a key. A compromise of one layer alone cannot rewrite an anchored tree head.</p>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/js-sha512@0.9.0/src/sha512.min.js" integrity="sha384-r3ICQ3POhpARVadsTYI3uWWnM1PSOrv0exkXdU0g7hQvtBXEWLZ9+WlBMohsRBUg" crossorigin="anonymous"></script>
@@ -88,7 +88,8 @@ async function main(){
     +'<div class="k">Tree size</div><div class="v">'+sth.tree_size+'</div>'
     +'<div class="k">Root hash</div><div class="v">'+esc(sth.root_hash)+'</div>'
     +'<div class="k">Timestamp</div><div class="v">'+sth.timestamp+' <span class="mut">('+new Date(sth.timestamp*1000).toISOString()+')</span></div>'
-    +'<div class="k">STH signature</div><div class="v '+(sig?"ok":"warn")+'">'+(sig?"ML-DSA-87 present ✓ ("+sig.length/2+" B)":"none")+'</div>'
+    +'<div class="k">STH signature</div><div class="v mut">'+(sig?"sig field present ("+sig.length/2+" B) — not verified on this page":"none")+'</div>'
+    +'<div class="k">Layer 1 verify</div><div class="v mut">This page does not verify ML-DSA. Use <a class="gold" href="./sth-verify.html">sth-verify.html</a> (pinned key; that page can fail).</div>'
     +'</div>';
 
   var commit=commitment(sth);
@@ -128,7 +129,7 @@ async function main(){
       +'<div class="v" style="font:500 12px/1.5 var(--mono);word-break:break-all">'+esc(want)+'</div></div>'
       +'<div style="text-align:right"><span class="pill" style="color:'+(ok?"var(--ok)":"var(--warn)")+'">'+(ok?label:esc("unverified: "+reason))+'</span><div style="margin-top:8px"><a class="gold" target="_blank" rel="noopener" href="https://lora.algokit.io/testnet/transaction/'+esc(m.txid)+'">txn ↗</a></div></div></div>');
   }
-  ap.innerHTML=rows.join("")+'<p class="mut" style="margin:14px 0 0;font-size:13px">A ✓ confirms <b>Layer 2</b> only: a <b>recognized</b> TRELYAN contract inscribed this exact tree-head commitment via a <code>falcon_verify</code>-gated <code>inscribe()</code> call (app-id, method selector, and commit arg all checked). It does <b>not</b> re-run the <b>Layer 1</b> ML-DSA-87 STH signature in your browser — that is shown above as THRONDAR\'s claim; cross-check it independently at <code>'+THRONDAR+'/api/transparency/ledger</code>.</p>';
+  ap.innerHTML=rows.join("")+'<p class="mut" style="margin:14px 0 0;font-size:13px">A match confirms <b>Layer 2</b> only: a <b>recognized</b> TRELYAN app-id, the <code>inscribe()</code> selector, and a 32-byte commit arg matching the recomputed <code>sha512_256</code> commitment. This UI does not run <code>falcon_verify</code> and does not verify ML-DSA. Layer 1 verify lives at <a class="gold" href="./sth-verify.html">sth-verify.html</a>.</p>';
 }
 main();
 </script>
