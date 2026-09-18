@@ -6,9 +6,12 @@ name: pqcbom-action self-test
 
 on:
   push:
-    paths: ['packages/verify-pqc/pqcbom-action/**', '.github/workflows/pqcbom-action-selftest.yml']
   pull_request:
     paths: ['packages/verify-pqc/pqcbom-action/**', '.github/workflows/pqcbom-action-selftest.yml']
+  # Runs on every push (a 4 s job, contents: read, no secrets) so main HEAD always has a run, and weekly so
+  # runtime drift (runner image, the forced Node 20 -> 24 move) is caught on a quiet main.
+  schedule:
+    - cron: '17 7 * * 1'
   workflow_dispatch:
 
 # Least privilege: the self-test only reads the repo and runs the vendored local action.
