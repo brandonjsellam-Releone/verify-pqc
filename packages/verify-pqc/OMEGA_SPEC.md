@@ -91,7 +91,7 @@ same as the rest of the suite — a **tamper-evident, independently-verifiable P
 ## 6. Self-tests
 
 `node omega-gov.mjs` (16) · `node omega-bridge.mjs` (21) · `node omega.mjs` (14) · `node qiv-pin.mjs` (10) ·
-`node omega-evidence.mjs` (6) · `node omega-chain.mjs` (7) · `node omega-sentinel.mjs` (8) · `node omega-nexus.mjs` (8) ·
+`node omega-evidence.mjs` (6) · `node omega-chain.mjs` (7) · `node omega-sentinel.mjs` (8) · `node omega-nexus.mjs` (10) ·
 `node omega-server.mjs` (8). All included in the SDK green-gate (`node test-all.mjs`, **71 modules**). SDK surface adds
 `sdk.omegaChain`, `sdk.omegaSentinel`, `sdk.omegaNexus`, `sdk.omegaServer` (SDK_VERSION **0.22.0-draft**). Every one of
 the 7 layers has a concrete, tested OMEGA-named artifact. The L1 on-chain contract lives at
