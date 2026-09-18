@@ -97,7 +97,9 @@ function selfTest() {
   // 3. verify entry end-to-end (authority + latest-leaf manifest inclusion; no caller index)
   ok(verifyEntry(vault, 'db-root-pw', { authorityPub: authority.publicKey, logPub: manifestKey.publicKey, sth: sth1 }).verified === true, 'entry verifies: sealed + authority-signed + bound + latest state in the signed manifest');
   // 4. tamper the stored envelope -> binding + unseal fail
-  vault.entries.get('signing-seed').envelope.ciphertext = vault.entries.get('signing-seed').envelope.ciphertext.slice(0, -2) + '00';
+  // Replace the last byte with a value it does not already hold: a fixed '00' is a no-op whenever the GCM tag's last
+  // byte is 0x00 (1 run in 256), leaving the envelope untouched and failing this assertion (CI run 31892593532).
+  { const env = vault.entries.get('signing-seed').envelope; env.ciphertext = env.ciphertext.slice(0, -2) + (env.ciphertext.endsWith('00') ? '11' : '00'); }
   ok(polarseek.verifyCustodyBinding(vault.entries.get('signing-seed').envelope, vault.entries.get('signing-seed').custody_record) === false, 'tampered envelope -> custody binding FAILS (manifest hash mismatch)');
 
   // 5. CRYPTO-AGILITY: rotate db-root-pw to a NEW custody key; new opens, old does not; manifest records it
