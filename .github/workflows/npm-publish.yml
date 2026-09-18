@@ -9,7 +9,16 @@ on:
 permissions: {}
 
 jobs:
+  # The release gate is the SAME suite every push and PR runs, called as a reusable workflow,
+  # not a hand-copied subset of it. ci.yml runs test-all.mjs, test-kat.mjs, the demo regression,
+  # the vendored-scanner drift diff and the Z3 formal proofs.
+  gate:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   publish:
+    needs: gate
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -20,6 +29,12 @@ jobs:
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
+
+      # The offline gate imports @noble/* and nothing is vendored, so without an install it dies on
+      # ERR_MODULE_NOT_FOUND. --ignore-scripts because this job holds id-token: write.
+      - name: Install from the lockfile (no scripts)
+        run: npm ci --ignore-scripts
+        working-directory: packages/verify-pqc
 
       - name: Full assurance suite (offline gate)
         run: PQC_SKIP_LIVE=1 node packages/verify-pqc/test-all.mjs
