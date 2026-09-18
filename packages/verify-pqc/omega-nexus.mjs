@@ -17,7 +17,7 @@
  */
 import { generateIdentity, publishPrekeyBundle, verifyPrekeyBundle, initiateHandshake, respondHandshake } from './pqx3dh.mjs';
 import { initAlice, initBob, newBobPrekeys, ratchetEncrypt, ratchetDecrypt } from './pqratchet.mjs';
-import { utf8ToBytes, bytesToUtf8 } from '@noble/hashes/utils.js';
+import { utf8ToBytes } from '@noble/hashes/utils.js';
 
 /** omegaIdentity(seed) — an OMEGA communication identity (ML-DSA-87 signing key + X25519 DH). The signing key is the
  *  pinnable OMEGA identity (e.g. a board member's or a vault's key). */
@@ -48,9 +48,10 @@ export function establishSession(initiator, responder, opts = {}) {
 
 /** send(state, text) -> ratchet message (opaque). */
 export function send(state, text) { return ratchetEncrypt(state, utf8ToBytes(text)); }
-/** receive(state, message) -> { ok, text } (fail-closed on a bad/tampered message). */
+/** receive(state, message) -> { ok, text } (fail-closed on a bad/tampered message). The UTF-8 decode is the exact
+ *  @noble/hashes 1.8.0 `bytesToUtf8` body (non-fatal TextDecoder), inlined because @noble/hashes 2.x removed it. */
 export function receive(state, message) {
-  try { const pt = ratchetDecrypt(state, message); return { ok: true, text: bytesToUtf8(pt) }; }
+  try { const pt = ratchetDecrypt(state, message); return { ok: true, text: new TextDecoder().decode(pt) }; }
   catch (e) { return { ok: false, reason: 'decrypt failed (tampered/out-of-order/wrong key): ' + e.message }; }
 }
 
@@ -70,6 +71,17 @@ function selfTest() {
   const m2 = send(s.bobState, 'acknowledged + counter-signed');
   const r2 = receive(s.aliceState, m2);
   ok(r2.ok && r2.text === 'acknowledged + counter-signed', 'session: Bob→Alice reply decrypts');
+
+  // 1b) decode-fidelity pin (@noble/hashes 2.x removed bytesToUtf8; receive() inlines its 1.8.0 body): non-ASCII
+  //     round-trips exactly.
+  const m1b = send(s.aliceState, 'r\u00e9sum\u00e9 \u2713 \u91cf\u5b50');
+  const r1b = receive(s.bobState, m1b);
+  ok(r1b.ok && r1b.text === 'r\u00e9sum\u00e9 \u2713 \u91cf\u5b50', 'decode: non-ASCII UTF-8 round-trips exactly');
+  // 1c) records CURRENT, pre-existing behaviour: receive() decodes non-fatally, so authenticated invalid UTF-8
+  //     becomes U+FFFD. This is what 1.8.0's bytesToUtf8 did and what the inlined decode does; it is not a
+  //     claimed security property, and nothing here says a fatal decode would be wrong.
+  const r1c = receive(s.bobState, ratchetEncrypt(s.aliceState, Uint8Array.of(0xff)));
+  ok(r1c.ok && r1c.text === '\uFFFD', 'decode: authenticated invalid UTF-8 currently decodes non-fatally to U+FFFD (as @noble/hashes 1.8.0 did)');
 
   // 2) identity pinning: pinning the WRONG identity must fail the handshake
   const mallory = omegaIdentity(seed(9));
