@@ -7,7 +7,7 @@
  *
  * HONEST: "beyond military grade" is not a claim we make — the claim is the precise property: N-of-N AND-composition
  * across distinct algorithm families, anti-downgrade-bound, verifiable offline against pinned keys. The crypto is the
- * independently-audited @noble/{post-quantum,curves}; pqseal is the (unaudited) composition layer. Self-test: node pqseal.mjs
+ * @noble/post-quantum (not independently audited) and @noble/curves; pqseal is the (unaudited) composition layer. Self-test: node pqseal.mjs
  */
 import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
 import { slh_dsa_sha2_256f } from '@noble/post-quantum/slh-dsa.js';

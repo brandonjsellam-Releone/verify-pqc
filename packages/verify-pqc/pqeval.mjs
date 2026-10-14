@@ -37,7 +37,7 @@
  * MEASURE function for STATIC/DECLARATIVE assessment only (not the whole MEASURE mandate — red-team/
  * bias/monitoring are broader), EU AI Act Art.15 accuracy/robustness declarations (the Art.15
  * cybersecurity leg needs separate evidence) + Annex IV(2)(g) test procedures, ISO/IEC 42001 AI-system
- * verification/validation. Self-attested pre-audit. FIPS 203/204/205 final; FIPS 206 draft.
+ * verification/validation. Self-attested pre-audit. FIPS 203/204/205 final; FIPS 206 in development.
  *  Self-test: node pqeval.mjs
  */
 import { sha512 } from '@noble/hashes/sha2.js';

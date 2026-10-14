@@ -36,7 +36,7 @@ harnesses, and an eventual external cryptographic audit.
 
 - This is a **symbolic-model** proof (Dolev-Yao / EUF-CMA style), not a computational proof and not
   a proof of the underlying primitives (ML-DSA-87 / SLH-DSA / Ed25519 themselves — those rest on
-  NIST FIPS 204 / 205 and the Ed25519 literature). FIPS 206 (FN-DSA/Falcon) remains a **draft**.
+  NIST FIPS 204 / 205 and the Ed25519 literature). FIPS 206 (FN-DSA/Falcon) remains **in development (not published)**.
 - In the Merkle proofs, the single uninterpreted `H` stands for the code's node hash; the
   implementation's `0x00` leaf / `0x01` node prefixes (pqsign.mjs) are what make the "leaf and node
   inputs never collide" part of the CR assumption realistic for SHA-256 — load-bearing in the code,

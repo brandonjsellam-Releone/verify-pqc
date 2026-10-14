@@ -18,7 +18,7 @@ docs and adds the formal cross-module crypto details an auditor needs first. **P
 
 ## 1. Scope
 - **In scope (this dir):** the reference SDK — `sdk.mjs` + the 29 modules. Built ONLY on `@noble/post-quantum`,
-  `@noble/hashes`, `@noble/ciphers`, `@noble/curves` (audited, pure-JS).
+  `@noble/hashes`, `@noble/ciphers`, `@noble/curves` (third-party, pure-JS).
 - **Two packages (see PACKAGING.md):** the lean, publishable `@trelyan/verify-pqc` browser verifier (narrow `files`
   allowlist — excludes all SDK modules) vs `@trelyan/pq-sdk` (the full SDK, HELD until this audit clears).
 

@@ -1,7 +1,7 @@
 # @trelyan/pq-sdk — module catalog (DRAFT, TRL ~5–6)
 
 The unified post-quantum SDK surface (`sdk.mjs`, `SDK_VERSION 0.16.0-draft`). One import for the TRELYAN
-Tier-1 PQ stack. Everything is built on the audited, pure-JS **`@noble/post-quantum`** (ML-KEM-1024 / FIPS 203,
+Tier-1 PQ stack. Everything is built on the pure-JS **`@noble/post-quantum`, not independently audited** (ML-KEM-1024 / FIPS 203,
 ML-DSA-87 / FIPS 204, SLH-DSA / FIPS 205) + `@noble/hashes` / `@noble/ciphers` / `@noble/curves`.
 
 **Apex tier (enforced):** ML-KEM-1024 · ML-DSA-87 · SLH-DSA (FIPS 205) · SHA-512 / SHA3-256 · AES-256-GCM /

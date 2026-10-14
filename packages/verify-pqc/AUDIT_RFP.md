@@ -14,7 +14,7 @@ move named modules toward production.
    verification, STH signing, canonical-leaf determinism. *Everything else inherits this.* Spec: `SPINE_SPEC.md`;
    pinned vectors: `spine-vectors.mjs`; 42,574-case differential: `vectors-crosscheck.mjs`.
 2. **Shared primitives & usage**: ML-KEM-1024 / ML-DSA-87 / SLH-DSA-SHAKE-256s / Falcon-1024 via `@noble`
-   (the libraries themselves are separately audited — audit our USAGE: contexts, canonicalization, hybrid combiners).
+   (the libraries themselves are out of scope here — audit our USAGE: contexts, canonicalization, hybrid combiners).
 3. **Hybrid handshake** (`pqtransport`) + **KEM envelope** (`polarseek`/`pqvault`) + **domain-separation registry**
    (`AUDIT_DOSSIER §4` — confirm no signing-context collisions).
 4. **Product verifiers**: pqgateway(-session), pqkt, pqtsa, pqpki, pqef, pqcbom-report, pqcompliance — verify the

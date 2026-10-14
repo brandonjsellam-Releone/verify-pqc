@@ -27,7 +27,7 @@ verdict for something an attacker controls). Defenses, in order of importance:
    - The vendored `js-sha512` and the jsdelivr `<script>` carry **Subresource Integrity** (`sha384-…`) +
      `crossorigin` — a tampered CDN file is rejected by the browser.
    - **Dependabot** (`.github/dependabot.yml`) watches npm + GitHub-Actions deps.
-   - The SDK core is **dependency-free**; the only added crypto (`@noble/post-quantum`, audited) is an
+   - The SDK core is **dependency-free**; the only added crypto (`@noble/post-quantum`, not independently audited) is an
      *optional* module, version-pinned.
    - ✅ **Fixed (Apex-council review):** the in-browser ML-DSA page loads `@noble` from a **self-bundled,
      same-origin** file (`web/vendor/mldsa-bundle.js`), **not** a third-party CDN — so a CDN compromise can

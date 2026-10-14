@@ -1,6 +1,6 @@
 name: pqcbom-action self-test
 
-# Dogfoods the "Quantum-Safe Scorecard" action IN real GitHub Actions: proves it runs dependency-free
+# Dogfoods the "PQ Readiness Scorecard" action IN real GitHub Actions: proves it runs dependency-free
 # (node20, NO npm install), grades correctly, and that the policy gate actually fails the build on banned
 # crypto. Locks the action so it can't silently regress (it was once broken by a transitive @noble import).
 

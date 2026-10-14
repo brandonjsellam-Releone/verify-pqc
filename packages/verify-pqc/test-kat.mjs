@@ -1,5 +1,5 @@
 // Conformance KAT — deterministic ML-DSA-87 + SLH-DSA-256f known-answer vectors, verified through the
-// kit's audited @noble/post-quantum path. Proves the verifier is byte-exact + stable across versions
+// kit's @noble/post-quantum path. Proves the verifier is byte-exact + stable across versions
 // (a regression/conformance gate). Pins exact key/sig sizes per FIPS-204 / FIPS-205.
 //   npm i @noble/post-quantum @noble/hashes && node test-kat.mjs
 import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';

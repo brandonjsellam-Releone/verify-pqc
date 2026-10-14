@@ -63,7 +63,7 @@ sig  =  header(1) || body(variable)
 ```
 A `0x00` version byte may follow as part of the wrapper. **The `0x80` bit and the `0x00`
 version byte are trelyan-pq conventions — they are NOT NIST Round-3 Falcon or FIPS-206
-(FN-DSA) fields.** FIPS 206 is a draft and defines neither. Do not call `0xBA` "the FN-DSA
+(FN-DSA) fields.** FIPS 206 is in development (not published) and defines neither. Do not call `0xBA` "the FN-DSA
 header." In deterministic mode the 40-byte random salt of standard Falcon is **omitted**
 (re-derived from the message at verification); there is no fixed salt field at a fixed offset.
 

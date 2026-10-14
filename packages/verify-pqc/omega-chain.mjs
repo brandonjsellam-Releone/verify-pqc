@@ -8,7 +8,7 @@
  * HONEST: this DOES NOT broadcast. It emits `anchorCalldata` / `commitment` — the precise bytes a funded account would
  * post to the Algorand app (TRELYAN's live PQ chain) — exactly as pqanchor does; actual posting needs a funded signer +
  * a deployed app and is OWNER-GATED. Anchoring proves the off-chain↔on-chain BINDING, not chain honesty/availability or
- * "immutability". Falcon-1024 (FIPS 206 DRAFT) is the separate on-chain inscription/verify leg; the anchor authority
+ * "immutability". Falcon-1024 (FIPS 206 in development) is the separate on-chain inscription/verify leg; the anchor authority
  * here signs Ed25519 ∧ ML-DSA-87 (FIPS 204). Self-test: node omega-chain.mjs
  */
 import { createLog, append, exportLog, verifyLog } from './pqauditlog.mjs';

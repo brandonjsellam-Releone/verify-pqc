@@ -101,7 +101,7 @@ button{cursor:pointer;font-weight:600}button:hover{background:#16304f}.hit{paddi
 <p class="sub">A search engine whose results are <b>tamper-evident + censorship-evident</b>: every answer ships a proof. A hit carries an <span class="ok badge">inclusion proof</span> (provably not fabricated in this index); "no results" carries an <span class="ok badge">absence proof</span> (provably not omitted in this index). Verified against a signed Merkle index (ML-DSA-87). This makes dishonesty <i>evident</i> — not structurally impossible.</p>
 <div class="panel"><div style="display:flex;gap:8px"><input id="q" placeholder="search a term (e.g. lattice, falcon, signal)" style="flex:1" onkeydown="if(event.key==='Enter')go()"><button onclick="go()">Search</button></div>
 <div id="out" style="margin-top:12px"></div></div>
-<p class="note">Reference/DRAFT over audited @noble crypto. Exact-term match only — NO crawler, ranking, semantic query, shard network, or browser. That's the web-scale layer (not built). Anti-rollback (stale signed shard) needs an external fresh checkpoint.</p>
+<p class="note">Reference/DRAFT over @noble/post-quantum, not independently audited. Exact-term match only — NO crawler, ranking, semantic query, shard network, or browser. That's the web-scale layer (not built). Anti-rollback (stale signed shard) needs an external fresh checkpoint.</p>
 </div><script>
 const SEED=[{id:"doc-kyber",text:"ML-KEM (Kyber) is the FIPS 203 lattice key encapsulation mechanism."},
 {id:"doc-falcon",text:"Falcon is the FN-DSA lattice signature (FIPS 206, in development — not yet standardized); compact signatures."},

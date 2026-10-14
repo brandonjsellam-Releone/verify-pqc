@@ -28,7 +28,7 @@
  * It is "AI DECLARATION ASSURANCE", never "AI Trust Posture". SUPPORTS (never certifies) evidence-
  * gathering for EU AI Act Annex IV (inventory + data-provenance subset), NIST AI RMF (MAP-2), the
  * NTIA SBOM minimum elements + CISA SBOM/AIBOM guidance, OMB M-25-21/22 (2025 successors to the
- * rescinded M-24-10), ISO/IEC 42001 Annex A. FIPS 203/204/205 final; FIPS 206 draft.
+ * rescinded M-24-10), ISO/IEC 42001 Annex A. FIPS 203/204/205 final; FIPS 206 in development.
  *
  * BOM-REALITY DRIFT (the pqtrace bridge): runtimeBindingHash(bom) binds the FULL normalized component
  * set; a deployer passes the components an HONEST, INDEPENDENT observer reports as loaded (it does not

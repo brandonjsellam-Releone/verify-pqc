@@ -4,7 +4,7 @@
 substance is the already-shipped `@trelyan/verify-pqc` modules, composed under one honest status map. This spec exists so
 any pitch/datasheet is generated **from the machine-readable manifest** (`omega.mjs` → `OMEGA_LAYERS`) and never claims a
 layer beyond what the code does. Reference implementation: `omega.mjs` (manifest), `omega-gov.mjs` (Layer 1),
-`omega-bridge.mjs` (Layer 4/5). Status: DRAFT, unaudited composition over the independently-audited `@noble` crypto.*
+`omega-bridge.mjs` (Layer 4/5). Status: DRAFT, unaudited composition over `@noble/post-quantum`, not independently audited.*
 
 > **For the reviewer (Dorit Dor test):** the defensible core is AND-composition signing, tamper-evident logs + anchoring,
 > an IP vault, M-of-N governance, hybrid-key derivation + entropy estimation, and hybrid-PQ messaging — all offline,
@@ -37,7 +37,7 @@ The blueprint carries claims a cryptographer would reject on sight. What we actu
 | "true quantum randomness" (QRNG) | MVP uses OS CSPRNG, labelled **MOCK_CSPRNG**. True QRNG needs certified hardware (gated). |
 | "QKD-integrated / verified with QKD hardware" | **QKD-ready interface only** — `qkdSessionMock` is a labelled mock; no hardware. |
 | "Legally admissible governance / evidence" | Cryptographically verifiable records that can **support** a legal process; admissibility is a court + counsel determination. |
-| "Falcon-1024 FIPS 206 compliant" | Falcon-1024 / FN-DSA / **FIPS 206 is DRAFT** — caveat every mention; it is the optional on-chain leg only. |
+| "Falcon-1024 FIPS 206 compliant" | Falcon-1024 / FN-DSA / **FIPS 206 is in development** — caveat every mention; it is the optional on-chain leg only. |
 | "Autonomous AI auto-rotates keys" | Human-in-the-loop only; `autonomousKeyRotation()` is machine-gated OFF. Signals are reactive + falsifiable, not "73.4% RSA break" predictions. |
 | "World's first" | Dropped — no primacy claim; the distinct claim is the specific PQ composition. |
 | "FIPS-certified / audited / NIST-approved" | Pre-audit, self-attested; `@noble/post-quantum` is not independently audited. |

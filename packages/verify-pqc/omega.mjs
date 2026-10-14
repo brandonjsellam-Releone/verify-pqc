@@ -40,7 +40,7 @@ export const OMEGA_LAYERS = {
     backing: ['omega-chain.mjs', 'pqanchor.mjs', 'pqauditlog.mjs', 'pqtsa.mjs', 'pqkt.mjs', 'index.js'],
     summary: 'omega-chain batches OMEGA events (governance/vault/capability) into a PQ-signed log and binds the batch to an Algorand anchor, producing the EXACT note/calldata bytes to post + the offline proof they bind. Falcon-1024 on-chain verify via the AVM falcon_verify opcode (live TestNet app 763809096).',
     gated: ['on-chain broadcast (funded account + deployed app — owner)', 'cross-chain bridges ETH/SOL/BTC/DOT (stubs)', 'ZK-rollup (design only)', 'oracles Chainlink/Pyth (stubs)'],
-    hazards: ['Falcon-1024 / FIPS 206 = DRAFT — caveat every mention', 'Algorand account layer is still Ed25519 (classically) at the wallet level', 'anchoring proves BINDING, not chain honesty/availability or "immutability"'],
+    hazards: ['Falcon-1024 / FIPS 206 = IN DEVELOPMENT — caveat every mention', 'Algorand account layer is still Ed25519 (classically) at the wallet level', 'anchoring proves BINDING, not chain honesty/availability or "immutability"'],
   },
   L3: {
     name: 'OMEGA VAULT — post-quantum IP registry (QIV)', status: 'BUILT',
@@ -132,7 +132,7 @@ export function capabilityStatement() {
   return {
     v: 'omega-capability-1', omega_version: OMEGA_VERSION,
     layers: capabilityMatrix(), gates: gatedFeatures(), hazards: claimHazards(),
-    note: 'Honest capability manifest. Statuses: BUILT/REFERENCE/MOCK/STUB/GATED. No affirmative overclaims; every gate is machine-enforced; Falcon-1024 = DRAFT FIPS 206. Generate any datasheet FROM this object.',
+    note: 'Honest capability manifest. Statuses: BUILT/REFERENCE/MOCK/STUB/GATED. No affirmative overclaims; every gate is machine-enforced; Falcon-1024 = FIPS 206 in development. Generate any datasheet FROM this object.',
   };
 }
 /** attestCapabilities(signers) — PQ-sign the capability statement. signers = pqseal signer set (recommend 3-family). */

@@ -22,7 +22,7 @@ TestNet app 763809096 — NOT a standards claim):
     low-nibble 0xA = logn 10. THIS part is standard.
   * 0xBA = 0x3A | 0x80. The 0x80 high bit, plus a following 0x00 version byte, are
     trelyan-pq's WRAPPER convention marking deterministic signing. They are NOT NIST
-    Round-3 Falcon or FIPS-206 (FN-DSA, still a draft) fields. Describe them as a
+    Round-3 Falcon or FIPS 206 (FN-DSA, still in development) fields. Describe them as a
     project extension — never as "the FN-DSA header".
   * The AVM falcon_verify opcode accepts 0xBA because it does not gate on header
     semantics: go-algorand opFalconVerify length-checks only the 1793-byte pubkey and
