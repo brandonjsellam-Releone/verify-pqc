@@ -1,11 +1,11 @@
 /*!
  * omega-server — TRELYAN OMEGA demo API + verification dashboard (reference, DRAFT). A framework-free node:http adapter
  * (like pqcbom-server) that serves the honest capability manifest, the product's self-signed capability attestation, and
- * a LIVE evidence-pack verification — all computed SERVER-SIDE with the audited @noble crypto (the browser only displays).
+ * a LIVE evidence-pack verification — all computed SERVER-SIDE with the third-party @noble crypto (the browser only displays).
  * The embedded dashboard is the "show, don't tell" surface for a technical due-diligence session: the reviewer sees the
  * capability matrix (from the signed statement) + can verify a fresh Evidence Pack pass/fail per component, in real time.
  *
- * HONEST: reference/DRAFT, unaudited COMPOSITION over the audited @noble crypto; nothing is broadcast on-chain; no auth,
+ * HONEST: reference/DRAFT, unaudited COMPOSITION over the third-party @noble crypto; nothing is broadcast on-chain; no auth,
  * no persistence — a demo, not production hosting (put it behind a real gateway + authn before any exposure). The
  * verification is genuine (server runs the real verifiers); the dashboard makes no claim the browser did the crypto.
  * Routes: GET / (dashboard) · GET /api/manifest · GET /api/capability · GET /api/demo-evidence · POST /api/verify-evidence
@@ -105,7 +105,7 @@ button:hover{background:#16304f}.note{color:var(--dim);font-size:12px;margin-top
 .grid2{display:grid;grid-template-columns:1fr;gap:0}#pins{word-break:break-all}
 </style></head><body><div class="wrap">
 <h1>TRELYAN <span class="k">OMEGA</span> — Capability &amp; Verification Console</h1>
-<p class="sub">Post-quantum trust + provenance layer. Every status below is the product's own honest label, and the checks run server-side with the audited <span class="mono">@noble</span> crypto. <span class="mono" id="ver"></span></p>
+<p class="sub">Post-quantum trust + provenance layer. Every status below is the product's own honest label, and the checks run server-side with the third-party <span class="mono">@noble</span> crypto. <span class="mono" id="ver"></span></p>
 
 <div class="panel"><h2>Capability matrix</h2><div style="overflow-x:auto"><table id="matrix"><thead><tr><th>Layer</th><th>Name</th><th>Status</th><th>Backing</th></tr></thead><tbody></tbody></table></div>
 <p class="note">Legend: <span class="badge BUILT">BUILT</span> tested core &nbsp; <span class="badge REFERENCE">REFERENCE</span> built, productionization gated &nbsp; <span class="badge MOCK">MOCK</span> labelled placeholder &nbsp; <span class="badge GATED">GATED</span> deliberately not built.</p></div>
@@ -122,7 +122,7 @@ button:hover{background:#16304f}.note{color:var(--dim);font-size:12px;margin-top
 
 <div class="panel"><h2>Machine-enforced gates</h2><div id="gates" class="small"></div></div>
 
-<p class="note">Reference / DRAFT. Unaudited composition over the independently-audited <span class="mono">@noble/{post-quantum,curves}</span>. Nothing is broadcast on-chain. No auth/persistence — a demo surface, not production hosting. Falcon-1024 (FIPS 206) is DRAFT and only an optional on-chain leg.</p>
+<p class="note">Reference / DRAFT. Unaudited composition over the third-party <span class="mono">@noble/{post-quantum,curves}</span>. Nothing is broadcast on-chain. No auth/persistence — a demo surface, not production hosting. Falcon-1024 (FIPS 206) is in development and only an optional on-chain leg.</p>
 </div><script>
 const badge=s=>'<span class="badge '+s+'">'+s+'</span>';
 async function load(){const m=await (await fetch('/api/manifest')).json();document.getElementById('ver').textContent='OMEGA v'+m.omega_version;

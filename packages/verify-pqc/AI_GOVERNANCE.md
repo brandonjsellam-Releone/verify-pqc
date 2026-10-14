@@ -9,7 +9,7 @@ independently re-verifiable, and a **transparency anchor** makes admissions publ
 > **Honest posture (read first).** This is a **self-attested, pre-audit** reference implementation. It
 > proves **who signed what, and that the pieces are cryptographically consistent** — it does **not**
 > certify a model, its safety, or its compliance, and it is **not** independently audited. It is not
-> "quantum-safe" or "certified". FIPS 203/204/205 are final; **FIPS 206 (FN-DSA/Falcon) is a draft**.
+> "quantum-safe" or "certified". FIPS 203/204/205 are final; **FIPS 206 (FN-DSA/Falcon) is in development, not published**.
 > Every module states its own limits in its header; this document summarizes them.
 
 ---
@@ -71,7 +71,7 @@ the admission gets, fail-closed:
   separate, unsolved-here availability problem).
 - **Symbolic proofs.** The Z3 proofs are in a symbolic (Dolev-Yao / EUF-CMA) model of the decision logic;
   they are not computational reductions and do not prove the primitives themselves (those rest on
-  FIPS 204/205; FIPS 206 is draft). They complement — never replace — tests, fuzzing, and external audit.
+  FIPS 204/205; FIPS 206 is in development). They complement — never replace — tests, fuzzing, and external audit.
 
 ---
 

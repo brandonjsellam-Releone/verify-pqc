@@ -7,7 +7,7 @@
  * ML-DSA-87 key), NOT the key the server sends and NOT a truncated thumbprint. So a
  * malicious/MITM'd server (or a key_id-grinding attacker) cannot get a false "verified".
  *
- * Peer dependency: @noble/post-quantum + @noble/hashes (audited, pure-JS FIPS-204).
+ * Peer dependency: @noble/post-quantum + @noble/hashes (third-party, pure-JS FIPS-204).
  * The construction is reverse-derived from THRONDAR's signer (lib/provenance-canonical.ts):
  * ML-DSA over the canonical core {"v","model","answer_sha256","governance_flag","ts"}
  * (FIXED key order) under context "throndar-sth-v1", with answer_sha256 == sha256(signed).

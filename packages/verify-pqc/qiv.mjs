@@ -4,7 +4,7 @@
  * publication) -> AND-compose a post-quantum signature over its digest + metadata -> bind it to a TRELYAN Vault Cell
  * and a PQ timestamp -> emit the EXACT bytes to anchor on Algorand (TRELYAN's live PQ chain, app 763809096) -> and
  * VERIFY the whole record offline, fail-closed. Plus an append-only, hash-chained, per-transition-signed CHAIN OF
- * CUSTODY (Blueprint-6 Module 2). Composes the audited-composition primitives already in this SDK: pqseal
+ * CUSTODY (Blueprint-6 Module 2). Composes the existing composition primitives already in this SDK: pqseal
  * (ML-DSA-87 ∧ SLH-DSA-256f ∧ Ed25519 AND-composition), pqtsa (PQ timestamp token), pqanchor (ledger binding).
  *
  * WHAT THIS IS (precise, falsifiable):
@@ -146,7 +146,7 @@ export function inscribe({ cellId, ipType, metadata, artifactBytes, offchain, ce
     anchor: {
       chain: 'algorand', network: opts.network ?? ALGORAND.network, app_id: appId,
       note_hex: note, commitment: rHash,
-      on_chain_signature: 'falcon-1024-det1024 (OWNER-GATED; DRAFT FIPS 206) — not produced here',
+      on_chain_signature: 'falcon-1024-det1024 (OWNER-GATED; FIPS 206 in development) — not produced here',
       broadcast: false,   // never broadcasts; produces the exact bytes only (see pqanchor honesty)
     },
     produced_by: 'qiv.mjs (reference, DRAFT)',

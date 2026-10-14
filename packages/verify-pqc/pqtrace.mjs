@@ -43,7 +43,7 @@
  * error, plus a sealed head.status ∈ {complete, aborted} so a graceful abort is distinguishable from
  * a completed run (a hard crash leaves NO seal — absence is undetectable in v1, per above). Every
  * step's canon is capped (STEP_CANON_MAX) so no field can DoS verifiers. "Supports, not certifies"
- * regulatory alignment; self-attested, not certified. FIPS 203/204/205 final; FIPS 206 draft.
+ * regulatory alignment; self-attested, not certified. FIPS 203/204/205 final; FIPS 206 in development.
  *  Self-test: node pqtrace.mjs
  */
 import { sha512 } from '@noble/hashes/sha2.js';

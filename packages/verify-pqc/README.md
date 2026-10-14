@@ -64,7 +64,7 @@ const v = await verifyThrondarStrong(j.signed_tree_head);
 
 The SLH-DSA leg is **non-authoritative**: `verified` is *exactly* the ML-DSA-87 result — a missing/invalid SLH
 co-signature can never flip the verdict. Rotation-ready via `THRONDAR_STH_PINS` (`{current, previous}`). Peer deps:
-`@noble/post-quantum` + `@noble/hashes` (independently audited — that audit covers @noble's primitives, NOT this
+`@noble/post-quantum` + `@noble/hashes` (third-party; per the upstream README, @noble/post-quantum has not been independently audited — and nothing here audits THIS
 toolkit, which remains unaudited; pure-JS FIPS-204/205). Conformance KAT: `npm run test:kat`.
 
 ## Inspect / compare raw signatures

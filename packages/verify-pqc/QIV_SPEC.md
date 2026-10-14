@@ -34,7 +34,7 @@ Everything verifies **offline, fail-closed**, against pinned keys (`verifyInscri
 | "World's first blockchain IP registry" | Blockchain IP-timestamping products already exist (e.g. WIPO PROOF's successors, Bernstein, various OpenTimestamps tools). The QIV's distinct claim is the **specific PQ composition** above — not primacy. |
 | "Register / file your patent on-chain" | Inscribing a hash **does not create, register, examine, or prosecute** any IP right. It is a private evidentiary record. Actual filing goes through USPTO/EPO/WIPO. |
 | "Quantum-proof / unbreakable" | The claim is the exact composition (3-family AND, offline-verifiable against pinned keys). No "unbreakable / quantum-safe." |
-| "Falcon-1024 secured" | Falcon-1024 (FN-DSA) is the **optional on-chain provenance leg only** (AVM `falcon_verify`), and **FIPS 206 is a DRAFT**. The off-chain record's integrity does **not** depend on Falcon — the primary signature is the NIST-standardized ML-DSA-87 ∧ SLH-DSA-256f ∧ Ed25519. |
+| "Falcon-1024 secured" | Falcon-1024 (FN-DSA) is the **optional on-chain provenance leg only** (AVM `falcon_verify`), and **FIPS 206 is in development (not published)**. The off-chain record's integrity does **not** depend on Falcon — the primary signature is the NIST-standardized ML-DSA-87 ∧ SLH-DSA-256f ∧ Ed25519. |
 
 ## 3. Securities red-line (Blueprint-6 Module 3 — deliberately NOT built)
 
@@ -65,7 +65,7 @@ artifact bytes ──digestArtifact()──▶ SHA-512 (tag: trelyan-qiv-artifac
            Ed25519 ∧ ML-DSA-87 ∧ (opt) SLH-DSA-256f, prev_hash chain, nonce anti-replay, monotonic ts + cell state
 ```
 
-Reused audited-composition primitives (already in this SDK, already swept): `pqseal.mjs`, `pqtsa.mjs`, `pqanchor.mjs`,
+Reused existing composition primitives (already in this SDK, already swept): `pqseal.mjs`, `pqtsa.mjs`, `pqanchor.mjs`,
 and the `pqauditlog.mjs` custody pattern. The QIV adds the IP-specific state machine + record format + securities gate.
 
 ## 5. API

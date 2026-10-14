@@ -15,7 +15,7 @@
  * offline and produces the record to inscribe. NOT legally binding governance — a Swiss Stiftung's legal authority is its
  * statutes + board, not this code; this encodes/attests decisions, it does not replace the foundation deed or counsel.
  * TOKEN-HOLDER voting (the blueprint's "67% token-holder approval", quadratic voting) is a TOKEN/securities matter and is
- * DELIBERATELY NOT IMPLEMENTED — see `tokenHolderVote()`. Falcon-1024 (FIPS 206) is DRAFT; the governance signatures here
+ * DELIBERATELY NOT IMPLEMENTED — see `tokenHolderVote()`. Falcon-1024 (FIPS 206) is in development; the governance signatures here
  * are ML-DSA-87 (FIPS 204) ∧ Ed25519 — Falcon is only the optional on-chain inscription leg (qiv/pqanchor).
  *
  * Self-test: node omega-gov.mjs
