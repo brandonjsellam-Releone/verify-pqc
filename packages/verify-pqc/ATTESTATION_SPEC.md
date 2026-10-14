@@ -1,6 +1,6 @@
 # TRELYAN Attestation Spec — `pqseal` + `pqattest`
 
-*Auditor-facing specification of the multi-family signing primitive (`pqseal`) and the composed attestation (`pqattest`). Reference, DRAFT. The cryptographic primitives are the independently-audited [`@noble/post-quantum`](https://github.com/paulmillr/noble-post-quantum) and `@noble/curves`; `pqseal`/`pqattest` are the **composition layer** and are **not yet third-party-audited**. This document states what is constructed, what is verified, the threat model, and — explicitly — what is **not** claimed.*
+*Auditor-facing specification of the multi-family signing primitive (`pqseal`) and the composed attestation (`pqattest`). Reference, DRAFT. The cryptographic primitives are the [`@noble/post-quantum`](https://github.com/paulmillr/noble-post-quantum) (not independently audited) and `@noble/curves`; `pqseal`/`pqattest` are the **composition layer** and are **not yet third-party-audited**. This document states what is constructed, what is verified, the threat model, and — explicitly — what is **not** claimed.*
 
 ---
 

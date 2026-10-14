@@ -12,7 +12,7 @@
  *   POST /api/cap/issue     ThrondarAgent  — issue + verify an agent capability token (+ out-of-bounds check)
  *   /omega/*  /mesh/*  /search/*           mounted omega-server / pqmesh-server / pqsearch-server (their tested handlers)
  *
- * HONEST: reference/DRAFT, unaudited COMPOSITION over the third-party @noble crypto. Demos use 2-family signers (Ed25519 ∧
+ * HONEST: reference/DRAFT, unaudited COMPOSITION over @noble/post-quantum, not independently audited. Demos use 2-family signers (Ed25519 ∧
  * ML-DSA-87) for speed; production uses the 3-family pqseal AND-composition. No auth/persistence — a demo console, not
  * production hosting. Every underlying core's gate/claim-hygiene rule still holds. Run: node trelyan-console.mjs --serve 8080
  * Self-test: node trelyan-console.mjs
@@ -139,7 +139,7 @@ button:hover{background:#16304f}a.btn{display:inline-block;margin-top:8px;text-d
 <h1>TRELYAN — product console <span class="mono" style="color:var(--dim);font-size:13px">(demo)</span></h1>
 <p class="sub">One surface for the portfolio. Each card runs a REAL sign→verify roundtrip with the tested post-quantum core (Ed25519 ∧ ML-DSA-87). The richer products (OMEGA, messenger, search) are mounted as their own dashboards.</p>
 <div class="grid" id="grid"></div>
-<p class="note">Reference/DRAFT over third-party @noble crypto. Demos use 2-family signers for speed; production uses the 3-family pqseal AND-composition. No auth/persistence — a demo console, not production hosting.</p>
+<p class="note">Reference/DRAFT over @noble/post-quantum, not independently audited. Demos use 2-family signers for speed; production uses the 3-family pqseal AND-composition. No auth/persistence — a demo console, not production hosting.</p>
 </div><script>
 const DEMOS={
  '/api/shield/grade':{body:{kex:'X25519MLKEM768',auth:'ML-DSA-87',tls:'TLSv1.3'},show:r=>'grade '+r.grade+' <span class=ok>✓</span>'},

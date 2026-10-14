@@ -4,7 +4,7 @@
 substance is the already-shipped `@trelyan/verify-pqc` modules, composed under one honest status map. This spec exists so
 any pitch/datasheet is generated **from the machine-readable manifest** (`omega.mjs` → `OMEGA_LAYERS`) and never claims a
 layer beyond what the code does. Reference implementation: `omega.mjs` (manifest), `omega-gov.mjs` (Layer 1),
-`omega-bridge.mjs` (Layer 4/5). Status: DRAFT, unaudited composition over the independently-audited `@noble` crypto.*
+`omega-bridge.mjs` (Layer 4/5). Status: DRAFT, unaudited composition over `@noble/post-quantum`, not independently audited.*
 
 > **For the reviewer (Dorit Dor test):** the defensible core is AND-composition signing, tamper-evident logs + anchoring,
 > an IP vault, M-of-N governance, hybrid-key derivation + entropy estimation, and hybrid-PQ messaging — all offline,

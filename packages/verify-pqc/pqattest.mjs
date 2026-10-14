@@ -11,7 +11,7 @@
  * the policy, or the index breaks the multi-family seal. This is the construction that makes pqattest downgrade-detecting under the stated trust model.
  *
  * HONESTY (council): NOT an eIDAS "qualified" timestamp (we are not an accredited QTSP); NOT a legal/court
- * determination; NOT "maximal" / "military-grade". The crypto is the third-party @noble primitives (not independently audited, per upstream);
+ * determination; NOT "maximal" / "military-grade". The crypto is @noble/post-quantum, not independently audited;
  * pqattest + pqseal are the (UNAUDITED) composition layer. Self-test: node pqattest.mjs
  */
 import * as pqseal from './pqseal.mjs';

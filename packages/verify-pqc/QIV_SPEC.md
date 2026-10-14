@@ -2,7 +2,7 @@
 
 *An immutable, post-quantum-signed intellectual-property **inscription + provenance** core. Blueprint 6 of the
 TRELYAN × Qbeat set, built on the existing `@trelyan/verify-pqc` primitives. Reference implementation: `qiv.mjs`
-(+ `qiv-cli.mjs`). Status: DRAFT, unaudited composition layer over the independently-audited `@noble` crypto.*
+(+ `qiv-cli.mjs`). Status: DRAFT, unaudited composition layer over `@noble/post-quantum`, not independently audited.*
 
 ---
 

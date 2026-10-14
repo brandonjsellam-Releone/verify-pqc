@@ -46,7 +46,7 @@ put+manifest-append are atomic; (c) rollback resistance is conditional on a fres
 `polarseek` (the KEM envelope) likewise assumes a properly-managed custody key supplied by the caller/KMS.
 
 ## 5. Supply chain & dependency pinning
-- Dependencies are the third-party `@noble` family only: `@noble/post-quantum`, `@noble/hashes`, `@noble/ciphers`,
+- Dependencies are the `@noble` family only: `@noble/post-quantum` (not independently audited), `@noble/hashes`, `@noble/ciphers`,
   `@noble/curves` — exact versions recorded in **`sbom.cdx.json`** (CycloneDX) and **`REPRODUCIBILITY.md`** (offline,
   deterministic build). No transitive runtime deps beyond these. *(Known item flagged in the SBOM: a `@noble/hashes`
   1.x↔2.x version-skew to reconcile — confirm a single pinned major across all `@noble` packages.)*

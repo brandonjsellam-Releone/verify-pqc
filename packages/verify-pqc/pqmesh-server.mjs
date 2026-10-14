@@ -116,7 +116,7 @@ button{cursor:pointer;font-weight:600}button:hover{background:#16304f}.msg{paddi
 </div>
 <div class="panel" style="margin-top:14px"><h2>What the relay sees</h2><div id="relay" class="ct">— send a message, then look here —</div>
 <p class="note">The relay only ever holds the opaque ciphertext blob + routing (from/to). In production the ratchet runs on each device; here both run in-process so the page can show both sides. No "unbreakable" claims — endpoint compromise breaks confidentiality.</p></div>
-<p class="note">Reference/DRAFT over the third-party @noble crypto. 1:1 only — no group / multi-device / voice / metadata anonymity / persistence.</p>
+<p class="note">Reference/DRAFT over @noble/post-quantum, not independently audited. 1:1 only — no group / multi-device / voice / metadata anonymity / persistence.</p>
 </div><script>
 const j=async(m,u,b)=>(await fetch(u,b?{method:m,headers:{'content-type':'application/json'},body:JSON.stringify(b)}:{method:m})).json();
 async function reg(){await j('POST','/api/register',{id:'alice'});await j('POST','/api/register',{id:'bob'});}

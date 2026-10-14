@@ -4,7 +4,7 @@ How a customer actually *uses* each of the five near-term products. Everything h
 
 ```bash
 npm install @trelyan/verify-pqc        # or: git clone github.com/brandonjsellam-Releone/verify-pqc
-# Node ≥ 18. Peer deps: @noble/post-quantum + @noble/curves + @noble/hashes (third-party primitives, not audited by TRELYAN;
+# Node ≥ 18. Peer deps: @noble/post-quantum + @noble/curves + @noble/hashes (@noble/post-quantum, not independently audited;
 # this toolkit — the composition layer — is unaudited reference).
 ```
 
