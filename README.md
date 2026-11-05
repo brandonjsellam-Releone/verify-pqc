@@ -4,11 +4,17 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![CycloneDX](https://img.shields.io/badge/CBOM-CycloneDX%201.6-blue)](https://cyclonedx.org/)
 
-**Find where quantum-vulnerable cryptography lives in your codebase — get an A–F readiness grade and a CycloneDX 1.6
-CBOM (Cryptographic Bill of Materials).** Free, open-source (MIT), dependency-free. The inventory that CNSA 2.0,
+**Find where quantum-vulnerable cryptography is named in your codebase, and get a CycloneDX 1.6 CBOM (Cryptographic
+Bill of Materials).** Free, open-source (MIT), dependency-free. The inventory that CNSA 2.0,
 DORA, and NIS2 preparation starts with.
 
 > **Try it in your browser first — nothing uploaded:** **https://throndar.ai/cbom**
+
+> **About the A–F grade.** The scanner still prints an A–F "readiness" grade. It is a score computed from counts of
+> lexical matches, not an assessment of post-quantum readiness. Do not rely on it or gate builds on it: by default it counts algorithm names that appear only in comments, and its deprecated-TLS
+> rule also matches TLS 1.3 written with an underscore (for example `TLSv1_3`), so a TLS 1.3 setting can be reported
+> as classically broken TLS. Use the per-finding list and the CBOM instead, and verify each finding: both are lexical
+> leads, not a complete or validated inventory.
 
 ## Scan your repo
 
@@ -27,7 +33,8 @@ jobs:
           path: .
           fail-on: broken-classical    # fail the build on classically-broken crypto
 ```
-It writes a CycloneDX 1.6 CBOM, a SARIF report (upload it to see findings in the **Security** tab), and an A–F grade.
+It writes a CycloneDX 1.6 CBOM, a SARIF report (upload it to see findings in the **Security** tab), and an A–F grade
+(see the note above: do not rely on the grade).
 
 **Locally (CLI):**
 ```bash
