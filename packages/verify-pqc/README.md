@@ -1,7 +1,7 @@
 # @trelyan/verify-pqc
 
 **Post-quantum readiness scanner + verification toolkit.** Find where quantum-vulnerable cryptography lives in your
-code (A–F grade + a CycloneDX 1.6 CBOM), build/verify signed **Evidence Packs**, and verify Falcon-1024 / ML-DSA-87
+code (a per-finding list + a CycloneDX 1.6 CBOM), build/verify signed **Evidence Packs**, and verify Falcon-1024 / ML-DSA-87
 post-quantum signatures. Dependency-free core; Node ≥18 + browser. MIT.
 
 ```bash
@@ -11,7 +11,7 @@ npm install @trelyan/verify-pqc
 ## Scan a repo for quantum-vulnerable crypto (CLI)
 
 ```bash
-npx -p @trelyan/verify-pqc pqcbom .        # A–F grade + cbom.cdx.json (CycloneDX 1.6) + SARIF + a report
+npx -p @trelyan/verify-pqc pqcbom .        # cbom.cdx.json (CycloneDX 1.6) + SARIF + a report
 ```
 
 Detects RSA/ECDSA/ECDH/DH (Shor-broken), AES-128/192 + SHA-256 (Grover-weakened), MD5/SHA-1/RC4/3DES/legacy-TLS
@@ -23,7 +23,9 @@ key-establishment findings (KEM/DH/ECDH and RSA *key transport* like RSA-OAEP / 
 ciphertext is decryptable once a CRQC exists, so migrate those FIRST; signatures are forge-later). Need to skip
 test fixtures? `--exclude test-fixtures/,examples/` or `.pqcbomignore` lines containing `/` — excluded paths are
 counted in the output, never silently dropped. **Lexical scan — findings are leads to verify, not a complete
-inventory, and not a certification.** A scan that examines zero files refuses to grade rather than reporting "A".
+inventory, and not a certification.** It also prints an A–F grade: a score computed from counts of lexical matches, not an
+assessment of readiness, so do not rely on it or gate builds on it (by default it counts names that appear only in
+comments, and its deprecated-TLS rule also matches TLS 1.3 written as `TLSv1_3`). A scan that examines zero files refuses to grade rather than reporting "A".
 Prefer a browser, nothing uploaded? → https://throndar.ai/cbom · CI GitHub Action + a signed Evidence Pack →
 https://throndar.ai/evidence
 
